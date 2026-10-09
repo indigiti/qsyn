@@ -113,11 +113,33 @@ try {
     throw new Error('Admin HTML should be uncacheable');
   }
   const adminHtml = await adminResponse.text();
-  for (const name of ['rust-admin.js', 'rust-stream-test.js']) {
+  for (const name of ['rust-admin.js', 'rust-stream-test.js', 'rust-activation-readiness.js']) {
     if (!adminHtml.includes('/qsyn/assets/' + name + '?v=')) {
       throw new Error('Admin page contains unversioned browser script: ' + name);
     }
   }
+  // Read-only admin readiness must work for visitors without authentication
+  // and must never expose a password, enable the demo or execute a command.
+  const adminBrowser = await browser.newPage();
+  adminBrowser.on('pageerror', err => errors.push(err.stack || err.message));
+  await adminBrowser.goto(origin + '/qsyn/admin/rust', { waitUntil: 'networkidle', timeout: 20000 });
+  await adminBrowser.waitForFunction(() => {
+    const text = document.getElementById('activation-summary')?.textContent || '';
+    return text.includes('activation is incomplete') || text.includes('Rust demo is enabled');
+  }, null, { timeout: 6000 });
+  if (!(await adminBrowser.locator('#activation-checks .activation-item').count() >= 4)) {
+    throw new Error('QSYN browser activation checklist did not report setup status');
+  }
+  if (!(await adminBrowser.locator('#activation-copy').isEnabled())) {
+    throw new Error('Cloudways request copy option was not activated');
+  }
+  const activationInfo = await adminBrowser.locator('#activation-checks').innerText();
+  if (!activationInfo.includes('Administrator sign-in')
+      || !activationInfo.includes('Rust HTTP engine')
+      || !activationInfo.includes('No-restart demo toggle')) {
+    throw new Error('Activation checklist missed required security gates');
+  }
+  await adminBrowser.close();
   const chartSrc = await page.locator('script[src*="/qsyn/assets/chart.js"]').getAttribute('src');
   if (!chartSrc || !/chart[.]js[?]v=[0-9]+/.test(chartSrc)) {
     throw new Error('DigiOps chart bundle URL missing deployment cache-busting version: ' + chartSrc);

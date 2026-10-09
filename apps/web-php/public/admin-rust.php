@@ -3,6 +3,7 @@
 // cached runtime-control client cannot survive a newer DigiOps deployment.
 $rustAdminVersion = (string)(@filemtime(__DIR__ . '/assets/rust-admin.js') ?: '0');
 $rustStreamTestVersion = (string)(@filemtime(__DIR__ . '/assets/rust-stream-test.js') ?: '0');
+$activationReadinessVersion = (string)(@filemtime(__DIR__ . '/assets/rust-activation-readiness.js') ?: '0');
 ?>
 <!doctype html>
 <html lang="en">
@@ -22,6 +23,12 @@ button.secondary{background:#243246;border-color:#44546e}
 input{background:#0c1625;border:1px solid #54647c;border-radius:7px;padding:12px;color:white;max-width:100%;min-width:260px}
 label{display:block;margin-bottom:10px;font-weight:600}code{color:#b6daff}.status{font-weight:700;color:#ffd28a}
 #feedback{min-height:24px;margin:15px 0;white-space:pre-wrap}[hidden]{display:none!important}
+.activation-item{display:grid;grid-template-columns:110px 180px 1fr;gap:9px;align-items:baseline;border-top:1px solid #304051;padding:11px 0}
+.activation-item strong{font-size:12px}
+.activation-item small{color:#a5b9d0;line-height:1.5}
+.activation-ok{color:#6cdaa7}
+.activation-pending{color:#ffd28a}
+@media(max-width:640px){.activation-item{grid-template-columns:1fr;gap:4px}}
 </style>
 </head>
 <body>
@@ -29,6 +36,16 @@ label{display:block;margin-bottom:10px;font-weight:600}code{color:#b6daff}.statu
 <main>
 <h1>Rust service control</h1>
 <p class="muted">Manage only the <code>qsyn-stream</code> service. Commands are restricted to an approved local service manager. This page does not provide shell access.</p>
+<section class="card" id="activation-readiness">
+  <h2>Rust activation readiness</h2>
+  <p class="muted">Read-only checks to prepare secure, web-only demo streaming. These do not restart processes, alter passwords or change market data.</p>
+  <div class="grid">
+    <button type="button" class="secondary" id="activation-refresh">Check activation</button>
+    <button type="button" class="secondary" id="activation-copy" disabled>Copy Cloudways request</button>
+  </div>
+  <p class="muted" id="activation-summary" role="status" aria-live="polite">Checking…</p>
+  <div id="activation-checks"></div>
+</section>
 <section class="card" id="admin-login">
   <h2>Administrator sign-in</h2>
   <p class="muted" id="login-help">Checking whether administrator control is configured…</p>
@@ -74,5 +91,6 @@ label{display:block;margin-bottom:10px;font-weight:600}code{color:#b6daff}.statu
 </main>
 <script src="/qsyn/assets/rust-admin.js?v=<?= rawurlencode($rustAdminVersion) ?>" defer></script>
 <script src="/qsyn/assets/rust-stream-test.js?v=<?= rawurlencode($rustStreamTestVersion) ?>" defer></script>
+<script src="/qsyn/assets/rust-activation-readiness.js?v=<?= rawurlencode($activationReadinessVersion) ?>" defer></script>
 </body>
 </html>
