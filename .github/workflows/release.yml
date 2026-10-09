@@ -2,6 +2,12 @@ name: QSYN DigiOps Release
 
 on:
   workflow_dispatch:
+  pull_request:
+    paths:
+      - '.github/workflows/release.yml'
+      - 'apps/**'
+      - 'frontend/**'
+      - 'services/**'
   push:
     branches: [main]
     paths:
