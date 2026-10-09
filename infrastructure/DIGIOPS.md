@@ -50,7 +50,7 @@ The OpenAlgo Charts JS is built in GitHub Actions. No production Node.js server 
 The QSYN chart page at /qsyn/ now includes a **Test Rust service** button. It calls the read-only PHP endpoint /qsyn/api/v1/diagnostics/rust. No SSH session is needed to inspect an already-running Rust daemon.
 
 - online: PHP verified the expected Rust /health response and checked the private demo WebSocket handshake.
-- offline: no compatible service is reachable on the fixed loopback address 127.0.0.1:1299, even if the binary has been deployed.
+- offline: no compatible service is reachable on the fixed loopback address 127.0.0.1:10251, even if the binary has been deployed.
 - demo_disabled: the optional Rust demo WebSocket is disabled (expected default).
 - demo_enabled: the optional WebSocket handshake returned 101 Switching Protocols.
 - unexpected_response: the port returned something other than the expected Rust service identity.
