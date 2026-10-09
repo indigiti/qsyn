@@ -78,6 +78,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.3"
+          tools: none
+          coverage: none
       - run: npm install --no-audit --no-fund
         working-directory: frontend
       - run: node --check src/main.js
@@ -85,3 +90,17 @@ jobs:
       - run: npm run build
         working-directory: frontend
       - run: test -s frontend/dist/chart.js
+      - name: Install test-only Playwright Chromium
+        run: |
+          npm install --no-save --no-audit --no-fund playwright@1.55.0
+          npx playwright install --with-deps chromium
+        working-directory: frontend
+      - name: Check real-browser candlestick rendering and CSP
+        run: node tests/browser-chart-smoke.mjs
+        working-directory: frontend
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: qsyn-chart-browser-screenshots
+          path: frontend/artifacts/*.png
+          if-no-files-found: ignore
