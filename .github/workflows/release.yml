@@ -2,6 +2,12 @@ name: QSYN DigiOps Release
 
 on:
   workflow_dispatch:
+  pull_request:
+    paths:
+      - '.github/workflows/release.yml'
+      - 'apps/**'
+      - 'frontend/**'
+      - 'services/**'
   push:
     branches: [main]
     paths:
@@ -15,7 +21,7 @@ permissions:
 
 jobs:
   package:
-    name: Tested Cloudways artifact (no automatic deployment)
+    name: Build and validate DigiOps payload
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -24,7 +30,9 @@ jobs:
           php-version: "8.3"
           coverage: none
       - name: Test PHP
-        run: php apps/web-php/tests/FileStoreTest.php
+        run: |
+          php -l apps/web-php/public/index.php
+          php apps/web-php/tests/FileStoreTest.php
       - uses: dtolnay/rust-toolchain@stable
       - name: Test and compile Rust binary
         run: |
@@ -38,29 +46,79 @@ jobs:
         run: |
           npm install --no-audit --no-fund
           npm run build
-      - name: Stage DigiOps directory payload
+      - name: Stage DigiOps-compatible release
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p staging/public_html/qsyn/assets
-          mkdir -p staging/public_html/qsyn/licenses
-          mkdir -p staging/private_html/qsyn/{src,bin,metadata}
-          cp apps/web-php/public/index.php staging/public_html/qsyn/index.php
-          cp apps/web-php/public/.htaccess staging/public_html/qsyn/.htaccess
-          cp frontend/dist/chart.js staging/public_html/qsyn/assets/chart.js
-          cp frontend/node_modules/openalgo-charts/LICENSE staging/public_html/qsyn/licenses/openalgo-charts-LICENSE.txt
+          # DigiOps adds the configured public_html/qsyn and private_html/qsyn
+          # destination prefixes. Do NOT put those paths in the artifact.
+          mkdir -p staging/public/{assets,licenses}
+          mkdir -p staging/private/app/{src,bin}
+          mkdir -p staging/private/build
+          cp apps/web-php/public/index.php staging/public/index.php
+          cp apps/web-php/public/.htaccess staging/public/.htaccess
+          cp frontend/dist/chart.js staging/public/assets/chart.js
+          cp frontend/node_modules/openalgo-charts/LICENSE staging/public/licenses/openalgo-charts-LICENSE.txt
           if [ -f frontend/node_modules/openalgo-charts/NOTICE ]; then
-            cp frontend/node_modules/openalgo-charts/NOTICE staging/public_html/qsyn/licenses/openalgo-charts-NOTICE.txt
+            cp frontend/node_modules/openalgo-charts/NOTICE staging/public/licenses/openalgo-charts-NOTICE.txt
           fi
-          cp apps/web-php/src/FileStore.php staging/private_html/qsyn/src/FileStore.php
-          cp services/stream-rust/target/release/qsyn-stream staging/private_html/qsyn/bin/qsyn-stream
-          printf '%s\n' "$GITHUB_SHA" > staging/private_html/qsyn/metadata/build-sha.txt
-          test -s staging/public_html/qsyn/assets/chart.js
-          test -x staging/private_html/qsyn/bin/qsyn-stream
+          cp apps/web-php/src/FileStore.php staging/private/app/src/FileStore.php
+          cp services/stream-rust/target/release/qsyn-stream staging/private/app/bin/qsyn-stream
+          cat > staging/RELEASE.json <<EOF
+          {
+            "schema": "DIGIOPS-BUILD/1",
+            "name": "QSYN",
+            "version": "0.1.0-phase0",
+            "builtAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "sourceSha": "$GITHUB_SHA",
+            "branch": "$GITHUB_REF_NAME",
+            "ciRunId": "$GITHUB_RUN_ID",
+            "public": "public",
+            "private": "private"
+          }
+          EOF
+          cp staging/RELEASE.json staging/private/build/release.json
+          php -l staging/public/index.php
+          test -s staging/public/index.php
+          test -s staging/public/.htaccess
+          test -s staging/public/assets/chart.js
+          test -x staging/private/app/bin/qsyn-stream
+          test -s staging/RELEASE.json
+          test -s staging/private/build/release.json
       - name: Publish DigiOps artifact
         uses: actions/upload-artifact@v4
         with:
           name: digiops-release
           path: staging/
           if-no-files-found: error
+          include-hidden-files: true
           retention-days: 30
+
+  verify-artifact:
+    name: Verify downloaded DigiOps entrypoint
+    runs-on: ubuntu-latest
+    needs: package
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: digiops-release
+          path: verified-release
+      - name: Validate exact artifact layout
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s verified-release/public/index.php
+          test -s verified-release/public/.htaccess
+          test -s verified-release/public/assets/chart.js
+          test -s verified-release/private/app/src/FileStore.php
+          test -s verified-release/private/app/bin/qsyn-stream
+          test -s verified-release/RELEASE.json
+          test -s verified-release/private/build/release.json
+          grep -F 'RewriteBase /qsyn/' verified-release/public/.htaccess
+          php -l verified-release/public/index.php
+          php -r '$m=json_decode(file_get_contents("verified-release/RELEASE.json"),true,512,JSON_THROW_ON_ERROR); if(($m["schema"]??"")!=="DIGIOPS-BUILD/1" || ($m["public"]??"")!=="public") exit(1);'
+          if test -d verified-release/public_html; then
+            echo 'ERROR: nested public_html is not a DigiOps entrypoint' >&2
+            exit 1
+          fi
+          echo 'PASS: DigiOps public/index.php, manifest and hidden rewrite rules included'
