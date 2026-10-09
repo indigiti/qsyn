@@ -97,6 +97,9 @@ if __name__ == "__main__":
                 assert actual["service"] == "qsyn-stream"
                 assert actual["http"] == "healthy"
                 assert actual["runtime_version"] == "0.1.0"
+                expected_commit = os.environ.get("QSYN_SOURCE_SHA")
+                assert actual["runtime_commit"] == expected_commit
+                assert actual["auto_activation"] is False
                 assert isinstance(actual["uptime_seconds"], int)
                 assert actual["uptime_seconds"] >= 0
                 assert actual["trading_enabled"] is False
