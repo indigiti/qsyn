@@ -28,11 +28,13 @@ jobs:
           php -l apps/web-php/src/RustProbe.php
           php -l apps/web-php/src/RustStreamProbe.php
           php -l apps/web-php/src/RustAdmin.php
+          php -l apps/web-php/src/RustDemoConfig.php
           php -l apps/web-php/src/RustSupervisor.php
           php -l apps/web-php/public/admin-rust.php
           php -l apps/web-php/dev-router.php
           php apps/web-php/tests/FileStoreTest.php
           php apps/web-php/tests/RustAdminTest.php
+          php apps/web-php/tests/RustDemoConfigTest.php
       - name: Demo endpoint smoke test
         run: |
           php -S 127.0.0.1:18080 -t apps/web-php/public apps/web-php/dev-router.php > /tmp/qsyn-php.log 2>&1 &
