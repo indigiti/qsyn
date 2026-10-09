@@ -104,7 +104,15 @@ setupForm.addEventListener('submit', async event => {
   button.disabled = true;
   feedback.textContent = 'Creating private QSYN administrator configuration…';
   try {
-    await request('setup', {setup_code: code.value.trim(), new_password: fresh.value}, setupCsrf);
+    // Two independent status widgets may race to create the anonymous
+    // session on first page load. Refresh the CSRF token from the browser's
+    // current cookie immediately before the privileged POST.
+    const verifiedState = await request('state');
+    const currentCsrf = verifiedState.setup?.csrf;
+    if (!verifiedState.setup?.available || !currentCsrf) {
+      throw new Error('setup_not_available');
+    }
+    await request('setup', {setup_code: code.value.trim(), new_password: fresh.value}, currentCsrf);
     feedback.textContent = 'Administrator password created. Sign in with your new password.';
     code.value = '';
     fresh.value = '';
