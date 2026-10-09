@@ -17,6 +17,7 @@ checkBootstrap(mkdir($runtime, 0700), 'create private runtime');
 putenv('QSYN_RUNTIME_DIR=' . $runtime);
 putenv('QSYN_ADMIN_PASSWORD_HASH');
 putenv('QSYN_CONTROL_ENABLED');
+RustAdmin::boot();
 $_SESSION = [];
 $codeFile = $runtime . '/admin-setup-code.txt';
 $authFile = $runtime . '/admin-auth.json';
