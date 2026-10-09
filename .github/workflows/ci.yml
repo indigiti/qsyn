@@ -82,6 +82,7 @@ jobs:
           cargo build --manifest-path services/stream-rust/Cargo.toml
           python3 services/stream-rust/tests/smoke_service.py
           python3 services/stream-rust/tests/direct_control_smoke.py
+          python3 services/stream-rust/tests/auto_activation_smoke.py
           python3 apps/web-php/tests/RustWebProbeSmoke.py
 
   charts:
