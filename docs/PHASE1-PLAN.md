@@ -65,3 +65,47 @@ mock identities, independent session/account health and independent
 disconnect, while a second owner and second tenant cannot read, subscribe
 or modify those identities. No production credentials or trade execution
 are possible. CI passes without MariaDB, Redis, RabbitMQ or production Node.
+
+## Phase 1.2 implementation: mock identity boundary
+
+The following isolated development API endpoints are present:
+\`GET /qsyn/api/v1/auth/state\`, \`GET /qsyn/api/v1/auth/me\`,
+\`POST /qsyn/api/v1/auth/login\`, and \`POST /qsyn/api/v1/auth/logout\`.
+There is **no signup, account-management API, OAuth, public fixture seeding,
+trading, live market feed or Rust operations-control capability** in this API.
+
+- **Disabled by default.** It requires *all* of
+  \`QSYN_IDENTITY_ENABLED=1\`, \`QSYN_ENV=test|development\`, and
+  \`QSYN_IDENTITY_STORAGE_DIR\` set to an existing private absolute
+  directory outside the website document root, with no world permissions.
+  Never enable this on a public or production QSYN installation. CI sets
+  these only for its disposable localhost HTTP process.
+- **HTTPS-only browser cookies**, named \`QSYN_USER_SESSION\`, with
+  \`HttpOnly\`, \`SameSite=Strict\`, \`Secure\`, path \`/qsyn/\`, strict PHP
+  session IDs, and ID rotation at login/logout. Only CI on localhost
+  can opt into insecure HTTP via \`QSYN_ENV=test\` and
+  \`QSYN_ALLOW_HTTP_TEST=1\`.
+- Login requires \`Origin\` exactly matching the request host, same-origin
+  Fetch Metadata when present, a 64-hex session CSRF token from \`state\`,
+  \`application/json\`, and correct tenant/username/password. A private
+  shared file lock permits at most five login attempts per source-IP +
+  tenant + username within 15 minutes, independent of session cookies.
+  Never trust a client-provided \`X-Forwarded-For\`.
+- Fixture users exist only through *trusted PHP fixtures* using
+  \`FileUserRepository::createFixture()\`; mock passwords are hashed
+  with Argon2id when supported (otherwise bcrypt), stored in owner-only
+  JSON files, and never returned in API responses. Duplicate identities
+  are revision-protected. No self-registration is exposed.
+- Session principal contains only tenant and user IDs; every authenticated
+  request re-reads the private user record and invalidates disabled accounts.
+  Session idle expiry is 20 minutes, absolute lifetime is 12 hours. Role
+  policy is \`viewer < member < tenant_admin\`, scoped to one tenant, and
+  cannot grant the separate Rust operations administrator's permissions.
+- **Do not enable Phase 1.2 APIs on Cloudways staging yet.** Phase 1.3
+  must bind account APIs to verified principal context and review the
+  operation-level rate limit, audit, revocation and identity deployment
+  controls first. The default deployed #58 Rust service remains unchanged.
+
+The auth HTTP and repository contract tests run in GitHub Actions with
+fake seeded users and temporary private storage, without MariaDB, Redis,
+real credentials or live trading.
