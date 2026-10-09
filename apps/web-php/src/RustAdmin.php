@@ -90,12 +90,17 @@ final class RustAdmin
         ini_set('session.use_strict_mode', '1');
         ini_set('session.use_only_cookies', '1');
         ini_set('session.cookie_httponly', '1');
-        ini_set('session.cookie_secure', '1');
+        // Only CI loopback HTTP may use a non-Secure cookie. Real QSYN
+        // deployments always require HTTPS and Secure session cookies.
+        $host = (string)($_SERVER['HTTP_HOST'] ?? '');
+        $testLoopback = getenv('QSYN_ALLOW_HTTP_TEST') === '1'
+            && preg_match('/^(?:localhost|127\\.0\\.0\\.1)(?::[0-9]{1,5})?$/D', $host) === 1;
+        ini_set('session.cookie_secure', $testLoopback ? '0' : '1');
         session_name('QSYN_ADMIN_SESSION');
         session_set_cookie_params([
             'lifetime' => 0,
             'path' => '/qsyn/',
-            'secure' => true,
+            'secure' => !$testLoopback,
             'httponly' => true,
             'samesite' => 'Strict',
         ]);
@@ -131,13 +136,20 @@ final class RustAdmin
         if ($fetchSite !== '' && $fetchSite !== 'same-origin' && $fetchSite !== 'none') {
             return false;
         }
+        $host = (string)($headers['HTTP_HOST'] ?? '');
+        // HTTP is permitted in integration tests ONLY on a local loopback
+        // host. Never permit this override on stage.digiti.in or another
+        // externally reachable host, even if an env var is misconfigured.
+        $localTest = getenv('QSYN_ALLOW_HTTP_TEST') === '1'
+            && preg_match('/^(?:localhost|127\\.0\\.0\\.1)(?::[0-9]{1,5})?$/D', $host) === 1;
         $origin = trim((string)($headers['HTTP_ORIGIN'] ?? ''));
-        if ($origin !== '' && $origin !== 'https://' . (string)($headers['HTTP_HOST'] ?? '')) {
+        if ($origin !== '' && $origin !== 'https://' . $host
+            && !($localTest && $origin === 'http://' . $host)) {
             return false;
         }
         return ($headers['HTTPS'] ?? '') === 'on'
             || ($headers['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https'
-            || getenv('QSYN_ALLOW_HTTP_TEST') === '1'; // CI only: never set on Cloudways
+            || $localTest;
     }
 
     public static function attempt(string $password): bool

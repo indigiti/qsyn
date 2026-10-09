@@ -35,12 +35,14 @@ jobs:
           php -l apps/web-php/src/RustProbe.php
           php -l apps/web-php/src/RustStreamProbe.php
           php -l apps/web-php/src/RustAdmin.php
+          php -l apps/web-php/src/RustAdminBootstrap.php
           php -l apps/web-php/tools/make-admin-config.php
           php -l apps/web-php/src/RustDemoConfig.php
           php -l apps/web-php/src/RustSupervisor.php
           php -l apps/web-php/public/admin-rust.php
           php apps/web-php/tests/FileStoreTest.php
           php apps/web-php/tests/RustAdminTest.php
+          php apps/web-php/tests/RustAdminBootstrapTest.php
           php apps/web-php/tests/RustDemoConfigTest.php
       - uses: dtolnay/rust-toolchain@stable
       - name: Test and compile Rust binary
@@ -88,6 +90,7 @@ jobs:
           cp apps/web-php/src/RustProbe.php staging/private/app/src/RustProbe.php
           cp apps/web-php/src/RustStreamProbe.php staging/private/app/src/RustStreamProbe.php
           cp apps/web-php/src/RustAdmin.php staging/private/app/src/RustAdmin.php
+          cp apps/web-php/src/RustAdminBootstrap.php staging/private/app/src/RustAdminBootstrap.php
           cp apps/web-php/src/RustDemoConfig.php staging/private/app/src/RustDemoConfig.php
           cp apps/web-php/src/RustSupervisor.php staging/private/app/src/RustSupervisor.php
           cp services/stream-rust/target/release/qsyn-stream staging/private/app/bin/qsyn-stream
@@ -117,6 +120,8 @@ jobs:
           test -s staging/public/assets/rust-activation-readiness.js
           test -s staging/public/admin-rust.php
           test -s staging/private/app/src/RustAdmin.php
+          test -s staging/private/app/src/RustAdminBootstrap.php
+          test ! -e staging/private/runtime/admin-setup-code.txt
           test -s staging/private/runtime/README.txt
           test ! -f staging/private/runtime/admin-auth.json
           test -s staging/private/app/src/RustDemoConfig.php
@@ -158,6 +163,8 @@ jobs:
           test -s verified-release/public/assets/rust-activation-readiness.js
           test -s verified-release/public/admin-rust.php
           test -s verified-release/private/app/src/RustAdmin.php
+          test -s verified-release/private/app/src/RustAdminBootstrap.php
+          test ! -e verified-release/private/runtime/admin-setup-code.txt
           test -s verified-release/private/runtime/README.txt
           test ! -f verified-release/private/runtime/admin-auth.json
           test -s verified-release/private/app/src/RustDemoConfig.php

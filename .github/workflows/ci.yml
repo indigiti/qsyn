@@ -28,6 +28,7 @@ jobs:
           php -l apps/web-php/src/RustProbe.php
           php -l apps/web-php/src/RustStreamProbe.php
           php -l apps/web-php/src/RustAdmin.php
+          php -l apps/web-php/src/RustAdminBootstrap.php
           php -l apps/web-php/tools/make-admin-config.php
           php -l apps/web-php/src/RustDemoConfig.php
           php -l apps/web-php/src/RustSupervisor.php
@@ -35,6 +36,7 @@ jobs:
           php -l apps/web-php/dev-router.php
           php apps/web-php/tests/FileStoreTest.php
           php apps/web-php/tests/RustAdminTest.php
+          php apps/web-php/tests/RustAdminBootstrapTest.php
           php apps/web-php/tests/RustDemoConfigTest.php
       - name: Validate offline administrator config generator
         run: |

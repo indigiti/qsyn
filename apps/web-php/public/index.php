@@ -56,7 +56,7 @@ if ($route === '/qsyn/api/v1/diagnostics/rust' || $route === '/api/v1/diagnostic
 
 // Administrator-only Rust service control. Never accessible without a configured
 // admin password, valid PHP session, CSRF token and allowlisted local adapter.
-if (preg_match('#^(?:/qsyn)?/api/v1/admin/rust/(state|login|logout|action|demo)$#', $route, $matches)) {
+if (preg_match('#^(?:/qsyn)?/api/v1/admin/rust/(state|login|logout|action|demo|setup)$#', $route, $matches)) {
     $operation = $matches[1];
     $source = dirname(__DIR__) . '/src';
     if (!is_file($source . '/RustAdmin.php')) {
@@ -67,6 +67,10 @@ if (preg_match('#^(?:/qsyn)?/api/v1/admin/rust/(state|login|logout|action|demo)$
     }
     require_once $source . '/RustAdmin.php';
     require_once $source . '/RustSupervisor.php';
+    if (!is_file($source . '/RustAdminBootstrap.php')) {
+        respond(['error' => 'setup_module_unavailable'], 503);
+    }
+    require_once $source . '/RustAdminBootstrap.php';
     \QSYN\Admin\RustAdmin::boot();
 
     $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
@@ -101,10 +105,28 @@ if (preg_match('#^(?:/qsyn)?/api/v1/admin/rust/(state|login|logout|action|demo)$
         respond(['authenticated' => true, 'csrf' => \QSYN\Admin\RustAdmin::csrf()]);
     }
 
+    if ($operation === 'setup') {
+        if (!\QSYN\Admin\RustAdminBootstrap::validCsrf((string)($_SERVER['HTTP_X_CSRF_TOKEN'] ?? ''))) {
+            respond(['error' => 'csrf_invalid'], 403);
+        }
+        $setupCode = (string)($data['setup_code'] ?? '');
+        $newPassword = (string)($data['new_password'] ?? '');
+        $result = \QSYN\Admin\RustAdminBootstrap::complete($setupCode, $newPassword);
+        respond($result, ($result['ok'] ?? false) ? 200 : 403);
+    }
+
     if ($operation === 'state') {
         $authorized = \QSYN\Admin\RustAdmin::authenticated();
         respond([
             'configured' => \QSYN\Admin\RustAdmin::configured(),
+            'setup' => $authorized ? ['available' => false] : (static function (): array {
+                $setup = \QSYN\Admin\RustAdminBootstrap::status();
+                return [
+                    'available' => $setup['available'],
+                    'reason' => $setup['reason'],
+                    'csrf' => $setup['available'] ? \QSYN\Admin\RustAdminBootstrap::csrf() : null,
+                ];
+            })(),
             'authenticated' => $authorized,
             'csrf' => $authorized ? \QSYN\Admin\RustAdmin::csrf() : null,
             'manager' => $authorized ? \QSYN\Admin\RustSupervisor::status() : null,

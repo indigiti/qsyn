@@ -420,3 +420,48 @@ No generic PHP `exec`/`shell_exec`/`proc_open` permissions are required
 for administrator sign-in or toggling simulated WebSockets. They are a
 separate consideration for optional web Start/Stop/Restart of a fully managed
 Rust daemon. Do not ask Cloudways to implement QSYN market-data logic.
+
+## Secure first-time administrator setup on the website
+
+The administrator no longer needs a developer-generated `admin-auth.json`
+file to set a first password. **There must still be proof of ownership**:
+an unrestricted, publicly accessible "first visitor becomes admin" page
+would let an attacker seize Rust controls.
+
+1. Deploy the QSYN release, confirm the private runtime directory exists
+   and that PHP can create owner-only `0600` private files there.
+2. Open `https://stage.digiti.in/qsyn/admin/rust`. If neither an
+   administrator nor an explicit disabled configuration exists, QSYN
+   generates a cryptographically random **256-bit one-time pairing code**
+   inside `private_html/qsyn/runtime/admin-setup-code.txt`. It is NOT
+   returned in any HTTP response and remains private to the app owner.
+3. From an **authorized Cloudways SFTP/private file manager**, open that
+   private text file and copy its 64 lowercase hexadecimal characters.
+   Never share it in a support ticket, chatbot, GitHub, screenshot, or
+   public_html. The operator does not need SSH or PHP-FPM environment
+   configuration for this step.
+4. On the QSYN web form **Create administrator password**, enter that
+   private code and choose a unique password (at least 20 characters).
+   HTTPS, same-origin validation, session CSRF and a per-session failed
+   attempt limit are enforced.
+5. QSYN atomically creates `private_html/qsyn/runtime/admin-auth.json`
+   with mode `0600`, stores only a PHP password hash, and invalidates the
+   one-time code. Setup becomes unavailable immediately, and the normal
+   sign-in form appears.
+6. Sign in and use **Enable demo stream → Test demo stream**. Rust must
+   already be running a compatible binary with shared private runtime
+   permissions; this setup doesn't start/stop the OS process.
+
+**Fail-closed behavior:** setup never activates if a private admin file
+already exists (even malformed/disabled), if the server-level
+`QSYN_CONTROL_ENABLED=0` kill switch is set, if private directory
+permissions are unsafe, or if the pairing code is absent/modified/too
+permissively readable. Password creation cannot replace existing
+administrators. Only an authorized private-filesystem operator may
+recover an invalid existing admin configuration; no unauthenticated
+password reset endpoint exists.
+
+**Administrative controls remain restricted:** this web enrollment
+does not enable generic PHP shell execution or activate optional
+Start/Stop/Restart. Runtime demo toggling is an authenticated, narrow,
+CSRF-protected operation separate from process management.

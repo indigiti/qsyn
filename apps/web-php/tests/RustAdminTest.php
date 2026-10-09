@@ -27,6 +27,8 @@ putenv('QSYN_CONTROL_ENABLED=1');
 putenv('QSYN_ALLOW_HTTP_TEST=1');
 ensure(RustAdmin::configured(), 'configured with valid password hash');
 ensure(RustAdmin::originAllowed(['HTTP_HOST'=>'localhost']), 'CI-only HTTPS override permitted');
+ensure(RustAdmin::originAllowed(['HTTP_HOST'=>'127.0.0.1:18080','HTTP_ORIGIN'=>'http://127.0.0.1:18080']), 'matching loopback HTTP browser origin allowed for CI');
+ensure(!RustAdmin::originAllowed(['HTTP_HOST'=>'stage.digiti.in','HTTP_ORIGIN'=>'http://stage.digiti.in']), 'test flag cannot permit public HTTP origin');
 ensure(!RustAdmin::originAllowed(['HTTP_HOST'=>'localhost','HTTP_SEC_FETCH_SITE'=>'cross-site']), 'cross-site blocked');
 ensure(!RustAdmin::originAllowed(['HTTP_HOST'=>'localhost','HTTP_ORIGIN'=>'https://evil.example']), 'foreign origin blocked');
 

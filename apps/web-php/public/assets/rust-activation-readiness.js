@@ -59,7 +59,7 @@
       root.append(
         line('Administrator sign-in', configured,
           configured ? 'Secure admin credentials are configured.'
-            : 'The developer must provision a private mode-0600 admin-auth.json under the persistent QSYN runtime. PHP-FPM secrets are optional.'),
+            : 'First-time setup: read the one-time code in private_html/qsyn/runtime/admin-setup-code.txt via Cloudways private SFTP, then create your password on this page. Never share the code.'),
         line('Rust HTTP engine', online,
           online ? 'Private Rust /health reachable through PHP.'
             : 'Cloudways must verify the QSYN-only process on 127.0.0.1:10251.'),
@@ -93,7 +93,7 @@
       copy.dataset.report = [
         'QSYN / Cloudways activation request (staging only)',
         'Please keep QNEXT untouched and never expose port 10251 publicly.',
-        '1. Developer: generate QSYN administrator config offline, and securely provision a 0600 admin-auth.json in private_html/qsyn/runtime. Existing PHP-FPM secrets are an alternative, not required. Never place admin config in public_html, GitHub, DigiOps release artifacts or this browser.',
+        '1. First visit to /qsyn/admin/rust: the application generates an owner-only 256-bit code in private_html/qsyn/runtime/admin-setup-code.txt. Retrieve it with authorized Cloudways private SFTP/file manager, then enter it in Create administrator password. The code is never returned over HTTP; no public first-user claim is allowed.',
         '2. Server operator only if needed: verify that qsyn-stream /health at 127.0.0.1:10251 reports demo_runtime_control=true. If it does not, perform a controlled QSYN-only executable transition, leaving QNEXT untouched.',
         '3. Server permissions only if needed: ensure QSYN PHP can read the private 0600 administrator configuration and atomically write the demo flag under private_html/qsyn/runtime. Rust must be able to read that flag. No broad process-execution privileges.',
         '4. Preserve restrictive application permissions, HTTPS and QSYN admin session/CSRF protections.',

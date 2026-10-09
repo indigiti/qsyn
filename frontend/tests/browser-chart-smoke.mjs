@@ -1,9 +1,10 @@
 // Browser regression for real candlestick painting, not only OHLC footer data.
 // Run after npm run build with Chromium installed: node tests/browser-chart-smoke.mjs
 import { spawn } from 'node:child_process';
-import { mkdir, copyFile, unlink } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, stat, rm, copyFile, unlink } from 'node:fs/promises';
 import { createServer } from 'node:net';
-import { resolve } from 'node:path';
+import { resolve, join } from 'node:path';
+import { tmpdir } from 'node:os';
 import { setTimeout as delay } from 'node:timers/promises';
 import { chromium } from 'playwright';
 
@@ -15,6 +16,7 @@ const errors = [];
 const warnings = [];
 let server;
 let browser;
+let temporaryRuntime;
 
 async function freePort() {
   return new Promise((done, reject) => {
@@ -67,11 +69,16 @@ async function paintedPixels(page) {
 try {
   await mkdir(screenshots, { recursive: true });
   await copyFile(bundle, chartAsset);
+  temporaryRuntime = await mkdtemp(join(tmpdir(), 'qsyn-browser-first-run-'));
   const port = await freePort();
   const origin = 'http://127.0.0.1:' + port;
   server = spawn('php', ['-S', '127.0.0.1:' + port, '-t',
     'apps/web-php/public', 'apps/web-php/dev-router.php'],
-    { cwd: project, stdio: ['ignore', 'pipe', 'pipe'] });
+    { cwd: project, stdio: ['ignore', 'pipe', 'pipe'], env: {
+      ...process.env,
+      QSYN_RUNTIME_DIR: temporaryRuntime,
+      QSYN_ALLOW_HTTP_TEST: '1',
+    } });
   let phpError = '';
   server.stderr.on('data', data => { phpError += String(data).slice(-1500); });
   await waitForHealth(origin);
@@ -138,6 +145,64 @@ try {
       || !activationInfo.includes('Rust HTTP engine')
       || !activationInfo.includes('No-restart demo toggle')) {
     throw new Error('Activation checklist missed required security gates');
+  }
+  // First-run password creation is a web operation, but it can only be
+  // claimed with a private 256-bit code retrieved by the trusted operator.
+  if (!(await adminBrowser.locator('#admin-first-run').isVisible())) {
+    throw new Error('First-run setup form not visible on unconfigured QSYN');
+  }
+  const secretFile = join(temporaryRuntime, 'admin-setup-code.txt');
+  const code = (await readFile(secretFile, 'utf8')).trim();
+  if (!/^[a-f0-9]{64}$/.test(code) || (await stat(secretFile)).mode % 512 !== 0o600) {
+    throw new Error('Private setup code missing or its file mode is unsafe');
+  }
+  const browserCookies = await adminBrowser.context().cookies(origin + '/qsyn/');
+  if (!browserCookies.some(cookie => cookie.name === 'QSYN_ADMIN_SESSION')) {
+    throw new Error('QSYN admin session cookie was not preserved in Chromium');
+  }
+  const unauthenticatedState = await adminBrowser.evaluate(async () => {
+    const response = await fetch('/qsyn/api/v1/admin/rust/state', {
+      credentials: 'same-origin', cache: 'no-store',
+    });
+    return response.text();
+  });
+  if (unauthenticatedState.includes(code)) {
+    throw new Error('Secret pairing code leaked in public admin state');
+  }
+  if (!JSON.parse(unauthenticatedState).setup?.csrf) {
+    throw new Error('First-run csrf token not available in same-origin session');
+  }
+  await adminBrowser.locator('#setup-code').fill(code);
+  const freshPassword = 'strong-browser-only-setup-' + 'X'.repeat(24);
+  await adminBrowser.locator('#setup-password').fill(freshPassword);
+  await adminBrowser.locator('#setup-confirm').fill(freshPassword);
+  const firstRunResponsePromise = adminBrowser.waitForResponse(response =>
+    response.url().endsWith('/qsyn/api/v1/admin/rust/setup'), { timeout: 7000 });
+  await adminBrowser.locator('#setup-button').click();
+  const firstRunResponse = await firstRunResponsePromise;
+  const firstRunStatus = firstRunResponse.status();
+  const firstRunResponseBody = await firstRunResponse.json();
+  if (firstRunStatus !== 200 || firstRunResponseBody.ok !== true) {
+    throw new Error('First-run setup API rejected request: HTTP ' + firstRunStatus +
+      ' / ' + String(firstRunResponseBody.error || 'unknown'));
+  }
+  await adminBrowser.waitForFunction(() => {
+    const text = document.getElementById('feedback')?.textContent || '';
+    return text.includes('Administrator password created.')
+      || text.includes('First-time setup could not be completed.');
+  }, null, { timeout: 7000 });
+  const setupFeedback = await adminBrowser.locator('#feedback').textContent();
+  if (!setupFeedback.includes('Administrator password created.')) {
+    throw new Error('First-run browser setup failed: ' + setupFeedback);
+  }
+  await adminBrowser.locator('#admin-login').waitFor({ state: 'visible', timeout: 7000 });
+  await adminBrowser.locator('#admin-first-run').waitFor({ state: 'hidden', timeout: 7000 });
+  await adminBrowser.locator('#admin-password').fill(freshPassword);
+  await adminBrowser.locator('#login-button').click();
+  await adminBrowser.waitForFunction(() =>
+    !document.getElementById('admin-panel')?.hidden, null, { timeout: 7000 });
+  if (!(await adminBrowser.locator('#admin-panel').isVisible())) {
+    throw new Error('New private administrator could not sign in');
   }
   await adminBrowser.close();
   const chartSrc = await page.locator('script[src*="/qsyn/assets/chart.js"]').getAttribute('src');
@@ -258,4 +323,5 @@ try {
   await browser?.close();
   server?.kill('SIGTERM');
   await unlink(chartAsset).catch(() => {});
+  if (temporaryRuntime) await rm(temporaryRuntime, { recursive: true, force: true });
 }
