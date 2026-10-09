@@ -54,6 +54,23 @@ if ($route === '/qsyn/api/v1/diagnostics/rust' || $route === '/api/v1/diagnostic
     respond(\QSYN\Diagnostics\RustProbe::inspect());
 }
 
+// Deliberately disabled-by-default QSYN *user* identity test API.
+// Separate cookie and code from the Rust operations administrator.
+if (preg_match('#^/qsyn/api/v1/auth/(state|me|login|logout)$#', $route, $identityMatch)) {
+    $src = dirname(__DIR__) . '/src';
+    if (!is_file($src . '/IdentityApi.php')) {
+        $src = dirname(__DIR__, 2) . '/private_html/qsyn/app/src';
+    }
+    foreach (['FileStore', 'UserRepository', 'FileUserRepository', 'IdentityThrottle', 'UserSession', 'IdentityApi'] as $unit) {
+        if (!is_file($src . '/' . $unit . '.php')) {
+            respond(['error' => 'identity_modules_unavailable'], 503);
+        }
+        require_once $src . '/' . $unit . '.php';
+    }
+    [$status, $payload] = \QSYN\Identity\IdentityApi::dispatch($identityMatch[1], $_SERVER);
+    respond($payload, $status);
+}
+
 // Administrator-only Rust service control. Never accessible without a configured
 // admin password, valid PHP session, CSRF token and allowlisted local adapter.
 if (preg_match('#^(?:/qsyn)?/api/v1/admin/rust/(state|login|logout|action|demo|setup)$#', $route, $matches)) {

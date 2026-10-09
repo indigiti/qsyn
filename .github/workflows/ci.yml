@@ -38,6 +38,14 @@ jobs:
           php -l apps/web-php/src/FileMockBrokerConnectionRepository.php
           php apps/web-php/tests/FileStoreTest.php
           php apps/web-php/tests/MockBrokerConnectionRepositoryTest.php
+          php -l apps/web-php/src/UserRepository.php
+          php -l apps/web-php/src/FileUserRepository.php
+          php -l apps/web-php/src/IdentityThrottle.php
+          php -l apps/web-php/src/UserSession.php
+          php -l apps/web-php/src/IdentityApi.php
+          php -l apps/web-php/tests/IdentityContractsTest.php
+          php apps/web-php/tests/IdentityContractsTest.php
+          python3 apps/web-php/tests/IdentityHttpSmoke.py
           php apps/web-php/tests/RustAdminTest.php
           php apps/web-php/tests/RustAdminBootstrapTest.php
           php apps/web-php/tests/RustDemoConfigTest.php
