@@ -179,7 +179,12 @@ if ($route !== '/' && $route !== '/qsyn' && $route !== '/qsyn/') {
     respond(['error' => 'not_found'], 404);
 }
 header('Content-Type: text/html; charset=utf-8');
+header('Cache-Control: private, no-store');
 header('Content-Security-Policy: default-src ' . "'self'" . '; script-src ' . "'self'" . '; style-src ' . "'self' 'unsafe-inline'" . '; connect-src ' . "'self'" . '; img-src ' . "'self' data:" . ';');
+// A new DigiOps chart bundle receives a new file timestamp. Keep the HTML
+// uncacheable; let browsers cache only the explicitly versioned static asset.
+$chartBundleVersion = (string)(@filemtime(__DIR__ . '/assets/chart.js') ?: '0');
+$diagnosticsVersion = (string)(@filemtime(__DIR__ . '/assets/chart-diagnostics.js') ?: '0');
 ?>
 <!doctype html>
 <html lang="en">
@@ -187,6 +192,7 @@ header('Content-Security-Policy: default-src ' . "'self'" . '; script-src ' . "'
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>QSYN — Development Terminal</title>
+<script src="/qsyn/assets/chart-diagnostics.js?v=<?= rawurlencode($diagnosticsVersion) ?>"></script>
 <style>
 html,body{margin:0;background:#0b111b;color:#e5eaf3;font:14px system-ui,sans-serif}
 header{padding:18px 24px;border-bottom:1px solid #303b4b;display:flex;align-items:center;gap:14px}
@@ -203,6 +209,12 @@ main{padding:20px;max-width:1600px;margin:auto} h1{font-size:20px;font-weight:60
 .chart-top button:disabled{opacity:.55;cursor:wait}
 #chart-reset-status{color:#a8c6e7;font-size:12px}
 .note{color:#a8b9ce;font-size:12px;margin-top:12px;line-height:1.6}
+.chart-debug{border:1px solid #34455c;border-radius:9px;padding:12px 16px;margin:14px 0;color:#c5d6eb}
+.chart-debug summary{cursor:pointer;font-weight:700}
+.chart-debug p{font-size:12px;color:#a8b9ce}
+.chart-debug button{background:#253d5b;border:1px solid #4c709d;color:#f0f5ff;border-radius:6px;padding:7px 12px;cursor:pointer;margin-right:8px}
+.chart-debug button:disabled{opacity:.5;cursor:not-allowed}
+.chart-debug pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:340px;overflow:auto;font-size:12px;color:#b5d2f0}
 </style>
 </head>
 <body>
@@ -234,9 +246,16 @@ main{padding:20px;max-width:1600px;margin:auto} h1{font-size:20px;font-weight:60
   </div>
 </section>
 <div id="terminal"><p style="padding:16px">Build chart assets using <code>npm run build</code> in <code>frontend/</code>, then copy <code>dist/chart.js</code> to <code>public/assets/chart.js</code>.</p></div>
+<details class="chart-debug">
+  <summary>Chart display diagnostics</summary>
+  <p>If candles disappear, check canvas rendering and CSP locally. Nothing is transmitted or changed.</p>
+  <button type="button" id="chart-diagnose">Diagnose chart</button>
+  <button type="button" id="chart-diagnostic-copy" disabled>Copy report</button>
+  <pre id="chart-diagnostic-report" role="status">Click Diagnose chart to inspect this browser.</pre>
+</details>
 <p class="note">No live Upstox feed, brokerage login or order execution is enabled. This chart uses deterministic demonstration OHLC data. Market-data source integration is a later phase.</p>
 </main>
-<script src="/qsyn/assets/chart.js" defer></script>
+<script src="/qsyn/assets/chart.js?v=<?= rawurlencode($chartBundleVersion) ?>" defer></script>
 <script src="/qsyn/assets/rust-diagnostics.js" defer></script>
 <script src="/qsyn/assets/rust-stream-test.js" defer></script>
 </body>

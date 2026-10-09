@@ -71,6 +71,7 @@ jobs:
           cp apps/web-php/public/.htaccess staging/public/.htaccess
           cp frontend/dist/chart.js staging/public/assets/chart.js
           cp apps/web-php/public/assets/rust-diagnostics.js staging/public/assets/rust-diagnostics.js
+          cp apps/web-php/public/assets/chart-diagnostics.js staging/public/assets/chart-diagnostics.js
           cp apps/web-php/public/assets/rust-stream-test.js staging/public/assets/rust-stream-test.js
           cp apps/web-php/public/assets/rust-admin.js staging/public/assets/rust-admin.js
           cp frontend/node_modules/openalgo-charts/LICENSE staging/public/licenses/openalgo-charts-LICENSE.txt
@@ -102,6 +103,7 @@ jobs:
           test -s staging/public/index.php
           test -s staging/public/.htaccess
           test -s staging/public/assets/chart.js
+          test -s staging/public/assets/chart-diagnostics.js
           test -s staging/public/assets/rust-diagnostics.js
           test -s staging/public/assets/rust-stream-test.js
           test -s staging/private/app/src/RustStreamProbe.php
@@ -139,6 +141,7 @@ jobs:
           test -s verified-release/public/index.php
           test -s verified-release/public/.htaccess
           test -s verified-release/public/assets/chart.js
+          test -s verified-release/public/assets/chart-diagnostics.js
           test -s verified-release/public/assets/rust-diagnostics.js
           test -s verified-release/public/assets/rust-stream-test.js
           test -s verified-release/private/app/src/RustStreamProbe.php
