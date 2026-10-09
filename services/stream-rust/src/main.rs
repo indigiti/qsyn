@@ -51,7 +51,7 @@ async fn demo_session(mut socket: WebSocket) {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Localhost only by default. Do not publish the demo gateway to the internet.
-    let bind = std::env::var("QSYN_BIND").unwrap_or_else(|_| "127.0.0.1:1299".to_owned());
+    let bind = std::env::var("QSYN_BIND").unwrap_or_else(|_| "127.0.0.1:10251".to_owned());
     let listener = tokio::net::TcpListener::bind(&bind).await?;
     let app = Router::new()
         .route("/health", get(health))
