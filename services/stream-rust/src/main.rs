@@ -16,12 +16,14 @@ async fn health() -> Json<Value> {
         "component": "qsyn-stream",
         "mode": "foundation",
         "upstox_connected": false,
-        "trading_enabled": false
+        "trading_enabled": false,
+        "demo_runtime_control": true,
+        "demo_ws_enabled": process_control::demo_ws_enabled()
     }))
 }
 
 async fn demo_ws(ws: WebSocketUpgrade) -> Response {
-    if std::env::var("QSYN_ENABLE_DEMO_WS").as_deref() != Ok("1") {
+    if !process_control::demo_ws_enabled() {
         return StatusCode::NOT_FOUND.into_response();
     }
     ws.on_upgrade(demo_session)
