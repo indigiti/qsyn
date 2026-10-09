@@ -5,7 +5,7 @@
 private-storage/
 storage/
 apps/web-php/storage/
-apps/web-php/public/assets/
+apps/web-php/public/assets/chart.js
 frontend/node_modules/
 frontend/dist/
 services/stream-rust/target/
