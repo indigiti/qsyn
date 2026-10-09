@@ -1,9 +1,9 @@
-# QSYN — Master Architecture Blueprint v1.4
+# QSYN — Master Architecture Blueprint v1.5
 
 **Status:** Architecture baseline for implementation; deployment and licensing gates remain open  
 **Updated:** 2026-10-09  
 **Repository:** https://github.com/indigiti/qsyn  
-**Supersedes:** Blueprint v1.3; preserves database-free development/testing and adds explicit multiple broker accounts per QSYN user
+**Supersedes:** Blueprint v1.4; retains multi-broker account design and adds an opt-in authenticated Rust runtime management boundary
 
 > This document is the canonical QSYN architecture. A completed item must be backed by code, tests, and deployment evidence. Statements marked "proposed", "target", or "pending" are not deployed capabilities.
 
@@ -322,12 +322,17 @@ These are **acceptance targets**, not claims about Upstox, Cloudways, OpenAlgo o
 | ADR-012 | Reusable repository contracts and repeatable file→MariaDB import/verification/rollback procedure are mandatory before switching | **Fixed** |
 | ADR-013 | One QSYN user can link multiple Upstox accounts and other broker accounts; each authorization/feed/order context is isolated | **Fixed requirement; not implemented** |
 | ADR-014 | No broker account's market data may be used to service unrelated users absent verified redistribution rights | **Fixed** |
+| ADR-015 | Browser Start/Stop/Restart of qsyn-stream requires an authenticated admin control plane, a restricted provider-approved service manager, CSRF protection and explicit opt-in; no public shell execution | **Implemented as disabled-by-default interface; Cloudways process manager unverified** |
+
+### Phase 0 administrator-only Rust runtime control
+
+QSYN has an opt-in web administration interface for the single hardcoded program `qsyn-stream` at `/qsyn/admin/rust`, with Start, Stop, Restart, manager status and Rust health. It is deliberately disabled by default. Enabling requires a server-managed administrator password hash, secure PHP sessions and CSRF, and provider-approved **restricted** Supervisor control scoped only to QSYN; it never runs arbitrary commands supplied by the browser. Cloudways' ability to grant those permissions has not been verified. `QSYN_CONTROL_ENABLED=1` alone does not start Rust. Detailed configuration and restrictions are in `infrastructure/DIGIOPS.md`.
 
 ## 13. Open launch gates and current implementation status
 
 **Not yet verified:** multi-tenant multi-account broker authorization/compliance and static-IP rules; the resource cost of multiple OpenAlgo contexts; Cloudways daemon viability; Upstox live-feed latency; production data licenses/derived-data rights; tenant-scale OpenAlgo topology; actual hardware sizing; full WAL crash recovery; end-to-end chart integration; file-backed application-store concurrency/recovery; MariaDB adapter migration and cutover (not yet required).
 
-**This revision is documentation only.** It does not implement a Rust engine, PHP website, Upstox credentials, chart terminal, file-store adapter, MariaDB adapter, migration tooling, CI automation or Cloudways deployment. Implementation begins at Phase 0, following this document.
+**Phase 0 implemented so far:** PHP development terminal, simulated chart feed, OpenAlgo Charts bundle, Rust synthetic calculation foundation, compiled Rust health/demo WebSocket executable, file-store scaffold, GitHub Actions tests and DigiOps release packaging. Administrator-only runtime control interface is implemented but disabled until Cloudways provisions a restricted service manager. **Not implemented:** live Upstox OAuth/feed, real multi-user accounts, production trading, complete file WAL/recovery, optional MariaDB adapter/migration, verified persistent Rust daemon startup and management on Cloudways. Implementation begins at Phase 0, following this document.
 
 ## Primary upstream references
 

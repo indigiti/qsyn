@@ -33,7 +33,11 @@ jobs:
         run: |
           php -l apps/web-php/public/index.php
           php -l apps/web-php/src/RustProbe.php
+          php -l apps/web-php/src/RustAdmin.php
+          php -l apps/web-php/src/RustSupervisor.php
+          php -l apps/web-php/public/admin-rust.php
           php apps/web-php/tests/FileStoreTest.php
+          php apps/web-php/tests/RustAdminTest.php
       - uses: dtolnay/rust-toolchain@stable
       - name: Test and compile Rust binary
         run: |
@@ -59,15 +63,19 @@ jobs:
           mkdir -p staging/private/app/{src,bin}
           mkdir -p staging/private/build
           cp apps/web-php/public/index.php staging/public/index.php
+          cp apps/web-php/public/admin-rust.php staging/public/admin-rust.php
           cp apps/web-php/public/.htaccess staging/public/.htaccess
           cp frontend/dist/chart.js staging/public/assets/chart.js
           cp apps/web-php/public/assets/rust-diagnostics.js staging/public/assets/rust-diagnostics.js
+          cp apps/web-php/public/assets/rust-admin.js staging/public/assets/rust-admin.js
           cp frontend/node_modules/openalgo-charts/LICENSE staging/public/licenses/openalgo-charts-LICENSE.txt
           if [ -f frontend/node_modules/openalgo-charts/NOTICE ]; then
             cp frontend/node_modules/openalgo-charts/NOTICE staging/public/licenses/openalgo-charts-NOTICE.txt
           fi
           cp apps/web-php/src/FileStore.php staging/private/app/src/FileStore.php
           cp apps/web-php/src/RustProbe.php staging/private/app/src/RustProbe.php
+          cp apps/web-php/src/RustAdmin.php staging/private/app/src/RustAdmin.php
+          cp apps/web-php/src/RustSupervisor.php staging/private/app/src/RustSupervisor.php
           cp services/stream-rust/target/release/qsyn-stream staging/private/app/bin/qsyn-stream
           cat > staging/RELEASE.json <<EOF
           {
@@ -88,6 +96,10 @@ jobs:
           test -s staging/public/.htaccess
           test -s staging/public/assets/chart.js
           test -s staging/public/assets/rust-diagnostics.js
+          test -s staging/public/assets/rust-admin.js
+          test -s staging/public/admin-rust.php
+          test -s staging/private/app/src/RustAdmin.php
+          test -s staging/private/app/src/RustSupervisor.php
           test -s staging/private/app/src/RustProbe.php
           test -x staging/private/app/bin/qsyn-stream
           test -s staging/RELEASE.json
@@ -118,6 +130,10 @@ jobs:
           test -s verified-release/public/.htaccess
           test -s verified-release/public/assets/chart.js
           test -s verified-release/public/assets/rust-diagnostics.js
+          test -s verified-release/public/assets/rust-admin.js
+          test -s verified-release/public/admin-rust.php
+          test -s verified-release/private/app/src/RustAdmin.php
+          test -s verified-release/private/app/src/RustSupervisor.php
           test -s verified-release/private/app/src/RustProbe.php
           test -s verified-release/private/app/src/FileStore.php
           test -s verified-release/private/app/bin/qsyn-stream

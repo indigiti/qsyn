@@ -1,0 +1,22 @@
+; Reference for Cloudways Support ONLY. Do not upload as an active config through the web app.
+; Supervisor must run under a dedicated restricted service account/socket.
+; Substitute application-specific absolute paths and create private log directories.
+[program:qsyn-stream]
+command=/ABSOLUTE/APPLICATION/PATH/private_html/qsyn/app/bin/qsyn-stream
+directory=/ABSOLUTE/APPLICATION/PATH/private_html/qsyn/app/bin
+environment=QSYN_BIND="127.0.0.1:10251"
+autostart=true
+autorestart=unexpected
+startsecs=3
+startretries=3
+stopsignal=TERM
+stopwaitsecs=10
+stopasgroup=true
+killasgroup=true
+redirect_stderr=true
+stdout_logfile=/ABSOLUTE/PRIVATE/RUNTIME/PATH/logs/qsyn-stream.log
+stdout_logfile_maxbytes=10MB
+stdout_logfile_backups=3
+; user=APP_OWNER -- Cloudways Support must specify the actual permitted user.
+; A dedicated qsyn-only supervisor endpoint/configuration is required for
+; supervisorctl web actions. DO NOT expose a global privileged Supervisor socket.

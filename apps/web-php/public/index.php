@@ -37,6 +37,91 @@ if ($route === '/qsyn/api/v1/diagnostics/rust' || $route === '/api/v1/diagnostic
     respond(\QSYN\Diagnostics\RustProbe::inspect());
 }
 
+// Administrator-only Rust service control. Never accessible without a configured
+// admin password, valid PHP session, CSRF token and approved supervisor adapter.
+if (preg_match('#^(?:/qsyn)?/api/v1/admin/rust/(state|login|logout|action)$#', $route, $matches)) {
+    $operation = $matches[1];
+    $source = dirname(__DIR__) . '/src';
+    if (!is_file($source . '/RustAdmin.php')) {
+        $source = dirname(__DIR__, 2) . '/private_html/qsyn/app/src';
+    }
+    if (!is_file($source . '/RustAdmin.php') || !is_file($source . '/RustSupervisor.php')) {
+        respond(['error' => 'admin_modules_unavailable'], 503);
+    }
+    require_once $source . '/RustAdmin.php';
+    require_once $source . '/RustSupervisor.php';
+    \QSYN\Admin\RustAdmin::boot();
+
+    $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
+    $expected = $operation === 'state' ? 'GET' : 'POST';
+    if ($method !== $expected) {
+        header('Allow: ' . $expected);
+        respond(['error' => 'method_not_allowed'], 405);
+    }
+    if ($operation !== 'state') {
+        if (!\QSYN\Admin\RustAdmin::originAllowed($_SERVER)) {
+            respond(['error' => 'origin_not_allowed'], 403);
+        }
+        if (stripos((string)($_SERVER['CONTENT_TYPE'] ?? ''), 'application/json') !== 0) {
+            respond(['error' => 'content_type_required'], 415);
+        }
+        $raw = file_get_contents('php://input', false, null, 0, 2048);
+        $data = json_decode($raw === false ? '' : $raw, true);
+        if (!is_array($data)) {
+            respond(['error' => 'invalid_json'], 400);
+        }
+    } else {
+        $data = [];
+    }
+
+    if ($operation === 'login') {
+        if (!\QSYN\Admin\RustAdmin::configured()) {
+            respond(['error' => 'admin_not_configured'], 503);
+        }
+        if (!\QSYN\Admin\RustAdmin::attempt((string)($data['password'] ?? ''))) {
+            respond(['error' => 'invalid_credentials'], 401);
+        }
+        respond(['authenticated' => true, 'csrf' => \QSYN\Admin\RustAdmin::csrf()]);
+    }
+
+    if ($operation === 'state') {
+        $authorized = \QSYN\Admin\RustAdmin::authenticated();
+        respond([
+            'configured' => \QSYN\Admin\RustAdmin::configured(),
+            'authenticated' => $authorized,
+            'csrf' => $authorized ? \QSYN\Admin\RustAdmin::csrf() : null,
+            'manager' => $authorized ? \QSYN\Admin\RustSupervisor::status() : null,
+        ]);
+    }
+
+    if (!\QSYN\Admin\RustAdmin::authenticated()) {
+        respond(['error' => 'unauthorized'], 401);
+    }
+    if (!\QSYN\Admin\RustAdmin::verifyCsrf((string)($_SERVER['HTTP_X_CSRF_TOKEN'] ?? ''))) {
+        respond(['error' => 'csrf_invalid'], 403);
+    }
+    if ($operation === 'logout') {
+        \QSYN\Admin\RustAdmin::logout();
+        respond(['authenticated' => false]);
+    }
+    if ($operation === 'action') {
+        $action = (string)($data['action'] ?? '');
+        if (!in_array($action, ['start', 'stop', 'restart'], true)) {
+            respond(['error' => 'invalid_action'], 422);
+        }
+        $outcome = \QSYN\Admin\RustSupervisor::execute($action);
+        respond($outcome, $outcome['ok'] ? 200 : 503);
+    }
+    respond(['error' => 'not_found'], 404);
+}
+
+if ($route === '/qsyn/admin/rust' || $route === '/qsyn/admin/rust/') {
+    header('Content-Type: text/html; charset=utf-8');
+    header('Content-Security-Policy: default-src ' . "'self'" . '; script-src ' . "'self'" . '; style-src ' . "'self' 'unsafe-inline'" . '; connect-src ' . "'self'" . '; img-src ' . "'self' data:" . ';');
+    require __DIR__ . '/admin-rust.php';
+    exit;
+}
+
 if (str_ends_with($route, '/api/v1/demo/bars')) {
     $end = intdiv(time(), 60) * 60;
     $bars = [];
@@ -82,7 +167,7 @@ main{padding:20px;max-width:1600px;margin:auto} h1{font-size:20px;font-weight:60
 </style>
 </head>
 <body>
-<header><strong>QSYN</strong><span class="tag">Phase 0 · Simulated data</span></header>
+<header><strong>QSYN</strong><span class="tag">Phase 0 · Simulated data</span><a href="/qsyn/admin/rust" style="color:#a9caff;margin-left:auto">Rust administration</a></header>
 <main>
 <h1>Chart terminal foundation</h1>
 <section class="diagnostics" aria-labelledby="rust-title">
