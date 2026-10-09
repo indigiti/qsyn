@@ -59,7 +59,7 @@
       root.append(
         line('Administrator sign-in', configured,
           configured ? 'Secure admin credentials are configured.'
-            : 'Cloudways must configure the password hash and enable QSYN admin in private PHP-FPM settings.'),
+            : 'The developer must provision a private mode-0600 admin-auth.json under the persistent QSYN runtime. PHP-FPM secrets are optional.'),
         line('Rust HTTP engine', online,
           online ? 'Private Rust /health reachable through PHP.'
             : 'Cloudways must verify the QSYN-only process on 127.0.0.1:10251.'),
@@ -93,9 +93,9 @@
       copy.dataset.report = [
         'QSYN / Cloudways activation request (staging only)',
         'Please keep QNEXT untouched and never expose port 10251 publicly.',
-        '1. Configure QSYN_CONTROL_ENABLED=1 and a strong PHP password_hash under QSYN_ADMIN_PASSWORD_HASH in the private QSYN PHP-FPM environment. Do not place passwords or their hash in public_html, GitHub or this browser.',
-        '2. Verify qsyn-stream /health at 127.0.0.1:10251 reports demo_runtime_control=true. If it does not, safely transition the verified QSYN-only process to the latest approved executable.',
-        '3. Ensure the QSYN PHP identity can atomically write a mode-0600 file under private_html/qsyn/runtime, and that running QSYN Rust can read it. No generic PHP shell/process functions are needed for demo enable/disable.',
+        '1. Developer: generate QSYN administrator config offline, and securely provision a 0600 admin-auth.json in private_html/qsyn/runtime. Existing PHP-FPM secrets are an alternative, not required. Never place admin config in public_html, GitHub, DigiOps release artifacts or this browser.',
+        '2. Server operator only if needed: verify that qsyn-stream /health at 127.0.0.1:10251 reports demo_runtime_control=true. If it does not, perform a controlled QSYN-only executable transition, leaving QNEXT untouched.',
+        '3. Server permissions only if needed: ensure QSYN PHP can read the private 0600 administrator configuration and atomically write the demo flag under private_html/qsyn/runtime. Rust must be able to read that flag. No broad process-execution privileges.',
         '4. Preserve restrictive application permissions, HTTPS and QSYN admin session/CSRF protections.',
         '5. After provisioning, confirm the QSYN admin can enable simulated streaming and the chart can connect. No Upstox orders or real feeds.',
         '',
