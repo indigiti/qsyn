@@ -88,8 +88,10 @@ final class RustProbe
         try {
             stream_set_timeout($conn, 0, 450_000);
             $headers = "GET {$path} HTTP/1.1\r\n"
-                . "Host: 127.0.0.1\r\n"
-                . "Connection: close\r\n";
+                . "Host: 127.0.0.1\r\n";
+            if (!$websocket) {
+                $headers .= "Connection: close\r\n";
+            }
             if ($websocket) {
                 $key = base64_encode(random_bytes(16));
                 $headers .= "Upgrade: websocket\r\n"
