@@ -1,0 +1,63 @@
+name: QSYN CI
+
+on:
+  push:
+    branches: [main, "build/**"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  php:
+    name: PHP file-store and HTTP demo
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.3"
+          tools: none
+          coverage: none
+      - name: Syntax checks and FileStore tests
+        run: |
+          php -l apps/web-php/src/FileStore.php
+          php -l apps/web-php/public/index.php
+          php -l apps/web-php/dev-router.php
+          php apps/web-php/tests/FileStoreTest.php
+      - name: Demo endpoint smoke test
+        run: |
+          php -S 127.0.0.1:18080 -t apps/web-php/public apps/web-php/dev-router.php > /tmp/qsyn-php.log 2>&1 &
+          PID=$!
+          trap 'kill "$PID" || true' EXIT
+          sleep 1
+          curl --fail --silent http://127.0.0.1:18080/qsyn/api/v1/health | grep -q '"status":"ok"'
+          curl --fail --silent http://127.0.0.1:18080/qsyn/api/v1/demo/bars | grep -q '"mode":"simulated"'
+
+  rust:
+    name: Rust synthetic engine tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - run: cargo fmt --manifest-path services/stream-rust/Cargo.toml --all -- --check
+      - run: cargo clippy --manifest-path services/stream-rust/Cargo.toml --all-targets -- -D warnings
+      - run: cargo test --manifest-path services/stream-rust/Cargo.toml
+
+  charts:
+    name: OpenAlgo Charts production bundle
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: npm install --no-audit --no-fund
+        working-directory: frontend
+      - run: npm run build
+        working-directory: frontend
+      - run: test -s frontend/dist/chart.js
