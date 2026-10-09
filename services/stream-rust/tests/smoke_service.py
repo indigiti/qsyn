@@ -114,6 +114,8 @@ def run_instance_with_runtime(enable_demo: bool, runtime: str) -> None:
     process = subprocess.Popen([str(BINARY)], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
     try:
         health = await_health(port, process)
+        assert health.pop("runtime_version") == "0.1.0"
+        assert isinstance(health.pop("uptime_seconds"), int)
         assert health == {
             "status": "ok",
             "component": "qsyn-stream",
