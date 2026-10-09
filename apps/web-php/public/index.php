@@ -19,6 +19,23 @@ if (str_ends_with($route, '/health') || str_ends_with($route, '/api/v1/health'))
     respond(['status' => 'ok', 'app' => 'qsyn-web', 'phase' => 0, 'market_feed' => 'demo-only', 'app_store' => 'file']);
 }
 
+if ($route === '/qsyn/api/v1/diagnostics/rust-stream' || $route === '/api/v1/diagnostics/rust-stream') {
+    // Simulated quotes ONLY. Never expose broker market data through this public endpoint.
+    if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'GET') {
+        header('Allow: GET');
+        respond(['error' => 'method_not_allowed'], 405);
+    }
+    $source = dirname(__DIR__) . '/src/RustStreamProbe.php';
+    if (!is_file($source)) {
+        $source = dirname(__DIR__, 2) . '/private_html/qsyn/app/src/RustStreamProbe.php';
+    }
+    if (!is_file($source)) {
+        respond(['status' => 'unavailable', 'reason' => 'stream_probe_not_installed'], 503);
+    }
+    require_once $source;
+    respond(\QSYN\Diagnostics\RustStreamProbe::inspect());
+}
+
 if ($route === '/qsyn/api/v1/diagnostics/rust' || $route === '/api/v1/diagnostics/rust') {
     // Public Phase-0 read-only signal. No shell, token, path, or target control.
     // In production replace this with an authenticated administrator API.
@@ -180,10 +197,21 @@ main{padding:20px;max-width:1600px;margin:auto} h1{font-size:20px;font-weight:60
     <output id="rust-result" role="status" aria-live="polite">Not checked</output>
   </div>
 </section>
+<section class="diagnostics" aria-labelledby="stream-title">
+  <div>
+    <strong id="stream-title">Rust simulated WebSocket stream</strong>
+    <p id="rust-stream-samples">Samples two demo quotes through a private PHP-to-Rust WebSocket connection. Does not use real broker prices.</p>
+  </div>
+  <div>
+    <button type="button" id="rust-stream-test">Test demo stream</button>
+    <output id="rust-stream-result" role="status" aria-live="polite">Not tested</output>
+  </div>
+</section>
 <div id="terminal"><p style="padding:16px">Build chart assets using <code>npm run build</code> in <code>frontend/</code>, then copy <code>dist/chart.js</code> to <code>public/assets/chart.js</code>.</p></div>
 <p class="note">No live Upstox feed, brokerage login or order execution is enabled. This chart uses deterministic demonstration OHLC data. Market-data source integration is a later phase.</p>
 </main>
 <script src="/qsyn/assets/chart.js" defer></script>
 <script src="/qsyn/assets/rust-diagnostics.js" defer></script>
+<script src="/qsyn/assets/rust-stream-test.js" defer></script>
 </body>
 </html>
