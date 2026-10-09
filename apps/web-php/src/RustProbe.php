@@ -60,6 +60,10 @@ final class RustProbe
             'demo_ws_enabled' => ($payload['demo_ws_enabled'] ?? null) === true,
             'runtime_version' => is_string($payload['runtime_version'] ?? null)
                 ? substr($payload['runtime_version'], 0, 32) : null,
+            'runtime_commit' => is_string($payload['runtime_commit'] ?? null)
+                && preg_match('/^[a-f0-9]{40}$/D', $payload['runtime_commit'])
+                ? $payload['runtime_commit'] : null,
+            'auto_activation' => ($payload['auto_activation'] ?? null) === true,
             'uptime_seconds' => is_int($payload['uptime_seconds'] ?? null)
                 && $payload['uptime_seconds'] >= 0 ? $payload['uptime_seconds'] : null,
             'latency_ms' => $latency,
