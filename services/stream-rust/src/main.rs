@@ -8,7 +8,12 @@ use axum::{
     Json, Router,
 };
 use serde_json::{json, Value};
+use std::sync::atomic::{AtomicU64, Ordering};
 use tokio::time::{interval, Duration};
+
+// Shared simulated progression, not a per-WebSocket replay from quote #1.
+// No broker-derived prices, subscriptions or trading side effects.
+static DEMO_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
 async fn health() -> Json<Value> {
     Json(json!({
@@ -31,10 +36,9 @@ async fn demo_ws(ws: WebSocketUpgrade) -> Response {
 
 async fn demo_session(mut socket: WebSocket) {
     let mut ticker = interval(Duration::from_millis(500));
-    let mut sample = 0_u64;
     loop {
         ticker.tick().await;
-        sample += 1;
+        let sample = DEMO_SEQUENCE.fetch_add(1, Ordering::Relaxed) + 1;
         let price = 220.0 + (sample as f64 / 7.0).sin() * 8.0;
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)

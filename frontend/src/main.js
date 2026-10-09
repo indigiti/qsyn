@@ -1,23 +1,22 @@
 import { createWidget } from 'openalgo-charts/widget';
 import 'openalgo-charts/indicators';
-
-/** Phase-0 feed uses only the QSYN PHP demo endpoint. No broker key in browser. */
-class QsynDemoFeed {
-  async getBars({ symbol }) {
-    if (symbol !== 'QSYN-DEMO') return [];
-    const r = await fetch('/qsyn/api/v1/demo/bars', { credentials: 'same-origin' });
-    if (!r.ok) throw new Error('QSYN demo bars unavailable');
-    const response = await r.json();
-    if (response.mode !== 'simulated') throw new Error('Unexpected data provenance');
-    return response.bars;
-  }
-}
+import { QsynDemoFeed } from './rust-demo-feed.js';
 
 const root = document.getElementById('terminal');
 if (root) {
   root.replaceChildren();
+  const connectButton = document.getElementById('chart-live-connect');
+  const liveStatus = document.getElementById('chart-live-status');
+  const updateStatus = message => {
+    if (liveStatus) liveStatus.textContent = message;
+    if (connectButton) {
+      connectButton.textContent = feed.enabled ? 'Disconnect Rust demo' : 'Connect Rust demo';
+      connectButton.setAttribute('aria-pressed', String(feed.enabled));
+    }
+  };
+  const feed = new QsynDemoFeed(updateStatus);
   const widget = createWidget(root, {
-    feed: new QsynDemoFeed(),
+    feed,
     symbol: 'QSYN-DEMO',
     exchange: 'QSYN',
     interval: '1m',
@@ -26,6 +25,14 @@ if (root) {
     persist: 'qsyn-dev-demo-v2',
     navigation: { defaultVisibleBars: 100, mousePan: 'horizontal' },
   });
+  if (connectButton) {
+    connectButton.addEventListener('click', () => {
+      // Explicit opt-in: no background polling, credentials or broker feeds
+      // until the user chooses to connect a simulated source.
+      feed.setEnabled(!feed.enabled);
+    });
+  }
+
   const fitButton = document.getElementById('chart-reset');
   const fitStatus = document.getElementById('chart-reset-status');
 

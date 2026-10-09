@@ -149,11 +149,60 @@ try {
   await scaledPage.screenshot({ path: resolve(screenshots, 'chart-125-percent.png'), fullPage: true });
   await scaledPage.close();
 
+  // No real broker and no live Rust process: mock only the exact bounded
+  // PHP sampler API, and exercise OpenAlgo Charts' subscribeBars integration.
+  let simulatedCalls = 0;
+  await page.route('**/qsyn/api/v1/diagnostics/rust-stream', async route => {
+    simulatedCalls++;
+    const timestamp = Math.floor(Date.now() / 1000);
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        status: 'streaming',
+        service: 'qsyn-stream',
+        websocket: 'demo_enabled',
+        received: 2,
+        quotes: [
+          { symbol: 'QSYN-DEMO', source: 'simulated', timestamp, price: 226.01 },
+          { symbol: 'QSYN-DEMO', source: 'simulated', timestamp, price: 228.02 },
+        ],
+        latency_ms: 1.2,
+      }),
+    });
+  });
+  const liveButton = page.locator('#chart-live-connect');
+  if (await liveButton.getAttribute('aria-pressed') !== 'false' || simulatedCalls !== 0) {
+    throw new Error('Simulated live chart made requests before explicit opt-in');
+  }
+  await liveButton.click();
+  await page.waitForFunction(() => {
+    const status = document.getElementById('chart-live-status');
+    return status && status.textContent.includes('Connected to Rust simulation');
+  }, null, { timeout: 12000 });
+  if (simulatedCalls < 1 || await liveButton.getAttribute('aria-pressed') !== 'true') {
+    throw new Error('Opt-in live chart subscription did not activate');
+  }
+  const livePaint = await paintedPixels(page);
+  if (livePaint.red < 25 || livePaint.green < 25) {
+    throw new Error('Demo stream caused previously healthy candle chart to disappear');
+  }
+  await liveButton.click();
+  if (await liveButton.getAttribute('aria-pressed') !== 'false') {
+    throw new Error('Web live chart disconnect did not stop subscription');
+  }
+  const stoppedCalls = simulatedCalls;
+  await page.waitForTimeout(300);
+  if (simulatedCalls !== stoppedCalls) {
+    throw new Error('Live chart continued polling after explicit disconnection');
+  }
+  await page.unrouteAll({ behavior: 'wait' });
+
   const violations = await page.evaluate(() => window.__qsynCspViolations);
   const bars = await (await page.request.get(origin + '/qsyn/api/v1/demo/bars')).json();
   console.log('CHART_BROWSER_DIAGNOSTICS ' + JSON.stringify({
     bars: bars.bars?.length, first: bars.bars?.[0], last: bars.bars?.at(-1),
-    initial, after, browserReport, scaledReport, violations, pageErrors: errors, consoleErrors: warnings,
+    initial, after, livePaint, simulatedCalls, browserReport, scaledReport, violations, pageErrors: errors, consoleErrors: warnings,
     phpError: phpError.slice(-600),
   }));
   if (bars.bars?.length !== 120) throw Error('PHP failed to serve 120 demo bars');

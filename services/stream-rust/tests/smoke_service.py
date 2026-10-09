@@ -161,7 +161,17 @@ def run_instance_with_runtime(enable_demo: bool, runtime: str) -> None:
                 assert isinstance(tick["price"], float) and tick["price"] > 0
                 assert abs(time.time() - tick["timestamp"]) < 30, tick["timestamp"]
             assert first["price"] != second["price"], "Price must update between messages"
-            print("PASS: WebSocket HTTP 101 upgrade and two correctly labeled simulated quotes")
+            # Another PHP sampling call must not restart simulated prices at
+            # the first sequence index; chart polling needs true progression.
+            follow_sock, follow_reader, follow_status = open_websocket(port)
+            try:
+                assert follow_status == 101
+                follow = read_server_message(follow_reader)
+                assert follow["price"] != first["price"], "Demo prices restarted across sessions"
+            finally:
+                follow_reader.close()
+                follow_sock.close()
+            print("PASS: WebSocket quotes are simulated and advance across client sessions")
         finally:
             reader.close()
             sock.close()
