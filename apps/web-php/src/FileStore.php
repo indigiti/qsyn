@@ -60,6 +60,37 @@ final class FileStore
     }
 
     /**
+     * Enumerate low-volume development records. Account ownership and tenant
+     * checks belong to the repository using this primitive, not to callers.
+     * Never use this scan for tick/candle market data.
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function listRecords(string $collection): array
+    {
+        $dir = dirname($this->path($collection, '__probe__'));
+        $names = scandir($dir);
+        if ($names === false) {
+            throw new RuntimeException('Cannot enumerate collection');
+        }
+        $records = [];
+        foreach ($names as $name) {
+            if (!preg_match('/^([a-zA-Z0-9_-]{1,96})\\.json$/', $name, $match)) {
+                continue;
+            }
+            $path = $dir . '/' . $name;
+            if (is_link($path)) {
+                throw new RuntimeException('Symlink records are not allowed');
+            }
+            $record = $this->get($collection, $match[1]);
+            if ($record !== null) {
+                $records[] = $record;
+            }
+        }
+        return $records;
+    }
+
+    /**
      * Optimistic concurrency: revision starts at 1.
      * null expectedRevision is allowed only for a new record.
      */

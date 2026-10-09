@@ -40,7 +40,10 @@ jobs:
           php -l apps/web-php/src/RustDemoConfig.php
           php -l apps/web-php/src/RustSupervisor.php
           php -l apps/web-php/public/admin-rust.php
+          php -l apps/web-php/src/BrokerConnectionRepository.php
+          php -l apps/web-php/src/FileMockBrokerConnectionRepository.php
           php apps/web-php/tests/FileStoreTest.php
+          php apps/web-php/tests/MockBrokerConnectionRepositoryTest.php
           php apps/web-php/tests/RustAdminTest.php
           php apps/web-php/tests/RustAdminBootstrapTest.php
           php apps/web-php/tests/RustDemoConfigTest.php
@@ -90,6 +93,8 @@ jobs:
             cp frontend/node_modules/openalgo-charts/NOTICE staging/public/licenses/openalgo-charts-NOTICE.txt
           fi
           cp apps/web-php/src/FileStore.php staging/private/app/src/FileStore.php
+          cp apps/web-php/src/BrokerConnectionRepository.php staging/private/app/src/BrokerConnectionRepository.php
+          cp apps/web-php/src/FileMockBrokerConnectionRepository.php staging/private/app/src/FileMockBrokerConnectionRepository.php
           cp apps/web-php/src/RustProbe.php staging/private/app/src/RustProbe.php
           cp apps/web-php/src/RustStreamProbe.php staging/private/app/src/RustStreamProbe.php
           cp apps/web-php/src/RustAdmin.php staging/private/app/src/RustAdmin.php
@@ -129,6 +134,8 @@ jobs:
           test ! -f staging/private/runtime/admin-auth.json
           test -s staging/private/app/src/RustDemoConfig.php
           test -s staging/private/app/src/RustSupervisor.php
+          test -s staging/private/app/src/BrokerConnectionRepository.php
+          test -s staging/private/app/src/FileMockBrokerConnectionRepository.php
           test -s staging/private/app/src/RustProbe.php
           test -x staging/private/app/bin/qsyn-stream
           test -s staging/RELEASE.json
@@ -174,6 +181,8 @@ jobs:
           test -s verified-release/private/app/src/RustSupervisor.php
           test -s verified-release/private/app/src/RustProbe.php
           test -s verified-release/private/app/src/FileStore.php
+          test -s verified-release/private/app/src/BrokerConnectionRepository.php
+          test -s verified-release/private/app/src/FileMockBrokerConnectionRepository.php
           test -s verified-release/private/app/bin/qsyn-stream
           test -s verified-release/RELEASE.json
           test -s verified-release/private/build/release.json
