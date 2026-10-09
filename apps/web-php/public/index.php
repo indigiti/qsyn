@@ -38,7 +38,7 @@ if ($route === '/qsyn/api/v1/diagnostics/rust' || $route === '/api/v1/diagnostic
 }
 
 // Administrator-only Rust service control. Never accessible without a configured
-// admin password, valid PHP session, CSRF token and approved supervisor adapter.
+// admin password, valid PHP session, CSRF token and allowlisted local adapter.
 if (preg_match('#^(?:/qsyn)?/api/v1/admin/rust/(state|login|logout|action)$#', $route, $matches)) {
     $operation = $matches[1];
     $source = dirname(__DIR__) . '/src';

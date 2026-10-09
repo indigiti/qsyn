@@ -34,7 +34,7 @@ async function request(path, data, token) {
 function showManager(manager) {
   const ready = Boolean(manager && manager.available);
   const state = (manager && manager.state) || 'unavailable';
-  managerStatus.textContent = ready ? state : 'Unavailable — requires Cloudways configuration';
+  managerStatus.textContent = ready ? state : 'Unavailable — requires enabled direct mode or restricted service manager';
   for (const action of actions) {
     byId('service-' + action).disabled = working || !ready;
   }

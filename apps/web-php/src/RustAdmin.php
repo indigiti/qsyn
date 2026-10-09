@@ -5,7 +5,7 @@ namespace QSYN\Admin;
 
 /**
  * Isolated Phase-0 administration gate. No passwords or real broker keys stored in Git.
- * Do not enable without HTTPS and an approved restricted supervisor integration.
+ * Do not enable without HTTPS and a reviewed restricted execution mechanism.
  */
 final class RustAdmin
 {

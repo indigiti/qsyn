@@ -41,7 +41,7 @@ label{display:block;margin-bottom:10px;font-weight:600}code{color:#b6daff}.statu
     <button type="button" id="service-restart" class="secondary" disabled>Restart</button>
     <button type="button" id="service-refresh" class="secondary">Refresh status</button>
   </div>
-  <p class="muted">If controls are unavailable, Cloudways must first configure a restricted service manager. A deployed binary alone is not a running daemon.</p>
+  <p class="muted">If controls are unavailable, Cloudways must enable the approved restricted runtime: direct Rust mode or Supervisor. Starting a binary requires PHP execution permission and host support; without a watchdog it will not auto-restart after a crash or reboot.</p>
 </section>
 <section class="card">
   <h2>Live connectivity</h2>

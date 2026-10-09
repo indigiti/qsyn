@@ -98,3 +98,74 @@ A valid \`password_hash\` is required. Session cookies are Secure, HttpOnly and 
 The status endpoint never returns shell output, private configuration paths, broker credentials or raw process logs. A successful supervisorctl command indicates only a **management request accepted**, not a passed health check; confirm using the separate Rust health probe. Controls are initially off and remain off if any configuration or capability check is missing.
 
 **Host permission remains unverified:** Nothing in the QSYN artifact or this panel starts Rust automatically. Production daemon setup must be confirmed by Cloudways and independently tested. Do not enable on the public staging hostname with real trading credentials until administration and privileges have been reviewed.
+
+
+## Direct Rust lifecycle mode (without Supervisord)
+
+QSYN additionally supports **opt-in direct mode**, where the Rust executable safely
+self-detaches and accepts fixed CLI lifecycle actions. This mode does not use
+Supervisord, systemd, sudo, shell execution, QNEXT processes, or public ports.
+
+- Web admin: https://stage.digiti.in/qsyn/admin/rust
+- Dedicated Rust engine executable: private_html/qsyn/app/bin/qsyn-stream
+- Listening address: 127.0.0.1:10251
+- Management interface: \`qsyn-stream ctl start|stop|restart|status\`
+- Private runtime files: private_html/qsyn/runtime/qsyn-stream.pid,
+  qsyn-stream.control.lock and qsyn-stream.log.
+- Starting the service uses Rust's native detached child with a new POSIX session,
+  closed standard input, and output redirected to a private log file.
+- Status and Stop validate the current PID's Linux /proc executable identity AND
+  managed process marker before signalling it. An exclusive file lock serializes
+  web requests and prevents two simultaneous launches. No arbitrary PIDs or programs.
+
+### Server-private opt-in
+
+Ask Cloudways to inject the following into this **QSYN application PHP-FPM**
+configuration, without putting any secret into Git, a .env file in public_html,
+or the browser:
+
+~~~text
+QSYN_CONTROL_ENABLED=1
+QSYN_SERVICE_MANAGER=direct
+QSYN_ADMIN_PASSWORD_HASH=<PHP password_hash() of a strong dedicated administrator password>
+~~~
+
+The binary path is **not customizable from a browser request** and is hardcoded
+relative to the deployed private Rust control adapter. Do NOT configure the
+Supervisor variables when choosing direct mode. The environment variable
+\`QSYN_ALLOW_HTTP_TEST\` is CI-only and MUST NOT be set on Cloudways.
+
+Cloudways must permit at minimum the PHP functions \`proc_open\`,
+\`proc_close\`, \`proc_get_status\` and \`proc_terminate\` for this application.
+Do **not** enable \`system\`, \`exec\`, \`shell_exec\`, \`passthru\` or broad
+PHP execution capabilities. Restrict /qsyn/admin/rust with a Cloudways WAF
+or IP allowlist in addition to QSYN administrator authentication, and confirm
+the entire QSYN runtime is isolated from QNEXT.
+
+The application user must have permission to execute the Rust ELF binary and
+write to the non-public \`private_html/qsyn/runtime/\` directory. Cloudways
+must confirm that a detached child is allowed to survive the PHP-FPM request.
+Deploying alone does not enable this mode.
+
+### Behavior, limitations and acceptance tests
+
+The Rust process is a self-detached app, NOT a full supervisor:
+
+1. After admin login, click **Start** and then **Test Rust health**;
+   expect HTTP 200 from the private /health endpoint.
+2. Click **Restart**; validate the private Rust service responds again.
+3. Click **Stop**; validate it becomes offline.
+4. Verify 20-minute session expiration, invalid CSRF denial, invalid action
+   rejection, and no ability to affect other processes.
+5. If Cloudways kills the detached child, direct mode cannot fix the host-level
+   restriction; use a provider-approved process manager or isolated worker.
+
+**Direct mode does not auto-restart a crashed service or relaunch it after
+a server reboot.** Arrange a host-approved scheduled health recovery/check
+if those properties become necessary. Release upgrades may replace the binary
+while an old process runs, so use a controlled restart after deployment.
+The application has no live broker feed or trading capabilities in Phase 0.
+
+Linux-only implementation: the direct Rust launcher uses setsid and /proc
+identity verification. The CI and DigiOps release workflows exercise
+start/stop/restart on disposable loopback ports, not Cloudways itself.

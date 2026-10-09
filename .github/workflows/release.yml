@@ -44,6 +44,7 @@ jobs:
           cargo test --manifest-path services/stream-rust/Cargo.toml
           cargo build --release --manifest-path services/stream-rust/Cargo.toml
           QSYN_RUST_BINARY=services/stream-rust/target/release/qsyn-stream python3 services/stream-rust/tests/smoke_service.py
+          QSYN_RUST_BINARY=services/stream-rust/target/release/qsyn-stream python3 services/stream-rust/tests/direct_control_smoke.py
           QSYN_RUST_BINARY=services/stream-rust/target/release/qsyn-stream python3 apps/web-php/tests/RustWebProbeSmoke.py
       - uses: actions/setup-node@v4
         with:
