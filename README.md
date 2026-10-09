@@ -52,6 +52,6 @@ OpenAlgo and OpenAlgo Charts must remain pinned and independently upgradeable; t
 
 ## Rust administration (opt-in)
 
-The browser admin page is available at `/qsyn/admin/rust` with **Start / Stop / Restart / Refresh / Health**. This feature is **disabled by default**. It requires a Cloudways-approved dedicated restricted Supervisor configuration, server-injected administrator password hash and process-control capability. It never executes arbitrary browser-supplied commands. See [DigiOps service control guidance](infrastructure/DIGIOPS.md) for setup and security gates.
+The browser admin page is available at `/qsyn/admin/rust` with **Start / Stop / Restart / Refresh / Health**. This feature is **disabled by default**. It requires either opt-in direct Rust lifecycle mode (no Supervisor) or a Cloudways-approved restricted Supervisor configuration, a server-injected administrator password hash, and PHP process-control permission. It never executes arbitrary browser-supplied commands. See [DigiOps service control guidance](infrastructure/DIGIOPS.md) for setup and security gates.
 
 No permission has yet been granted to start the Rust daemon on Cloudways; the page will show service controls unavailable until Cloudways supplies a supported manager. The health button remains usable even when actions are disabled.
