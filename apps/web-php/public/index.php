@@ -151,6 +151,7 @@ if (preg_match('#^(?:/qsyn)?/api/v1/admin/rust/(state|login|logout|action|demo)$
 
 if ($route === '/qsyn/admin/rust' || $route === '/qsyn/admin/rust/') {
     header('Content-Type: text/html; charset=utf-8');
+    header('Cache-Control: private, no-store');
     header('Content-Security-Policy: default-src ' . "'self'" . '; script-src ' . "'self'" . '; style-src ' . "'self' 'unsafe-inline'" . '; connect-src ' . "'self'" . '; img-src ' . "'self' data:" . ';');
     require __DIR__ . '/admin-rust.php';
     exit;
@@ -185,6 +186,8 @@ header('Content-Security-Policy: default-src ' . "'self'" . '; script-src ' . "'
 // uncacheable; let browsers cache only the explicitly versioned static asset.
 $chartBundleVersion = (string)(@filemtime(__DIR__ . '/assets/chart.js') ?: '0');
 $diagnosticsVersion = (string)(@filemtime(__DIR__ . '/assets/chart-diagnostics.js') ?: '0');
+$rustDiagnosticsVersion = (string)(@filemtime(__DIR__ . '/assets/rust-diagnostics.js') ?: '0');
+$rustStreamTestVersion = (string)(@filemtime(__DIR__ . '/assets/rust-stream-test.js') ?: '0');
 ?>
 <!doctype html>
 <html lang="en">
@@ -274,7 +277,7 @@ main{padding:20px;max-width:1600px;margin:auto} h1{font-size:20px;font-weight:60
 <p class="note">No live Upstox feed, brokerage login or order execution is enabled. This chart uses deterministic demonstration OHLC data. Market-data source integration is a later phase.</p>
 </main>
 <script src="/qsyn/assets/chart.js?v=<?= rawurlencode($chartBundleVersion) ?>" defer></script>
-<script src="/qsyn/assets/rust-diagnostics.js" defer></script>
-<script src="/qsyn/assets/rust-stream-test.js" defer></script>
+<script src="/qsyn/assets/rust-diagnostics.js?v=<?= rawurlencode($rustDiagnosticsVersion) ?>" defer></script>
+<script src="/qsyn/assets/rust-stream-test.js?v=<?= rawurlencode($rustStreamTestVersion) ?>" defer></script>
 </body>
 </html>
