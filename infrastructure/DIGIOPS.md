@@ -44,3 +44,21 @@ The earlier artifact had public_html/qsyn/index.php *inside the ZIP*. DigiOps on
 6. No live Upstox connection, trading, or real broker secrets are enabled in Phase 0.
 
 The OpenAlgo Charts JS is built in GitHub Actions. No production Node.js server is required.
+
+## Browser-based Rust testing (Phase 0)
+
+The QSYN chart page at /qsyn/ now includes a **Test Rust service** button. It calls the read-only PHP endpoint /qsyn/api/v1/diagnostics/rust. No SSH session is needed to inspect an already-running Rust daemon.
+
+- online: PHP verified the expected Rust /health response and checked the private demo WebSocket handshake.
+- offline: no compatible service is reachable on the fixed loopback address 127.0.0.1:8788, even if the binary has been deployed.
+- demo_disabled: the optional Rust demo WebSocket is disabled (expected default).
+- demo_enabled: the optional WebSocket handshake returned 101 Switching Protocols.
+- unexpected_response: the port returned something other than the expected Rust service identity.
+
+The browser never connects directly to localhost on the user's computer. PHP checks a fixed localhost port with strict timeouts and no arbitrary URL parameters, process execution or credentials. The UI checks only when the user clicks the button.
+
+Security: the Phase 0 endpoint exposes only non-sensitive status. Before introducing real user credentials or live trading, protect operational diagnostics using QSYN administrator authentication and authorization. The endpoint must not execute/start/stop processes.
+
+The button does NOT start the daemon. DigiOps packages the executable under private_html/qsyn/app/bin/qsyn-stream but does not yet launch or supervise it. Cloudways may therefore report offline; this is an accurate state report, not a UI error. Enable persistent startup only after validating Cloudways process permissions, restarts, isolation, and private routing.
+
+GitHub Actions starts temporary PHP and Rust processes in CI to test offline/online states and the WebSocket handshake; it then shuts them down. No real broker data or production credentials are involved.

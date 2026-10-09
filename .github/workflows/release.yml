@@ -32,6 +32,7 @@ jobs:
       - name: Test PHP
         run: |
           php -l apps/web-php/public/index.php
+          php -l apps/web-php/src/RustProbe.php
           php apps/web-php/tests/FileStoreTest.php
       - uses: dtolnay/rust-toolchain@stable
       - name: Test and compile Rust binary
@@ -39,6 +40,7 @@ jobs:
           cargo test --manifest-path services/stream-rust/Cargo.toml
           cargo build --release --manifest-path services/stream-rust/Cargo.toml
           QSYN_RUST_BINARY=services/stream-rust/target/release/qsyn-stream python3 services/stream-rust/tests/smoke_service.py
+          QSYN_RUST_BINARY=services/stream-rust/target/release/qsyn-stream python3 apps/web-php/tests/RustWebProbeSmoke.py
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
@@ -59,11 +61,13 @@ jobs:
           cp apps/web-php/public/index.php staging/public/index.php
           cp apps/web-php/public/.htaccess staging/public/.htaccess
           cp frontend/dist/chart.js staging/public/assets/chart.js
+          cp apps/web-php/public/assets/rust-diagnostics.js staging/public/assets/rust-diagnostics.js
           cp frontend/node_modules/openalgo-charts/LICENSE staging/public/licenses/openalgo-charts-LICENSE.txt
           if [ -f frontend/node_modules/openalgo-charts/NOTICE ]; then
             cp frontend/node_modules/openalgo-charts/NOTICE staging/public/licenses/openalgo-charts-NOTICE.txt
           fi
           cp apps/web-php/src/FileStore.php staging/private/app/src/FileStore.php
+          cp apps/web-php/src/RustProbe.php staging/private/app/src/RustProbe.php
           cp services/stream-rust/target/release/qsyn-stream staging/private/app/bin/qsyn-stream
           cat > staging/RELEASE.json <<EOF
           {
@@ -83,6 +87,8 @@ jobs:
           test -s staging/public/index.php
           test -s staging/public/.htaccess
           test -s staging/public/assets/chart.js
+          test -s staging/public/assets/rust-diagnostics.js
+          test -s staging/private/app/src/RustProbe.php
           test -x staging/private/app/bin/qsyn-stream
           test -s staging/RELEASE.json
           test -s staging/private/build/release.json
@@ -111,6 +117,8 @@ jobs:
           test -s verified-release/public/index.php
           test -s verified-release/public/.htaccess
           test -s verified-release/public/assets/chart.js
+          test -s verified-release/public/assets/rust-diagnostics.js
+          test -s verified-release/private/app/src/RustProbe.php
           test -s verified-release/private/app/src/FileStore.php
           test -s verified-release/private/app/bin/qsyn-stream
           test -s verified-release/RELEASE.json
