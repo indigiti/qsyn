@@ -47,6 +47,10 @@ jobs:
       - run: cargo fmt --manifest-path services/stream-rust/Cargo.toml --all
       - run: cargo clippy --manifest-path services/stream-rust/Cargo.toml --all-targets -- -D warnings
       - run: cargo test --manifest-path services/stream-rust/Cargo.toml
+      - name: Build and exercise Rust HTTP + WebSocket service
+        run: |
+          cargo build --manifest-path services/stream-rust/Cargo.toml
+          python3 services/stream-rust/tests/smoke_service.py
 
   charts:
     name: OpenAlgo Charts production bundle
