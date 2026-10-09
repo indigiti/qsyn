@@ -197,13 +197,22 @@ main{padding:20px;max-width:1600px;margin:auto} h1{font-size:20px;font-weight:60
 .diagnostics button{background:#235ca5;color:#fff;padding:9px 15px;border:1px solid #4987d6;border-radius:6px;cursor:pointer;font-weight:600}
 .diagnostics button:disabled{opacity:.6;cursor:wait}.diagnostics output{font-size:13px;font-weight:600;color:#c5d6eb}
 #terminal{height:min(73vh,800px);min-height:410px;border:1px solid #303b4b;border-radius:9px;overflow:hidden}
+.chart-top{display:flex;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:12px}
+.chart-top h1{margin:0 12px 0 0}
+.chart-top button{background:#243a57;color:#eaf4ff;border:1px solid #4c709d;border-radius:6px;padding:8px 12px;cursor:pointer;font-weight:600}
+.chart-top button:disabled{opacity:.55;cursor:wait}
+#chart-reset-status{color:#a8c6e7;font-size:12px}
 .note{color:#a8b9ce;font-size:12px;margin-top:12px;line-height:1.6}
 </style>
 </head>
 <body>
 <header><strong>QSYN</strong><span class="tag">Phase 0 · Simulated data</span><a href="/qsyn/admin/rust" style="color:#a9caff;margin-left:auto">Rust administration</a></header>
 <main>
-<h1>Chart terminal foundation</h1>
+<div class="chart-top">
+  <h1>Chart terminal foundation</h1>
+  <button type="button" id="chart-reset" title="Refit all loaded demo candles to the visible chart">Reset chart view</button>
+  <output id="chart-reset-status" role="status" aria-live="polite"></output>
+</div>
 <section class="diagnostics" aria-labelledby="rust-title">
   <div>
     <strong id="rust-title">Rust realtime engine — browser test</strong>
