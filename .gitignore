@@ -1,0 +1,13 @@
+# QSYN private state and credentials
+.env
+.env.*
+!.env.example
+private-storage/
+storage/
+apps/web-php/storage/
+apps/web-php/public/assets/
+frontend/node_modules/
+frontend/dist/
+services/stream-rust/target/
+.DS_Store
+*.log
