@@ -45,6 +45,7 @@ jobs:
           mkdir -p staging/public_html/qsyn/assets
           mkdir -p staging/private_html/qsyn/{src,bin,metadata}
           cp apps/web-php/public/index.php staging/public_html/qsyn/index.php
+          cp apps/web-php/public/.htaccess staging/public_html/qsyn/.htaccess
           cp frontend/dist/chart.js staging/public_html/qsyn/assets/chart.js
           cp apps/web-php/src/FileStore.php staging/private_html/qsyn/src/FileStore.php
           cp services/stream-rust/target/release/qsyn-stream staging/private_html/qsyn/bin/qsyn-stream
