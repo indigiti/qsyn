@@ -14,6 +14,7 @@ from pathlib import Path
 import secrets
 import socket
 import subprocess
+import tempfile
 import time
 from urllib.error import HTTPError, URLError
 from urllib.request import urlopen
@@ -95,9 +96,15 @@ def read_server_message(reader: object) -> dict:
 
 
 def run_instance(enable_demo: bool) -> None:
+    with tempfile.TemporaryDirectory(prefix="qsyn-demo-toggle-") as runtime:
+        run_instance_with_runtime(enable_demo, runtime)
+
+
+def run_instance_with_runtime(enable_demo: bool, runtime: str) -> None:
     port = unused_local_port()
     env = os.environ.copy()
     env["QSYN_BIND"] = f"127.0.0.1:{port}"
+    env["QSYN_RUNTIME_DIR"] = runtime
     if enable_demo:
         env["QSYN_ENABLE_DEMO_WS"] = "1"
     else:
@@ -113,6 +120,8 @@ def run_instance(enable_demo: bool) -> None:
             "mode": "foundation",
             "upstox_connected": False,
             "trading_enabled": False,
+            "demo_runtime_control": True,
+            "demo_ws_enabled": enable_demo,
         }, f"Unexpected Rust health response: {health}"
 
         assert http_status(f"http://127.0.0.1:{port}/unknown")[0] == 404
@@ -121,6 +130,27 @@ def run_instance(enable_demo: bool) -> None:
             if not enable_demo:
                 assert status == 404, f"Demo WS should be disabled by default, got {status}"
                 print("PASS: /health responds, trading disabled, demo WebSocket denied by default")
+                # Toggle the on-disk private flag while the original daemon
+                # stays alive: there must be no need to restart Rust.
+                flag = Path(runtime) / "demo-websocket.flag"
+                flag.write_text("1\n")
+                assert http_status(f"http://127.0.0.1:{port}/health")[0] == 200
+                assert json.loads(http_status(f"http://127.0.0.1:{port}/health")[1])["demo_ws_enabled"] is True
+                enabled_sock, enabled_reader, enabled_status = open_websocket(port)
+                try:
+                    assert enabled_status == 101
+                    message = read_server_message(enabled_reader)
+                    assert message["symbol"] == "QSYN-DEMO" and message["source"] == "simulated"
+                finally:
+                    enabled_reader.close()
+                    enabled_sock.close()
+                flag.write_text("0\n")
+                assert json.loads(http_status(f"http://127.0.0.1:{port}/health")[1])["demo_ws_enabled"] is False
+                disabled_sock, disabled_reader, disabled_status = open_websocket(port)
+                disabled_reader.close()
+                disabled_sock.close()
+                assert disabled_status == 404
+                print("PASS: private flag dynamically enables/disables demo WS without process restart")
                 return
             assert status == 101, f"Expected WebSocket 101 upgrade, got {status}"
             first, second = read_server_message(reader), read_server_message(reader)
