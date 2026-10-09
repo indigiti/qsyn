@@ -33,6 +33,7 @@ jobs:
         run: |
           php -l apps/web-php/public/index.php
           php -l apps/web-php/src/RustProbe.php
+          php -l apps/web-php/src/RustStreamProbe.php
           php -l apps/web-php/src/RustAdmin.php
           php -l apps/web-php/src/RustSupervisor.php
           php -l apps/web-php/public/admin-rust.php
@@ -68,6 +69,7 @@ jobs:
           cp apps/web-php/public/.htaccess staging/public/.htaccess
           cp frontend/dist/chart.js staging/public/assets/chart.js
           cp apps/web-php/public/assets/rust-diagnostics.js staging/public/assets/rust-diagnostics.js
+          cp apps/web-php/public/assets/rust-stream-test.js staging/public/assets/rust-stream-test.js
           cp apps/web-php/public/assets/rust-admin.js staging/public/assets/rust-admin.js
           cp frontend/node_modules/openalgo-charts/LICENSE staging/public/licenses/openalgo-charts-LICENSE.txt
           if [ -f frontend/node_modules/openalgo-charts/NOTICE ]; then
@@ -75,6 +77,7 @@ jobs:
           fi
           cp apps/web-php/src/FileStore.php staging/private/app/src/FileStore.php
           cp apps/web-php/src/RustProbe.php staging/private/app/src/RustProbe.php
+          cp apps/web-php/src/RustStreamProbe.php staging/private/app/src/RustStreamProbe.php
           cp apps/web-php/src/RustAdmin.php staging/private/app/src/RustAdmin.php
           cp apps/web-php/src/RustSupervisor.php staging/private/app/src/RustSupervisor.php
           cp services/stream-rust/target/release/qsyn-stream staging/private/app/bin/qsyn-stream
@@ -97,6 +100,8 @@ jobs:
           test -s staging/public/.htaccess
           test -s staging/public/assets/chart.js
           test -s staging/public/assets/rust-diagnostics.js
+          test -s staging/public/assets/rust-stream-test.js
+          test -s staging/private/app/src/RustStreamProbe.php
           test -s staging/public/assets/rust-admin.js
           test -s staging/public/admin-rust.php
           test -s staging/private/app/src/RustAdmin.php
@@ -131,6 +136,8 @@ jobs:
           test -s verified-release/public/.htaccess
           test -s verified-release/public/assets/chart.js
           test -s verified-release/public/assets/rust-diagnostics.js
+          test -s verified-release/public/assets/rust-stream-test.js
+          test -s verified-release/private/app/src/RustStreamProbe.php
           test -s verified-release/public/assets/rust-admin.js
           test -s verified-release/public/admin-rust.php
           test -s verified-release/private/app/src/RustAdmin.php
