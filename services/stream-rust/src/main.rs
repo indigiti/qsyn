@@ -1,3 +1,4 @@
+mod binary_activation;
 mod process_control;
 
 use axum::{
@@ -27,6 +28,8 @@ async fn health() -> Json<Value> {
         "demo_runtime_control": true,
         "demo_ws_enabled": process_control::demo_ws_enabled(),
         "runtime_version": env!("CARGO_PKG_VERSION"),
+        "runtime_commit": option_env!("QSYN_SOURCE_SHA").unwrap_or("development"),
+        "auto_activation": binary_activation::active(),
         "uptime_seconds": STARTED_AT.get_or_init(Instant::now).elapsed().as_secs()
     }))
 }
@@ -88,6 +91,9 @@ async fn run_service() -> Result<(), Box<dyn std::error::Error>> {
     // Localhost only by default. Do not publish the demo gateway to the internet.
     let bind = std::env::var("QSYN_BIND").unwrap_or_else(|_| "127.0.0.1:10251".to_owned());
     let listener = tokio::net::TcpListener::bind(&bind).await?;
+    // Only the exact qsyn-stream Supervisor program can hand a binary
+    // replacement back to Supervisor. Manual processes never auto-exit.
+    binary_activation::start();
     let app = Router::new()
         .route("/health", get(health))
         .route("/ws/demo", get(demo_ws));
