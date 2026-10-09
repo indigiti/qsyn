@@ -1,9 +1,9 @@
-# QSYN — Master Architecture Blueprint v1.2
+# QSYN — Master Architecture Blueprint v1.3
 
 **Status:** Architecture baseline for implementation; deployment and licensing gates remain open  
 **Updated:** 2026-10-09  
 **Repository:** https://github.com/indigiti/qsyn  
-**Supersedes:** Blueprint v1.1 and the prior storage proposal in chat
+**Supersedes:** Blueprint v1.2; retains its market-data storage design and adds database-free development/testing with a pluggable MariaDB migration path
 
 > This document is the canonical QSYN architecture. A completed item must be backed by code, tests, and deployment evidence. Statements marked "proposed", "target", or "pending" are not deployed capabilities.
 
@@ -15,11 +15,12 @@ QSYN is a multi-user Indian-market charting and synthetic-instrument platform, i
 2. Keep QSYN's custom code, data contracts, accounts, and storage independent from upstream internals.
 3. Treat QSYN and QNXT as entirely separate projects; QNXT is not a dependency.
 4. Process realtime ticks in Rust memory without forcing them through PHP, MariaDB, Redis, or RabbitMQ.
-5. Use **file-based storage for QSYN market-data history**; do **not** remove OpenAlgo's native databases or transactional storage for QSYN user accounts.
+5. Use **file-based storage for QSYN market-data history** and **file-backed application persistence for development/testing**, without MariaDB; do **not** remove OpenAlgo's own native databases. Preserve a clean, opt-in MariaDB migration path for user-facing application records.
 6. No production Node.js server. Build-time JavaScript/TypeScript tooling may run in CI.
 7. Do not share one user's broker data with others without verified provider/exchange permissions.
 8. Keep order execution and credential management isolated from public chart broadcasting.
 9. All upstream upgrades must be pinned, tested, staged, approved, and rollback-ready.
+10. Never make MariaDB, Redis, or RabbitMQ a prerequisite for local development, test fixtures, or the default CI suite; do not enable live trading or production user credentials in the file-backed development profile.
 
 ## 2. Frozen stack and ownership
 
@@ -30,7 +31,7 @@ QSYN is a multi-user Indian-market charting and synthetic-instrument platform, i
 | Realtime ingestion, normalization, synthetics, candles, fan-out | Rust + Tokio | QSYN-owned service |
 | Chart rendering, indicators, drawings, layouts, replay UI | OpenAlgo Charts (JS/TS) | Upstream library + QSYN feed adapter |
 | Main website and auth API | PHP 8.2+ application | QSYN-owned |
-| User/account/broker metadata and transactional records | MariaDB | QSYN-owned transactional store |
+| User/account/broker metadata and transactional records | Private file-backed store in dev/test; optional MariaDB adapter later | QSYN-owned versioned store interface |
 | Volatile caches/rate limits where justified | In-process Rust cache; Redis optional | Not in the market-data critical path |
 | Background admin jobs | PHP workers / Supervisord where supported | RabbitMQ optional |
 | Market tick/candle history | Append-only WAL + immutable indexed binary segments | QSYN Rust storage |
@@ -38,7 +39,7 @@ QSYN is a multi-user Indian-market charting and synthetic-instrument platform, i
 | Preferred hosting | Cloudways Flexible, subject to persistent-process validation | Alternative execution host allowed for Rust/OpenAlgo |
 | CI and dependency maintenance | GitHub Actions + dependency-update tooling | QSYN-owned |
 
-**Rationale for hybrid storage:** "Database-free" is scoped to QSYN's high-frequency market-data path. OpenAlgo's current README describes SQLite operational stores and a DuckDB Historify store; retain these to preserve upstream upgradeability. Accounts, payments, entitlements, secrets metadata, and trading/audit records require transactional guarantees: MariaDB remains the baseline. Rust, not Go, implements the QSYN market-data file engine.
+**Rationale for progressive storage:** QSYN local development and automated testing should run without MariaDB, Redis or RabbitMQ. File-based adapters may persist synthetic test identities, mock broker connections, workspace settings and other non-production application state. The production application store remains a separate security/correctness decision; use the optional MariaDB adapter when transactional multi-user requirements justify it, rather than silently relying on development files for real funds or credentials. OpenAlgo currently uses its own SQLite operational stores and DuckDB Historify; leave them untouched for upstream compatibility. Rust, not Go, implements the QSYN market-data file engine.
 
 ## 3. Logical architecture and data flow
 
@@ -80,7 +81,7 @@ Use OpenAlgo Charts' published widget, workspace/grid, indicators, drawings, tra
 
 Pin both upstream projects to **tested versions**. Versions observed at planning time are not automatic upgrade targets; a release is eligible only when QSYN's compatibility suite passes.
 
-## 5. Storage architecture v1.2 (hybrid, memory-first)
+## 5. Storage architecture v1.3 (database-free dev/test + memory-first market data)
 
 | Data class | Canonical storage | Reliability rule |
 | --- | --- | --- |
@@ -88,9 +89,9 @@ Pin both upstream projects to **tested versions**. Versions observed at planning
 | Optional retained raw feed events | Checksummed append-only WAL / binary blocks | Subject to licensing and retention policy |
 | Completed ordinary candles | Date/instrument/timeframe partitioned immutable binary blocks | Indexed range reads; verified publishing |
 | Completed synthetic candles | Versioned synthetic-series binary blocks | Preserve leg mapping, formula, roll rules |
-| Active synthetic definitions | MariaDB metadata + versioned JSON export | Transactional updates, audited |
-| Workspace/drawing documents | MariaDB metadata; JSON documents/exports where useful | Auth-scoped updates and atomic publishing |
-| Users, roles, entitlements, sessions, key metadata | MariaDB; secrets encrypted with managed application key | ACID operations, revocation, audit |
+| Active synthetic definitions | Application storage interface: private JSON/journal in dev/test; optional MariaDB later | Versioned definitions, atomic/transactional update semantics |
+| Workspace/drawing documents | Application storage interface: private JSON/journal in dev/test; optional MariaDB later | Tenant-scoped, atomic publishing and revision checks |
+| Users, roles, entitlements, sessions, key metadata | File-backed **mock/test data only** in dev/test; MariaDB adapter available later | Auth checks, revisioning, revocation; production requires independent security sign-off |
 | OpenAlgo platform state / Historify | Its own native stores | Managed only by supported OpenAlgo interfaces |
 | Analytical extracts (optional) | Partitioned Parquet | Batch-derived, rebuildable |
 
@@ -113,6 +114,64 @@ storage/
 ~~~
 
 Partition by stable instrument ID, trading session and expected file size; do not generate millions of tiny files. Indexed compressed files must use independent compressed blocks or frame offsets that can actually be sought and decompressed efficiently.
+
+### Database-free development and testing profile
+
+**Default for development and CI:** `QSYN_APP_STORE=file`. Do **not** install, boot, or connect to MariaDB for ordinary QSYN local development, test suites, demos, or fixture-backed acceptance testing. Redis and RabbitMQ remain optional. This only applies to **QSYN-owned application storage**; when integration testing a real OpenAlgo instance, its upstream SQLite/DuckDB dependencies remain.
+
+Example environment settings (proposed contracts, not currently implemented):
+
+~~~dotenv
+QSYN_ENV=development
+QSYN_APP_STORE=file
+QSYN_APP_STORAGE_DIR=/absolute/private/path/qsyn-app-store
+QSYN_ALLOW_REAL_BROKER_CREDENTIALS=false
+QSYN_ENABLE_LIVE_TRADING=false
+~~~
+
+- File-backed adapter supports user fixtures, mock broker accounts, roles and entitlements, workspaces/drawings, synthetic definitions, settings, and simulated audit records. Passwords, even in test data, must use a maintained password-hashing algorithm. Prefer seeded disposable identities and **mock tokens**; never commit genuine Upstox API keys or refresh tokens to Git.
+- Keep all application files **outside the public web root**. Exclude them from version control, use restrictive filesystem permissions, and isolate test suites in ephemeral storage directories.
+- Define PHP-facing repository interfaces such as `UserRepository`, `BrokerConnectionRepository`, `WorkspaceRepository`, `SyntheticDefinitionRepository` and `AuditRepository`. Application features depend on these interfaces, not SQL syntax, filesystem paths or implementation-specific query methods.
+- Store records with stable UUIDs, `schema_version`, tenant ID, revision, timestamps and a canonical serialization format. Normalize money, time and enum representations at the domain boundary so JSON and MariaDB backends have identical behavior.
+- For local concurrent writes, use a **single application writer or explicit advisory locking**, atomic temp-file + fsync + rename where supported, plus a bounded checksummed operation journal. Never permit two PHP requests to overwrite the same user/account revision silently. Index/rebuild tooling and crash-recovery tests are required.
+- Avoid unbounded per-tick files or millions of user JSON objects. Market tick/candle history belongs to the separate Rust file engine; the PHP file adapter stores low-frequency application state only.
+- API authentication, tenant isolation, revocation, validation and tests must run identically under both implementations. File-backed development is **not** automatically approved for real customer accounts, live order execution, or payments.
+
+### Future switch to MariaDB — no code rewrite
+
+**The switching boundary is the application storage adapter, not the chart or Rust market-data engine.** MariaDB is a supported *future option*, not a prerequisite or automatic production default. Introduce `QSYN_APP_STORE=mariadb` only when the operator deliberately selects it and the connector passes identical repository-contract tests.
+
+Migration procedure to implement and rehearse before enabling this mode:
+
+1. Define relational schemas/migrations reflecting the same stable IDs, schema versions, tenant ownership, uniqueness constraints and record relationships as the file store.
+2. Add a MariaDB implementation for the **same** repository interfaces. Keep business services, HTTP APIs, chart data contracts and Rust engine unchanged.
+3. Build a versioned export/import utility with dry-run, record counts, integrity checksums, relationship checks, secret-handling policy and audit report. Export must never log or expose raw credentials.
+4. Stop or freeze writes, produce and verify a consistent file-store snapshot/checkpoint, import into a clean database, then compare ownership, revisions and counts and run complete integration/authorization tests.
+5. Switch the configured adapter in a **staging** environment first; exercise login, token revocation, layouts, synthetic definitions, and cross-tenant access tests.
+6. Use a controlled maintenance window to cut over, retaining the verified file snapshot for rollback. Do not casually toggle adapters against divergent live stores or start unsupervised dual-writes. Define the recovery plan before migrating live data.
+7. MariaDB contract tests run as a separate **optional integration CI job** (service container or provisioned test instance); the default file-based test suite stays fully database-free.
+
+**Decision trigger:** move application metadata to MariaDB when real-world transactional concurrency, audited production credentials, billing, or multi-instance consistency justify it. Do not migrate market tick/candle WAL and binary segment history merely because the application store changes.
+
+### Proposed private file-store layout
+
+~~~text
+private-storage/
+  app-dev/
+    journal/operations.wal
+    snapshots/<checkpoint>.json
+    indexes/
+    tenants/<tenant-id>/
+      users/
+      workspaces/
+      synthetic-definitions/
+      settings/
+    test-fixtures/
+  market/
+    ... (see Rust market storage layout above)
+~~~
+
+The file-backed store is deliberately a **development/test implementation**, not a claim of production ACID equivalence to MariaDB.
 
 ### Write path and acknowledgement semantics
 
@@ -155,7 +214,7 @@ source_id, entitlement_scope, instrument_id, event_type (ltp/quote/depth), excha
 ## 7. Security and tenancy
 
 - Tenant-scoped user IDs, broker sessions, secrets, entitlement decisions, synthetic definitions, files and cache keys.
-- Server-side encrypted broker credentials; no API key, broker secret or OpenAlgo token in chart browser bundles.
+- Server-side encrypted broker credentials when explicitly enabled for a production-approved store; use fake/sandbox credentials in the default file-backed dev/test profile. No API key, broker secret or OpenAlgo token in chart browser bundles.
 - Short-lived, scope-bound chart access tokens minted by PHP; Rust validates tenant/series/expiry on subscribe and refresh.
 - Per-tenant connection limits, rate limits and bounded outgoing buffers; slow viewers cannot stall the upstream engine.
 - Dedicated admin and execution permissions; paper-trading first, live trading behind explicit enablement and pre-trade risk checks.
@@ -197,8 +256,8 @@ No production Node.js process is needed. Compile OpenAlgo Charts assets in CI. K
 
 | Phase | Scope | Required exit evidence |
 | --- | --- | --- |
-| **0 — Blueprint & feasibility** | Confirm licensing, Cloudways process/WSS support, OpenAlgo interfaces; CI skeleton, dependency pins and storage contract | Hosting smoke test, decision log, CI baseline |
-| **1 — PHP identity & control** | Multi-user account model, MariaDB, auth, secret vault, admin and entitlement model | Two accounts cannot read or use each other's keys or data |
+| **0 — Blueprint & feasibility** | Confirm licensing, Cloudways process/WSS support, OpenAlgo interfaces; define pluggable PHP store contracts and file-only default CI; dependency pins | Hosting smoke test; no-MariaDB CI pass; adapter-contract fixtures |
+| **1 — PHP identity & control** | Multi-user test identities, private file-backed repository adapter, authentication, mocked broker credentials, roles and entitlements; MariaDB optional adapter stub | Two independent fixture accounts cannot read each other's records; passes with MariaDB/Redis absent |
 | **2 — Upstox / OpenAlgo** | First broker linkage, symbol/expiry lookup, quotes, historical feeds, reconnection | Authenticated live quotes and authorized historical candles |
 | **3 — Rust engine + storage foundation** | Normalized feeds, subscription registry, tick/price processing, candle builder, memory cache, checksummed WAL, snapshot replay, file segments/indexes | Deterministic replay, power-loss/crash recovery tests, observable end-to-end metrics |
 | **4 — OpenAlgo Charts terminal** | Supported widget/grid/data-feed integration; indicators, drawing/layout persistence, candle history and realtime WSS | Live and historical chart parity, saved workspace recovery |
@@ -208,7 +267,7 @@ No production Node.js process is needed. Compile OpenAlgo Charts assets in CI. K
 | **8 — Trading and risk** | OpenAlgo sandbox, positions/orders, privileged execution API, risk checks | Paper-trading acceptance, explicit production go/no-go |
 | **9 — Production hardening** | Benchmarks, backups, observability, disaster restore, upgrades, capacity tuning | Agreed SLOs, recovery tests and production readiness sign-off |
 
-Phase 3 includes the market-data storage engine—not a separate Go storage service. Historical file-format v1, migration tests and restore tooling must exist before production history retention.
+Phase 3 includes the market-data storage engine—not a separate Go storage service. Historical file-format v1, migration tests and restore tooling must exist before production history retention. The PHP application file-store interface begins in Phases 0–1. MariaDB may be added later through an independently tested adapter and migration without revising Rust market-data storage.
 
 ## 11. Engineering targets (unverified until measured)
 
@@ -229,18 +288,20 @@ These are **acceptance targets**, not claims about Upstox, Cloudways, OpenAlgo o
 | ADR-002 | Reuse OpenAlgo and OpenAlgo Charts via supported interfaces | **Fixed** |
 | ADR-003 | Rust/Tokio owns hot market-data processing and file storage; no separate Go engine | **Fixed** |
 | ADR-004 | File-based WAL/indexed binary market history; no SQL/Redis in tick hot path | **Fixed as design**, benchmark before launch |
-| ADR-005 | MariaDB remains for user-facing transactional data and credentials metadata | **Fixed for v1** |
+| ADR-005 | No MariaDB in QSYN development or default CI; file-backed PHP application repository; optional MariaDB adapter + controlled migration when selected | **Fixed for dev/test; migration optional** |
 | ADR-006 | Preserve OpenAlgo SQLite/DuckDB internals | **Fixed** |
 | ADR-007 | Multiple user keys must be isolated; pooling/redistribution requires licenses | **Fixed** |
 | ADR-008 | Cloudways-first, with persistent-daemon feasibility gate | **Pending validation** |
 | ADR-009 | Upstream upgrades are monitored, pinned, tested and staged; no blind auto-deploy | **Fixed** |
 | ADR-010 | Broker V3 Upstox starts the platform; add other adapters later | **Fixed** |
+| ADR-011 | Real credentials, live trading and production billing are disabled in file-backed development profile until separately reviewed and approved | **Fixed** |
+| ADR-012 | Reusable repository contracts and repeatable file→MariaDB import/verification/rollback procedure are mandatory before switching | **Fixed** |
 
 ## 13. Open launch gates and current implementation status
 
-**Not yet verified:** Cloudways daemon viability; Upstox live-feed latency; production data licenses/derived-data rights; tenant-scale OpenAlgo topology; actual hardware sizing; full WAL crash recovery; end-to-end chart integration.
+**Not yet verified:** Cloudways daemon viability; Upstox live-feed latency; production data licenses/derived-data rights; tenant-scale OpenAlgo topology; actual hardware sizing; full WAL crash recovery; end-to-end chart integration; file-backed application-store concurrency/recovery; MariaDB adapter migration and cutover (not yet required).
 
-**This commit is documentation only.** It does not implement a Rust engine, PHP website, Upstox credentials, chart terminal, storage files, CI automation or Cloudways deployment. Implementation begins at Phase 0, following this document.
+**This revision is documentation only.** It does not implement a Rust engine, PHP website, Upstox credentials, chart terminal, file-store adapter, MariaDB adapter, migration tooling, CI automation or Cloudways deployment. Implementation begins at Phase 0, following this document.
 
 ## Primary upstream references
 
