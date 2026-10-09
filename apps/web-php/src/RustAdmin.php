@@ -11,12 +11,75 @@ final class RustAdmin
 {
     private const IDLE_SECONDS = 1200;
 
+    /**
+     * Password configuration belongs to the QSYN application, not PHP-FPM.
+     *
+     * Prefer an explicitly configured server environment when provided.
+     * Otherwise read a persistent 0600 private JSON file that can be placed
+     * using a trusted application file manager/SFTP (never under public_html).
+     * An explicit QSYN_CONTROL_ENABLED=0 always disables administrator access.
+     */
+    private static function passwordHash(): string
+    {
+        if (getenv('QSYN_CONTROL_ENABLED') === '0') {
+            return '';
+        }
+        $envHash = getenv('QSYN_ADMIN_PASSWORD_HASH');
+        if (is_string($envHash) && $envHash !== '') {
+            if (getenv('QSYN_CONTROL_ENABLED') !== '1') {
+                return '';
+            }
+            return self::validHash($envHash) ? $envHash : '';
+        }
+
+        $runtime = (string)(getenv('QSYN_RUNTIME_DIR') ?: dirname(__DIR__, 2) . '/runtime');
+        if (!str_starts_with($runtime, '/')
+            || preg_match('~(?:^|/)\.\.(?:/|$)~', $runtime)
+            || !is_dir($runtime)
+            || is_link($runtime)) {
+            return '';
+        }
+        // Shared PHP/Rust runtime can be group writable, but never world writable.
+        $runtimeMode = @fileperms($runtime);
+        if ($runtimeMode === false || ($runtimeMode & 0002) !== 0) {
+            return '';
+        }
+
+        $file = rtrim($runtime, '/') . '/admin-auth.json';
+        clearstatcache(true, $file);
+        if (!is_file($file) || is_link($file) || !is_readable($file)) {
+            return '';
+        }
+        $mode = @fileperms($file);
+        $size = @filesize($file);
+        if ($mode === false || ($mode & 0077) !== 0
+            || $size === false || $size < 20 || $size > 4096) {
+            return '';
+        }
+        $raw = @file_get_contents($file);
+        if (!is_string($raw)) {
+            return '';
+        }
+        $data = json_decode($raw, true);
+        if (!is_array($data)
+            || ($data['schema'] ?? null) !== 'QSYN-ADMIN/1'
+            || ($data['enabled'] ?? null) !== true
+            || !is_string($data['password_hash'] ?? null)) {
+            return '';
+        }
+        $hash = $data['password_hash'];
+        return self::validHash($hash) ? $hash : '';
+    }
+
+    private static function validHash(string $hash): bool
+    {
+        return strlen($hash) <= 255
+            && (password_get_info($hash)['algoName'] ?? 'unknown') !== 'unknown';
+    }
+
     public static function configured(): bool
     {
-        $hash = (string)(getenv('QSYN_ADMIN_PASSWORD_HASH') ?: '');
-        return getenv('QSYN_CONTROL_ENABLED') === '1'
-            && $hash !== ''
-            && (password_get_info($hash)['algoName'] ?? 'unknown') !== 'unknown';
+        return self::passwordHash() !== '';
     }
 
     public static function boot(): void
@@ -86,7 +149,7 @@ final class RustAdmin
         if ($lockUntil > time()) {
             return false;
         }
-        $hash = (string)getenv('QSYN_ADMIN_PASSWORD_HASH');
+        $hash = self::passwordHash();
         if (strlen($password) > 1024 || !password_verify($password, $hash)) {
             $failures = (int)($_SESSION['qsyn_failures'] ?? 0) + 1;
             $_SESSION['qsyn_failures'] = $failures;
