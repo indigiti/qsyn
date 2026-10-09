@@ -299,3 +299,48 @@ sampling bridge is intentionally low rate and development-only. The production
 multi-user realtime data plane should use authenticated, permissioned websocket
 streaming, user/session authorization, fanout and market-data licensing controls
 in Rust, without PHP request-per-tick polling.
+
+## Browser-only Cloudways activation readiness
+
+The QSYN Rust admin page now contains a **Rust activation readiness**
+section, visible even before administrator login. It makes read-only,
+same-origin calls to the existing QSYN `/api/v1/admin/rust/state` and
+`/api/v1/diagnostics/rust` endpoints and reports:
+
+- Whether administrator credentials are provisioned (boolean only).
+- Whether PHP can reach the private Rust HTTP health endpoint.
+- Whether the actual running Rust executable supports runtime toggling.
+- Whether the simulated WebSocket has been enabled.
+- **After authentication only:** whether PHP can write the private Rust
+  runtime flag. No private directory listing or raw secret is returned.
+
+**Copy Cloudways request** creates a local text request listing the
+necessary server-only settings and one-time process transition. Nothing
+is sent over the network by this button.
+
+Cloudways should provision the administrator password hash using a
+private PHP-FPM environment/secret facility. Avoid Git, public files,
+browser-displayed credentials, and a public first-user initialization
+wizard. Enabling the simulated feed only needs authenticated file-write
+permission—not generic `proc_open`, `exec`, `shell_exec` or service
+restart privileges. Those functions are **separate** optional prerequisites
+for web-based process Start/Stop/Restart and should not be enabled merely
+to switch simulated market-data feed status.
+
+Operator verification:
+1. Deploy current QSYN PHP/JS release via DigiOps.
+2. Visit `https://stage.digiti.in/qsyn/admin/rust` and click
+   **Check activation**. Before provisioning, expect pending admin
+   configuration.
+3. Arrange one safe QSYN-only transition to a recent Rust binary if
+   `demo_runtime_control` is absent from `/health`. Do not stop QNEXT.
+4. Provision private PHP-FPM `QSYN_CONTROL_ENABLED=1` and
+   `QSYN_ADMIN_PASSWORD_HASH`, and grant a narrow write permission to
+   `private_html/qsyn/runtime` for the QSYN PHP application.
+5. Sign in, refresh activation readiness to check writable state, and
+   click **Enable demo stream**, then **Test demo stream**.
+6. Open `/qsyn/` and click **Connect Rust demo**. The two-quote PHP
+   sampler is Phase-0 only; it is not a production streaming topology.
+
+Do not construe a green read-only readiness checklist as proof of production
+authorization, uptime recovery or broker/trading readiness.
