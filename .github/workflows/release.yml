@@ -74,6 +74,7 @@ jobs:
           cp apps/web-php/public/assets/chart-diagnostics.js staging/public/assets/chart-diagnostics.js
           cp apps/web-php/public/assets/rust-stream-test.js staging/public/assets/rust-stream-test.js
           cp apps/web-php/public/assets/rust-admin.js staging/public/assets/rust-admin.js
+          cp apps/web-php/public/assets/rust-activation-readiness.js staging/public/assets/rust-activation-readiness.js
           cp frontend/node_modules/openalgo-charts/LICENSE staging/public/licenses/openalgo-charts-LICENSE.txt
           if [ -f frontend/node_modules/openalgo-charts/NOTICE ]; then
             cp frontend/node_modules/openalgo-charts/NOTICE staging/public/licenses/openalgo-charts-NOTICE.txt
@@ -108,6 +109,7 @@ jobs:
           test -s staging/public/assets/rust-stream-test.js
           test -s staging/private/app/src/RustStreamProbe.php
           test -s staging/public/assets/rust-admin.js
+          test -s staging/public/assets/rust-activation-readiness.js
           test -s staging/public/admin-rust.php
           test -s staging/private/app/src/RustAdmin.php
           test -s staging/private/app/src/RustDemoConfig.php
@@ -146,6 +148,7 @@ jobs:
           test -s verified-release/public/assets/rust-stream-test.js
           test -s verified-release/private/app/src/RustStreamProbe.php
           test -s verified-release/public/assets/rust-admin.js
+          test -s verified-release/public/assets/rust-activation-readiness.js
           test -s verified-release/public/admin-rust.php
           test -s verified-release/private/app/src/RustAdmin.php
           test -s verified-release/private/app/src/RustDemoConfig.php
