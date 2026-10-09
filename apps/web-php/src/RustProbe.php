@@ -4,7 +4,7 @@ declare(strict_types=1);
 namespace QSYN\Diagnostics;
 
 /**
- * Read-only, on-demand Phase 0 diagnostic. Probes ONLY localhost:8788.
+ * Read-only, on-demand Phase 0 diagnostic. Probes ONLY localhost:1299.
  * Does not execute processes, accept a target URL, or expose broker secrets.
  */
 final class RustProbe
@@ -75,7 +75,7 @@ final class RustProbe
         $errno = 0;
         $errstr = '';
         $conn = @stream_socket_client(
-            'tcp://127.0.0.1:8788',
+            'tcp://127.0.0.1:1299',
             $errno,
             $errstr,
             0.35,

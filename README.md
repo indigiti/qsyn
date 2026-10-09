@@ -35,7 +35,7 @@ To start the separate **localhost-only** Rust service:
 
 ~~~bash
 cargo run --manifest-path services/stream-rust/Cargo.toml
-curl http://127.0.0.1:8788/health
+curl http://127.0.0.1:1299/health
 ~~~
 
 The demo WebSocket at /ws/demo is disabled by default. For local testing only, start with QSYN_ENABLE_DEMO_WS=1. This simulated WebSocket is not connected to the chart widget or a real broker.
