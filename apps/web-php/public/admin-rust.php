@@ -48,8 +48,15 @@ label{display:block;margin-bottom:10px;font-weight:600}code{color:#b6daff}.statu
   <p class="muted">Checks whether PHP can reach the Rust HTTP endpoint and optional WebSocket handshake.</p>
   <div class="grid"><button type="button" class="secondary" id="probe-rust">Test Rust health</button><output class="status" id="probe-result">Not checked</output></div>
 </section>
+<section class="card">
+  <h2>Demo WebSocket stream</h2>
+  <p class="muted">Samples exactly two simulated quotes from Rust through PHP. Not connected to Upstox or a public WebSocket.</p>
+  <div class="grid"><button type="button" class="secondary" id="rust-stream-test">Test demo stream</button><output class="status" id="rust-stream-result" role="status">Not tested</output></div>
+  <p class="muted" id="rust-stream-samples" aria-live="polite">Demo streaming is disabled by default until Rust is started with QSYN_ENABLE_DEMO_WS=1.</p>
+</section>
 <p id="feedback" class="muted" role="status" aria-live="polite"></p>
 </main>
 <script src="/qsyn/assets/rust-admin.js" defer></script>
+<script src="/qsyn/assets/rust-stream-test.js" defer></script>
 </body>
 </html>
