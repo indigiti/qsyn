@@ -49,3 +49,9 @@ FileStore takes a **private absolute directory** and exposes get()/put() with op
 See [DigiOps integration](infrastructure/DIGIOPS.md). The release workflow publishes a GitHub Actions artifact, **not** a live Cloudways deployment. The actual Cloudways app, PHP routing, Rust/OpenAlgo long-running processes, WSS proxy/TLS, upgrades, backup and rollbacks require environment-specific validation.
 
 OpenAlgo and OpenAlgo Charts must remain pinned and independently upgradeable; the production feed adapter will keep provider secrets on the server, not in the browser.
+
+## Rust administration (opt-in)
+
+The browser admin page is available at `/qsyn/admin/rust` with **Start / Stop / Restart / Refresh / Health**. This feature is **disabled by default**. It requires a Cloudways-approved dedicated restricted Supervisor configuration, server-injected administrator password hash and process-control capability. It never executes arbitrary browser-supplied commands. See [DigiOps service control guidance](infrastructure/DIGIOPS.md) for setup and security gates.
+
+No permission has yet been granted to start the Rust daemon on Cloudways; the page will show service controls unavailable until Cloudways supplies a supported manager. The health button remains usable even when actions are disabled.
