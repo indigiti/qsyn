@@ -115,6 +115,8 @@ def run_instance_with_runtime(enable_demo: bool, runtime: str) -> None:
     try:
         health = await_health(port, process)
         assert health.pop("runtime_version") == "0.1.0"
+        assert health.pop("runtime_commit") == os.environ.get("QSYN_SOURCE_SHA", "development")
+        assert health.pop("auto_activation") is False
         assert isinstance(health.pop("uptime_seconds"), int)
         assert health == {
             "status": "ok",
