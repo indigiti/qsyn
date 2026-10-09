@@ -166,13 +166,17 @@ try {
   await adminBrowser.locator('#setup-password').fill(freshPassword);
   await adminBrowser.locator('#setup-confirm').fill(freshPassword);
   await adminBrowser.locator('#setup-button').click();
-  await adminBrowser.waitForFunction(() => (
-    document.getElementById('feedback')?.textContent || ''
-  ).includes('Administrator password created.'), null, { timeout: 7000 });
-  if (!(await adminBrowser.locator('#admin-login').isVisible()) ||
-      !(await adminBrowser.locator('#admin-first-run').isHidden())) {
-    throw new Error('Admin setup did not transition to normal sign-in');
+  await adminBrowser.waitForFunction(() => {
+    const text = document.getElementById('feedback')?.textContent || '';
+    return text.includes('Administrator password created.')
+      || text.includes('First-time setup could not be completed.');
+  }, null, { timeout: 7000 });
+  const setupFeedback = await adminBrowser.locator('#feedback').textContent();
+  if (!setupFeedback.includes('Administrator password created.')) {
+    throw new Error('First-run browser setup failed: ' + setupFeedback);
   }
+  await adminBrowser.locator('#admin-login').waitFor({ state: 'visible', timeout: 7000 });
+  await adminBrowser.locator('#admin-first-run').waitFor({ state: 'hidden', timeout: 7000 });
   await adminBrowser.locator('#admin-password').fill(freshPassword);
   await adminBrowser.locator('#login-button').click();
   await adminBrowser.waitForFunction(() =>
