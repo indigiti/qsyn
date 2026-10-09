@@ -98,11 +98,24 @@ try {
   await page.waitForTimeout(800);
   const after = await paintedPixels(page);
   await page.screenshot({ path: resolve(screenshots, 'chart-reset.png'), fullPage: true });
+  const chartSrc = await page.locator('script[src*="/qsyn/assets/chart.js"]').getAttribute('src');
+  if (!chartSrc || !/chart\\.js\\?v=\\d+/.test(chartSrc)) {
+    throw new Error('DigiOps chart bundle URL missing deployment cache-busting version: ' + chartSrc);
+  }
+  await page.locator('details.chart-debug summary').click();
+  await page.locator('#chart-diagnose').click();
+  const browserReport = JSON.parse(await page.locator('#chart-diagnostic-report').textContent());
+  if (browserReport.coloredPixels.green < 25 || browserReport.coloredPixels.red < 25) {
+    throw new Error('In-page diagnostics did not detect painted candlesticks');
+  }
+  if (browserReport.chartBundleVersion === 'unversioned') {
+    throw new Error('In-page diagnostics reported unversioned chart asset');
+  }
   const violations = await page.evaluate(() => window.__qsynCspViolations);
   const bars = await (await page.request.get(origin + '/qsyn/api/v1/demo/bars')).json();
   console.log('CHART_BROWSER_DIAGNOSTICS ' + JSON.stringify({
     bars: bars.bars?.length, first: bars.bars?.[0], last: bars.bars?.at(-1),
-    initial, after, violations, pageErrors: errors, consoleErrors: warnings,
+    initial, after, browserReport, violations, pageErrors: errors, consoleErrors: warnings,
     phpError: phpError.slice(-600),
   }));
   if (bars.bars?.length !== 120) throw Error('PHP failed to serve 120 demo bars');
