@@ -344,3 +344,79 @@ Operator verification:
 
 Do not construe a green read-only readiness checklist as proof of production
 authorization, uptime recovery or broker/trading readiness.
+
+## Application-owned administrator provisioning (no Cloudways PHP-FPM changes)
+
+Cloudways correctly classifies QSYN authentication and demo-stream toggling as
+**application responsibilities**. Starting with this release, QSYN supports
+a persistent private administrator file in addition to legacy PHP-FPM secrets:
+
+```text
+private_html/qsyn/runtime/admin-auth.json
+```
+
+The directory is provisioned by the DigiOps private release artifact, while
+the **actual secret file must NEVER be placed into GitHub, the release ZIP,
+public_html, Cloudways public web root, or client-side JavaScript**.
+
+The admin file is a small JSON object with `schema=QSYN-ADMIN/1`,
+`enabled=true` and `password_hash` set to a valid PHP
+`password_hash(..., PASSWORD_DEFAULT)` value. The app accepts it only when:
+
+- File is inside the prearranged QSYN private runtime directory.
+- Regular file, not a symlink, readable by the PHP application identity.
+- Mode **0600** (no group or world access); the directory is not
+  world-writable.
+- Valid JSON under 4096 bytes, with a valid hash and explicit enabled=true.
+- A server-level `QSYN_CONTROL_ENABLED=0` emergency kill switch is absent.
+
+The existing PHP-FPM environment configuration remains supported when present
+and explicitly enabled, and takes precedence. By default, the private file
+enables authentication only; the Start/Stop/Restart adapter remains disabled
+until a separate reviewed `QSYN_CONTROL_ENABLED=1` direct/supervisor process
+configuration is provisioned.
+
+### Developer-owned one-time setup
+
+1. On a trusted **developer machine**, generate a unique strong administrator
+   password and store it in a password manager. Do not submit it to ChatGPT or
+   Cloudways Support.
+2. Generate a password hash and private JSON config using the developer-only
+   `apps/web-php/tools/make-admin-config.php` helper. It accepts the password
+   through **stdin** from a trusted local password manager, not a CLI argument,
+   and outputs an `admin-auth.json` file with mode 0600. Do not run the
+   helper through HTTP or package it in a release.
+3. Transfer that file over authenticated **SFTP / private file manager** into
+   `private_html/qsyn/runtime/admin-auth.json`. Verify its mode remains 0600,
+   its parent is private, and no HTTP route serves it. This is the one-time
+   credential bootstrap; routine enable/disable works entirely in the browser.
+4. Visit `https://stage.digiti.in/qsyn/admin/rust`, click **Check activation**,
+   and sign in. If `demo_runtime_control=true` appears from the *running*
+   Rust process and PHP can write the private runtime flag, use **Enable demo
+   stream**, then **Test demo stream**.
+5. Return to `/qsyn/` and click **Connect Rust demo**.
+
+If the developer does not have authorized private SFTP/file-manager access,
+the application cannot securely self-provision a first administrator via a
+public webpage. Arrange one-time authorization rather than adding an
+unauthenticated first-run endpoint.
+
+### Server-level Cloudways questions only
+
+Ask Cloudways Support to confirm **only** the following when needed:
+
+- Whether the QSYN PHP runtime identity can read a mode-0600 private file
+  and write another mode-0600 file in `private_html/qsyn/runtime`. If PHP
+  and Rust are different users, advise a narrow private ACL for the demo
+  flag, not world-write permissions.
+- Whether the QSYN-specific running `qsyn-stream` process on
+  `127.0.0.1:10251` may be safely restarted once so the on-disk upgraded
+  executable takes effect, leaving QNEXT untouched.
+- Whether Cloudways supports persistently running the application-owned
+  Rust service or needs an approved process supervisor for uptime. This
+  does not block the no-restart demo *toggle* itself after initial activation.
+
+No generic PHP `exec`/`shell_exec`/`proc_open` permissions are required
+for administrator sign-in or toggling simulated WebSockets. They are a
+separate consideration for optional web Start/Stop/Restart of a fully managed
+Rust daemon. Do not ask Cloudways to implement QSYN market-data logic.
