@@ -47,4 +47,53 @@ putenv('QSYN_SERVICE_MANAGER');
 RustAdmin::logout();
 ensure(!RustAdmin::authenticated(), 'logout revokes session');
 ensure(!RustAdmin::verifyCsrf(RustAdmin::csrf()), 'logout invalidates CSRF');
-echo "PASS: Rust service controls fail closed, authenticate, verify CSRF, and restrict actions\n";
+
+// Cloudways must not need PHP-FPM environment changes just to enable
+// authenticated QSYN demo-stream toggles. The persistent private 0600 file
+// is a valid alternative, but world-readable files and symlinks fail closed.
+$root = sys_get_temp_dir() . '/qsyn-private-admin-' . bin2hex(random_bytes(6));
+ensure(mkdir($root, 0700), 'private runtime directory created');
+putenv('QSYN_RUNTIME_DIR=' . $root);
+putenv('QSYN_CONTROL_ENABLED');
+putenv('QSYN_ADMIN_PASSWORD_HASH');
+$config = $root . '/admin-auth.json';
+try {
+    ensure(!RustAdmin::configured(), 'no private file fails closed');
+    $content = json_encode([
+        'schema' => 'QSYN-ADMIN/1',
+        'enabled' => true,
+        'password_hash' => $hash,
+    ], JSON_THROW_ON_ERROR) . "\n";
+    ensure(file_put_contents($config, $content) !== false, 'private config written');
+    ensure(chmod($config, 0600), 'private config locked down');
+    ensure(RustAdmin::configured(), 'private config activates admin without PHP-FPM env');
+    ensure(RustAdmin::attempt($password), 'private config password accepted');
+    ensure(RustAdmin::authenticated(), 'private-config session authenticated');
+    RustAdmin::logout();
+    ensure(chmod($config, 0644), 'insecure file fixture');
+    ensure(!RustAdmin::configured(), 'world-readable config denied');
+    ensure(chmod($config, 0600), 'restore private file mode');
+    ensure(file_put_contents($config, '{broken-json') !== false, 'malformed fixture');
+    ensure(!RustAdmin::configured(), 'malformed admin file denied');
+    unlink($config);
+    ensure(symlink('/etc/passwd', $config), 'symlink fixture');
+    ensure(!RustAdmin::configured(), 'symlink admin config denied');
+    unlink($config);
+    ensure(file_put_contents($config, $content) !== false, 'restore private config');
+    ensure(chmod($config, 0600), 'restore strict mode');
+    putenv('QSYN_CONTROL_ENABLED=0');
+    ensure(!RustAdmin::configured(), 'explicit kill switch overrides private config');
+    putenv('QSYN_CONTROL_ENABLED');
+    ensure(RustAdmin::configured(), 'private config recovers when kill switch unset');
+    ensure(file_put_contents($config, json_encode([
+        'schema' => 'QSYN-ADMIN/1', 'enabled' => false, 'password_hash' => $hash,
+    ], JSON_THROW_ON_ERROR)) !== false, 'disabled fixture');
+    ensure(!RustAdmin::configured(), 'explicit disabled config denied');
+} finally {
+    putenv('QSYN_RUNTIME_DIR');
+    putenv('QSYN_CONTROL_ENABLED');
+    putenv('QSYN_ADMIN_PASSWORD_HASH');
+    if (file_exists($config) || is_link($config)) unlink($config);
+    rmdir($root);
+}
+echo "PASS: Rust admin session, private 0600 file activation, and fail-closed safety gates\n";
