@@ -263,3 +263,39 @@ trusted administrator identity. An operator must first provision those
 credentials through a secure provider interface; do not add a public
 first-user setup endpoint. Cloudways PHP execution restrictions may still
 require operator approval before web Start/Stop/Restart can work.
+
+## Phase 0 — Rust simulated ticks → OpenAlgo Charts live candles
+
+The QSYN chart terminal now provides an explicit **Connect Rust demo / Disconnect
+Rust demo** control. It preserves the 120 deterministic PHP OHLC candles and
+uses OpenAlgo Charts' supported `DataFeed.subscribeBars` callback plus its
+reused `CandleBuilder` to update the newest one-minute bar from Rust quotes.
+
+- The browser issues a bounded same-origin request to
+  `GET /qsyn/api/v1/diagnostics/rust-stream` only **after an explicit click**.
+- PHP connects to `127.0.0.1:10251/ws/demo` and receives two fixed,
+  simulated `QSYN-DEMO` quotes per request. Browser requests are serialized
+  (never overlapping), use a timeout and can be aborted on disconnect.
+- The Rust demo quote sequence is shared across connections so consecutive
+  PHP probes no longer reset the synthetic price to sample #1.
+- OpenAlgo Charts' `CandleBuilder` converts Rust quote timestamps/prices to
+  aligned 60-second OHLC updates and emits through `subscribeBars`. No
+  fake trade quantities, order execution, options data, or broker credentials.
+- When Rust is offline or demo WebSockets are disabled, the chart **retains
+  existing PHP history** and displays the reason. Users can disconnect at
+  any time; other chart intervals are explicitly unsupported by this demo
+  live subscription.
+
+**One-time Cloudways prerequisites remain:** The Rust service must be running
+the upgraded binary with demo WebSockets enabled; admin credentials must be
+securely provisioned to enable its toggle from the website. The existing
+unmanaged Cloudways `nohup` process is NOT automatically restarted by a DigiOps
+artifact deployment. A safe QSYN-only process transition may be necessary.
+Chart updates themselves need no local console or direct browser WebSocket
+exposure.
+
+**Not a production feed architecture:** This bounded PHP-to-Rust WebSocket
+sampling bridge is intentionally low rate and development-only. The production
+multi-user realtime data plane should use authenticated, permissioned websocket
+streaming, user/session authorization, fanout and market-data licensing controls
+in Rust, without PHP request-per-tick polling.
