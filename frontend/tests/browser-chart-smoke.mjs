@@ -99,7 +99,7 @@ try {
   const after = await paintedPixels(page);
   await page.screenshot({ path: resolve(screenshots, 'chart-reset.png'), fullPage: true });
   const chartSrc = await page.locator('script[src*="/qsyn/assets/chart.js"]').getAttribute('src');
-  if (!chartSrc || !/chart\\.js\\?v=\\d+/.test(chartSrc)) {
+  if (!chartSrc || !/chart[.]js[?]v=[0-9]+/.test(chartSrc)) {
     throw new Error('DigiOps chart bundle URL missing deployment cache-busting version: ' + chartSrc);
   }
   await page.locator('details.chart-debug summary').click();
