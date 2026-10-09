@@ -169,3 +169,41 @@ The application has no live broker feed or trading capabilities in Phase 0.
 Linux-only implementation: the direct Rust launcher uses setsid and /proc
 identity verification. The CI and DigiOps release workflows exercise
 start/stop/restart on disposable loopback ports, not Cloudways itself.
+
+## Browser-based Rust WebSocket quote sampling
+
+The QSYN chart and administration pages have a **Test demo stream** button.
+It fetches a bounded PHP endpoint:
+`GET /qsyn/api/v1/diagnostics/rust-stream`.
+
+- The PHP bridge connects only to `127.0.0.1:10251/ws/demo`.
+- It validates the WebSocket HTTP 101 response and Sec-WebSocket-Accept,
+  then reads exactly two small server-to-client text frames.
+- It returns only `QSYN-DEMO` quotes marked `simulated`, and rejects
+  unexpected frames or payloads.
+- `offline` means the Rust socket cannot be reached.
+- `demo_disabled` means Rust is running but optional demo WebSockets
+  were not enabled at service startup.
+- `streaming` means two correctly labelled simulated quote events arrived.
+- No browser WebSocket reverse proxy is needed for this one-shot test, and
+  this endpoint is **not** a production market-data API.
+
+The existing Cloudways `nohup` launch used no streaming environment flag,
+so `demo_disabled` is the expected initial browser result. To test actual
+quotes, Cloudways must **gracefully stop the existing verified QSYN process**
+and start the Rust binary with environment variable
+`QSYN_ENABLE_DEMO_WS=1`, retaining
+`QSYN_BIND=127.0.0.1:10251`. For example, from the QSYN private directory,
+after its existing process was stopped:
+
+~~~bash
+QSYN_BIND=127.0.0.1:10251 QSYN_ENABLE_DEMO_WS=1 nohup app/bin/qsyn-stream >> /absolute/private/tmp/qsyn-stream.log 2>&1 &
+~~~
+
+Replace the log path with the actual writable private Cloudways path; never
+start a second instance while port 10251 is occupied. Keep `/ws/demo`
+disabled on deployments where the simulated feed is not needed.
+
+Once this is verified, the future product work is to implement an authenticated,
+multi-account Upstox feed adapter and a licensed synthetic data pathway,
+rather than using these simulated quotes as market data.
