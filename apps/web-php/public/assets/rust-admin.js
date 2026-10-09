@@ -3,6 +3,9 @@
 const api = '/qsyn/api/v1/admin/rust';
 const byId = id => document.getElementById(id);
 const loginBox = byId('admin-login');
+const setupBox = byId('admin-first-run');
+const setupForm = byId('setup-form');
+let setupCsrf = '';
 const panel = byId('admin-panel');
 const form = byId('login-form');
 const password = byId('admin-password');
@@ -68,10 +71,12 @@ function showManager(manager) {
 
 async function loadState() {
   const state = await request('state');
-  loginBox.hidden = state.authenticated;
+  setupCsrf = !state.configured && state.setup?.available ? state.setup.csrf : '';
+  setupBox.hidden = !setupCsrf;
+  loginBox.hidden = state.authenticated || Boolean(setupCsrf);
   panel.hidden = !state.authenticated;
   if (!state.configured) {
-    loginHelp.textContent = 'Admin control is disabled. A developer can provision private_html/qsyn/runtime/admin-auth.json (0600) securely; PHP-FPM credentials are an alternative. Never use public_html.';
+    loginHelp.textContent = 'Admin sign-in is not configured. If first-run setup is available, use the private setup code shown in the Cloudways file manager. Otherwise ask the QSYN operator to check private runtime permissions.';
     form.hidden = true;
   } else {
     loginHelp.textContent = 'Sign in with the dedicated QSYN administrator password.';
@@ -84,6 +89,33 @@ async function loadState() {
     await loadDemoState();
   }
 }
+
+setupForm.addEventListener('submit', async event => {
+  event.preventDefault();
+  if (!setupCsrf) return;
+  const code = byId('setup-code');
+  const fresh = byId('setup-password');
+  const confirm = byId('setup-confirm');
+  if (fresh.value !== confirm.value || fresh.value.length < 20) {
+    feedback.textContent = 'Passwords must match and contain at least 20 characters.';
+    return;
+  }
+  const button = byId('setup-button');
+  button.disabled = true;
+  feedback.textContent = 'Creating private QSYN administrator configuration…';
+  try {
+    await request('setup', {setup_code: code.value.trim(), new_password: fresh.value}, setupCsrf);
+    feedback.textContent = 'Administrator password created. Sign in with your new password.';
+    code.value = '';
+    fresh.value = '';
+    confirm.value = '';
+    await loadState();
+  } catch (_error) {
+    feedback.textContent = 'First-time setup could not be completed. Verify the private pairing code, runtime permissions, and HTTPS connection.';
+  } finally {
+    button.disabled = false;
+  }
+});
 
 form.addEventListener('submit', async event => {
   event.preventDefault();
