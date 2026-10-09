@@ -43,10 +43,15 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p staging/public_html/qsyn/assets
+          mkdir -p staging/public_html/qsyn/licenses
           mkdir -p staging/private_html/qsyn/{src,bin,metadata}
           cp apps/web-php/public/index.php staging/public_html/qsyn/index.php
           cp apps/web-php/public/.htaccess staging/public_html/qsyn/.htaccess
           cp frontend/dist/chart.js staging/public_html/qsyn/assets/chart.js
+          cp frontend/node_modules/openalgo-charts/LICENSE staging/public_html/qsyn/licenses/openalgo-charts-LICENSE.txt
+          if [ -f frontend/node_modules/openalgo-charts/NOTICE ]; then
+            cp frontend/node_modules/openalgo-charts/NOTICE staging/public_html/qsyn/licenses/openalgo-charts-NOTICE.txt
+          fi
           cp apps/web-php/src/FileStore.php staging/private_html/qsyn/src/FileStore.php
           cp services/stream-rust/target/release/qsyn-stream staging/private_html/qsyn/bin/qsyn-stream
           printf '%s\n' "$GITHUB_SHA" > staging/private_html/qsyn/metadata/build-sha.txt
