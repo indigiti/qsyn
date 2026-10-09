@@ -156,7 +156,7 @@ try {
   if (!/^[a-f0-9]{64}$/.test(code) || (await stat(secretFile)).mode % 512 !== 0o600) {
     throw new Error('Private setup code missing or its file mode is unsafe');
   }
-  const browserCookies = await adminBrowser.context().cookies(origin);
+  const browserCookies = await adminBrowser.context().cookies(origin + '/qsyn/');
   if (!browserCookies.some(cookie => cookie.name === 'QSYN_ADMIN_SESSION')) {
     throw new Error('QSYN admin session cookie was not preserved in Chromium');
   }
