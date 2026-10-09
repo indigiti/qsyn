@@ -179,7 +179,7 @@ pub fn enter_managed() -> io::Result<ManagedPid> {
     if current_pid(&dir).is_some() { return Err(io_error("already_running")); }
     let mut file = open_file(&pid_file(&dir))?;
     file.set_len(0)?;
-    write!(file, "{}\n", std::process::id())?;
+    writeln!(file, "{}", std::process::id())?;
     file.sync_all()?;
     Ok(ManagedPid(dir))
 }
