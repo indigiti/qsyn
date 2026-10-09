@@ -31,7 +31,7 @@ if (streamButton && streamResult && streamSamples) {
       } else if (data.status === 'demo_disabled') {
         streamResult.textContent = 'Demo stream disabled';
         streamResult.style.color = '#ffbc75';
-        streamSamples.textContent = 'Rust HTTP is online. Restart Rust with QSYN_ENABLE_DEMO_WS=1 to enable simulated WebSocket quotes.';
+        streamSamples.textContent = 'Rust HTTP is online. Use the authenticated QSYN Rust administration page to enable demo streaming (after the one-time server setup).';
       } else if (data.status === 'offline') {
         streamResult.textContent = 'Rust offline';
         streamResult.style.color = '#ffbc75';
