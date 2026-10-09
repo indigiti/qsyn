@@ -98,6 +98,26 @@ try {
   await page.waitForTimeout(800);
   const after = await paintedPixels(page);
   await page.screenshot({ path: resolve(screenshots, 'chart-reset.png'), fullPage: true });
+  // DigiOps previously versioned only chart.js; its stale unversioned
+  // Rust stream client kept telling users to restart the daemon from SSH.
+  // Every executable JS asset on both chart and admin pages must be versioned.
+  for (const name of ['rust-diagnostics.js', 'rust-stream-test.js']) {
+    const src = await page.locator('script[src*="/qsyn/assets/' + name + '"]').getAttribute('src');
+    if (!src || !src.includes('?v=') || src.endsWith('?v=0')) {
+      throw new Error('Chart loaded unversioned or missing Rust browser asset: ' + name + ' / ' + src);
+    }
+  }
+  const adminResponse = await page.request.get(origin + '/qsyn/admin/rust');
+  if (adminResponse.status() !== 200
+      || !String(adminResponse.headers()['cache-control'] || '').includes('no-store')) {
+    throw new Error('Admin HTML should be uncacheable');
+  }
+  const adminHtml = await adminResponse.text();
+  for (const name of ['rust-admin.js', 'rust-stream-test.js']) {
+    if (!adminHtml.includes('/qsyn/assets/' + name + '?v=')) {
+      throw new Error('Admin page contains unversioned browser script: ' + name);
+    }
+  }
   const chartSrc = await page.locator('script[src*="/qsyn/assets/chart.js"]').getAttribute('src');
   if (!chartSrc || !/chart[.]js[?]v=[0-9]+/.test(chartSrc)) {
     throw new Error('DigiOps chart bundle URL missing deployment cache-busting version: ' + chartSrc);
