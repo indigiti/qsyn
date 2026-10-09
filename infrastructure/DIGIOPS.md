@@ -1,35 +1,46 @@
-# QSYN x DigiOps — Phase 0 deployment contract
+# QSYN × DigiOps — deployment artifact contract
 
-The DigiOps interface shows:
-- public browser route: /qsyn/
-- application public directory: public_html/qsyn/
-- application private directory: private_html/qsyn/
-- artifact lookup name: digiops-release
+DigiOps' own installation documentation supports a release-root public/index.php entrypoint (or dist/index.html, index.php, index.html). It does not recognize the former nested public_html/qsyn/index.php as the artifact entrypoint.
 
-This repository contains the matching .github/workflows/release.yml.
-It creates a release *artifact only*. It does not modify Cloudways or assume DigiOps is already linked to this repository/workflow.
+Documentation: https://github.com/indigiti/DigiOps/blob/main/docs/INSTALL.md
 
-## Artifact contents
+## DigiOps target configuration
+
+- Browser route: /qsyn/
+- Public deployment destination: public_html/qsyn/
+- Private deployment destination: private_html/qsyn/
+- Artifact name: digiops-release
+
+These Cloudways destination prefixes are configured in DigiOps, NOT embedded in the ZIP. DigiOps maps release/public to public_html/qsyn and release/private to private_html/qsyn.
+
+## Exact ZIP paths
 
 ~~~text
-digiops-release/
-  public_html/qsyn/index.php
-  public_html/qsyn/assets/chart.js
-  private_html/qsyn/src/FileStore.php
-  private_html/qsyn/bin/qsyn-stream
-  private_html/qsyn/metadata/build-sha.txt
+public/
+  index.php               # app entrypoint
+  .htaccess               # include-hidden-files: true required
+  assets/chart.js
+  licenses/openalgo-charts-LICENSE.txt
+private/
+  app/src/FileStore.php
+  app/bin/qsyn-stream
+  build/release.json
+RELEASE.json
 ~~~
 
-The binary is for the runner's Linux target; confirm target architecture, glibc, and Cloudways compatibility. Do not make it executable as a public CGI script. Private application state and credentials must live outside the release extraction path so releases cannot overwrite them.
+GitHub Actions stages these paths and uploads an artifact named digiops-release. A separate verify-artifact job downloads the ZIP and confirms public/index.php, .htaccess, the compiled chart JS and the manifest exist.
 
-## DigiOps configuration and safety gates
+### Explanation of ENTRYPOINT_MISSING
 
-1. Link DigiOps to the **QSYN repository's** QSYN DigiOps Release workflow. A DigiOps console's own commit SHA is not proof that the QSYN app has deployed.
-2. Trigger and inspect GitHub Actions CI + release artifact. Confirm artifact digest, SHA and extracted folder paths.
-3. Test PHP route /qsyn/ and /qsyn/api/v1/health after a staged deployment.
-4. **Do not** start Rust/OpenAlgo daemons until the host permits supervised long-running processes and secure private networking/WSS proxy routes. They are not required for the PHP simulated chart demo.
-5. Never expose the OpenAlgo port, Upstox API keys, arbitrary local Rust admin endpoints or private user-store files to the internet.
-6. Upgrade OpenAlgo and OpenAlgo Charts through pinned versions, compatibility tests and reviewed staging releases. Do not replace OpenAlgo's SQLite/DuckDB stores during the release.
-7. Establish immutable release backups, storage snapshots and rollback ownership before production cutover.
+The earlier artifact had public_html/qsyn/index.php *inside the ZIP*. DigiOps only accepted entrypoints at documented release-root paths. The earlier workflow also omitted include-hidden-files: true, which excluded .htaccess. Both are corrected by the new release workflow.
 
-The static JS chart bundle uses build-time Node tooling only; there is **no Node.js production server**.
+## Review and deployment checks
+
+1. Confirm both QSYN DigiOps Release jobs, package and verify-artifact, pass on main.
+2. In DigiOps click Check update and verify the new exact workflow run, SHA and digiops-release artifact.
+3. Deploy the verified Phase 0 payload; inspect /qsyn/ and /qsyn/api/v1/health.
+4. Leave Rust in private/app/bin as a compiled artifact only, NOT a public CGI script. Daemon supervision/WSS proxy and Cloudways capabilities still require verification.
+5. Keep persistent storage and credentials outside release-managed paths.
+6. No live Upstox connection, trading, or real broker secrets are enabled in Phase 0.
+
+The OpenAlgo Charts JS is built in GitHub Actions. No production Node.js server is required.
