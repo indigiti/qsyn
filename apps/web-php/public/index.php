@@ -207,6 +207,11 @@ main{padding:20px;max-width:1600px;margin:auto} h1{font-size:20px;font-weight:60
 .chart-top h1{margin:0 12px 0 0}
 .chart-top button{background:#243a57;color:#eaf4ff;border:1px solid #4c709d;border-radius:6px;padding:8px 12px;cursor:pointer;font-weight:600}
 .chart-top button:disabled{opacity:.55;cursor:wait}
+.chart-live{display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin:0 0 14px;border:1px solid #30465a;border-radius:8px;padding:10px 14px;background:#11202b}
+.chart-live button{background:#1d5b67;color:#e5fcff;border:1px solid #478e9e;border-radius:6px;padding:9px 12px;cursor:pointer;font-weight:600}
+.chart-live button[aria-pressed="true"]{background:#4c2730;border-color:#965a62}
+.chart-live output{font-size:12px;color:#b0c5d8}
+.chart-live .hint{margin-left:auto;color:#9db2c6;font-size:11px}
 #chart-reset-status{color:#a8c6e7;font-size:12px}
 .note{color:#a8b9ce;font-size:12px;margin-top:12px;line-height:1.6}
 .chart-debug{border:1px solid #34455c;border-radius:9px;padding:12px 16px;margin:14px 0;color:#c5d6eb}
@@ -228,6 +233,11 @@ main{padding:20px;max-width:1600px;margin:auto} h1{font-size:20px;font-weight:60
   <button type="button" id="chart-reset" title="Refit all loaded demo candles to the visible chart">Reset chart view</button>
   <output id="chart-reset-status" role="status" aria-live="polite"></output>
 </div>
+<section class="chart-live" aria-label="Simulated Rust live chart control">
+  <button type="button" id="chart-live-connect" aria-pressed="false">Connect Rust demo</button>
+  <output id="chart-live-status" role="status" aria-live="polite">Historical PHP demo candles only.</output>
+  <span class="hint">Opt-in simulation · 1-minute candles · No broker data or orders</span>
+</section>
 <section class="diagnostics" aria-labelledby="rust-title">
   <div>
     <strong id="rust-title">Rust realtime engine — browser test</strong>
