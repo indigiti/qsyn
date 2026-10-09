@@ -38,6 +38,7 @@ jobs:
         run: |
           cargo test --manifest-path services/stream-rust/Cargo.toml
           cargo build --release --manifest-path services/stream-rust/Cargo.toml
+          QSYN_RUST_BINARY=services/stream-rust/target/release/qsyn-stream python3 services/stream-rust/tests/smoke_service.py
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
