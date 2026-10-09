@@ -42,12 +42,23 @@ final class RustAdminBootstrap
         return !file_exists($target) && !is_link($target);
     }
 
+    /** Create private files with owner-only permissions from the first byte. */
+    private static function openOwnerOnly(string $path, string $mode)
+    {
+        $old = umask(0077);
+        try {
+            return @fopen($path, $mode);
+        } finally {
+            umask($old);
+        }
+    }
+
     /** Private lock with an exclusive owner-only setup-token lifecycle. */
     private static function withLock(string $directory, callable $callback): mixed
     {
         $file = $directory . '/.admin-setup.lock';
         if (is_link($file)) return null;
-        $handle = @fopen($file, 'c');
+        $handle = self::openOwnerOnly($file, 'c');
         if ($handle === false) return null;
         try {
             @chmod($file, 0600);
@@ -90,7 +101,7 @@ final class RustAdminBootstrap
             if (file_exists($path)) return self::verifiedCode($path) !== null;
             // Creating the private setup code is safe on unauthenticated GET:
             // it grants NO privilege and never returns the code over HTTP.
-            $handle = @fopen($path, 'x');
+            $handle = self::openOwnerOnly($path, 'x');
             if ($handle === false) return false;
             try {
                 $code = bin2hex(random_bytes(32)) . "\n";
@@ -138,7 +149,7 @@ final class RustAdminBootstrap
                 'password_hash' => $hash,
             ], JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES) . "\n";
             $temp = $directory . '/.admin-auth-' . bin2hex(random_bytes(8));
-            $handle = @fopen($temp, 'x');
+            $handle = self::openOwnerOnly($temp, 'x');
             if ($handle === false) return false;
             try {
                 $written = @fwrite($handle, $data) === strlen($data) &&
