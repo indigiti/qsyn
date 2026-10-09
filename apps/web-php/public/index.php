@@ -19,6 +19,23 @@ if (str_ends_with($route, '/health') || str_ends_with($route, '/api/v1/health'))
     respond(['status' => 'ok', 'app' => 'qsyn-web', 'phase' => 0, 'market_feed' => 'demo-only', 'app_store' => 'file']);
 }
 
+if ($route === '/qsyn/api/v1/diagnostics/rust-stream' || $route === '/api/v1/diagnostics/rust-stream') {
+    // Simulated quotes ONLY. Never expose broker market data through this public endpoint.
+    if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'GET') {
+        header('Allow: GET');
+        respond(['error' => 'method_not_allowed'], 405);
+    }
+    $source = dirname(__DIR__) . '/src/RustStreamProbe.php';
+    if (!is_file($source)) {
+        $source = dirname(__DIR__, 2) . '/private_html/qsyn/app/src/RustStreamProbe.php';
+    }
+    if (!is_file($source)) {
+        respond(['status' => 'unavailable', 'reason' => 'stream_probe_not_installed'], 503);
+    }
+    require_once $source;
+    respond(\QSYN\Diagnostics\RustStreamProbe::inspect());
+}
+
 if ($route === '/qsyn/api/v1/diagnostics/rust' || $route === '/api/v1/diagnostics/rust') {
     // Public Phase-0 read-only signal. No shell, token, path, or target control.
     // In production replace this with an authenticated administrator API.
