@@ -40,7 +40,7 @@ def healthy(port_number: int) -> dict:
     raise AssertionError("Rust health unavailable")
 
 
-def start(binary: Path, runtime: Path, port_number: int, supervisor: bool) -> subprocess.Popen:
+def start(binary: Path, runtime: Path, port_number: int, supervisor: bool, program: str = "qsyn-stream") -> subprocess.Popen:
     env = os.environ.copy()
     env["QSYN_BIND"] = f"127.0.0.1:{port_number}"
     env["QSYN_RUNTIME_DIR"] = str(runtime)
@@ -49,7 +49,7 @@ def start(binary: Path, runtime: Path, port_number: int, supervisor: bool) -> su
     env.pop("SUPERVISOR_PROCESS_NAME", None)
     if supervisor:
         env["SUPERVISOR_ENABLED"] = "1"
-        env["SUPERVISOR_PROCESS_NAME"] = "qsyn-stream"
+        env["SUPERVISOR_PROCESS_NAME"] = program
     return subprocess.Popen(
         [str(binary)], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
     )
@@ -94,6 +94,19 @@ def run() -> None:
             print("PASS: non-Supervisor service ignores binary replacement")
         finally:
             stop(foreground)
+
+        # A process with Supervisor markers belonging to a different service
+        # must never perform a QSYN-owned restart, even after publication.
+        foreign = start(binary, runtime, bind_port, supervisor=True, program="qnext")
+        try:
+            assert healthy(bind_port)["auto_activation"] is False
+            publish_another_inode(binary)
+            time.sleep(6)
+            assert foreign.poll() is None, "Mismatched Supervisor program was stopped"
+            assert healthy(bind_port)["status"] == "ok"
+            print("PASS: mismatched Supervisor process ignores QSYN binary replacement")
+        finally:
+            stop(foreign)
 
         # Exact Supervisor program: the old inode exits with code 75 after
         # the new inode appears at the executable path.
