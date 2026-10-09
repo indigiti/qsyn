@@ -77,7 +77,7 @@ if __name__ == "__main__":
 
         for demo_enabled, expected in [(False, "demo_disabled"), (True, "demo_enabled")]:
             env = os.environ.copy()
-            env["QSYN_BIND"] = "127.0.0.1:1299"
+            env["QSYN_BIND"] = "127.0.0.1:10251"
             if demo_enabled:
                 env["QSYN_ENABLE_DEMO_WS"] = "1"
             else:
