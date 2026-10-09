@@ -59,7 +59,7 @@ final class RustSupervisor
         $result = self::invoke('status');
         $first = strtoupper(trim($result['output']));
         $state = 'unknown';
-        if (preg_match('/^qsyn-stream\s+(RUNNING|STOPPED|STARTING|STOPPING|FATAL|BACKOFF|EXITED)\b/', $first, $match)) {
+        if (preg_match('/^QSYN-STREAM\s+(RUNNING|STOPPED|STARTING|STOPPING|FATAL|BACKOFF|EXITED)\b/', $first, $match)) {
             $state = strtolower($match[1]);
         }
         return ['available' => true, 'state' => $state];
