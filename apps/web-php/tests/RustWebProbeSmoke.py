@@ -96,6 +96,9 @@ if __name__ == "__main__":
                 actual = until(php_port, "online", expected)
                 assert actual["service"] == "qsyn-stream"
                 assert actual["http"] == "healthy"
+                assert actual["runtime_version"] == "0.1.0"
+                assert isinstance(actual["uptime_seconds"], int)
+                assert actual["uptime_seconds"] >= 0
                 assert actual["trading_enabled"] is False
                 assert actual["upstox_connected"] is False
                 sample = stream_probe(php_port)

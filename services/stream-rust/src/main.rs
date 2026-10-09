@@ -8,12 +8,14 @@ use axum::{
     Json, Router,
 };
 use serde_json::{json, Value};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{atomic::{AtomicU64, Ordering}, OnceLock};
+use std::time::Instant;
 use tokio::time::{interval, Duration};
 
 // Shared simulated progression, not a per-WebSocket replay from quote #1.
 // No broker-derived prices, subscriptions or trading side effects.
 static DEMO_SEQUENCE: AtomicU64 = AtomicU64::new(0);
+static STARTED_AT: OnceLock<Instant> = OnceLock::new();
 
 async fn health() -> Json<Value> {
     Json(json!({
@@ -23,7 +25,9 @@ async fn health() -> Json<Value> {
         "upstox_connected": false,
         "trading_enabled": false,
         "demo_runtime_control": true,
-        "demo_ws_enabled": process_control::demo_ws_enabled()
+        "demo_ws_enabled": process_control::demo_ws_enabled(),
+        "runtime_version": env!("CARGO_PKG_VERSION"),
+        "uptime_seconds": STARTED_AT.get_or_init(Instant::now).elapsed().as_secs()
     }))
 }
 
@@ -80,6 +84,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 async fn run_service() -> Result<(), Box<dyn std::error::Error>> {
+    STARTED_AT.get_or_init(Instant::now);
     // Localhost only by default. Do not publish the demo gateway to the internet.
     let bind = std::env::var("QSYN_BIND").unwrap_or_else(|_| "127.0.0.1:10251".to_owned());
     let listener = tokio::net::TcpListener::bind(&bind).await?;
