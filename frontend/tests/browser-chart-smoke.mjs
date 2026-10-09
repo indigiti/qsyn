@@ -156,10 +156,21 @@ try {
   if (!/^[a-f0-9]{64}$/.test(code) || (await stat(secretFile)).mode % 512 !== 0o600) {
     throw new Error('Private setup code missing or its file mode is unsafe');
   }
-  const unauthenticatedState = await (await adminBrowser.request.get(origin +
-    '/qsyn/api/v1/admin/rust/state')).text();
+  const browserCookies = await adminBrowser.context().cookies(origin);
+  if (!browserCookies.some(cookie => cookie.name === 'QSYN_ADMIN_SESSION')) {
+    throw new Error('QSYN admin session cookie was not preserved in Chromium');
+  }
+  const unauthenticatedState = await adminBrowser.evaluate(async () => {
+    const response = await fetch('/qsyn/api/v1/admin/rust/state', {
+      credentials: 'same-origin', cache: 'no-store',
+    });
+    return response.text();
+  });
   if (unauthenticatedState.includes(code)) {
     throw new Error('Secret pairing code leaked in public admin state');
+  }
+  if (!JSON.parse(unauthenticatedState).setup?.csrf) {
+    throw new Error('First-run csrf token not available in same-origin session');
   }
   await adminBrowser.locator('#setup-code').fill(code);
   const freshPassword = 'strong-browser-only-setup-' + 'X'.repeat(24);
