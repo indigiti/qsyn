@@ -1,0 +1,66 @@
+name: QSYN DigiOps Release
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/**'
+      - 'frontend/**'
+      - 'services/**'
+      - '.github/workflows/release.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    name: Tested Cloudways artifact (no automatic deployment)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.3"
+          coverage: none
+      - name: Test PHP
+        run: php apps/web-php/tests/FileStoreTest.php
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Test and compile Rust binary
+        run: |
+          cargo test --manifest-path services/stream-rust/Cargo.toml
+          cargo build --release --manifest-path services/stream-rust/Cargo.toml
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Build chart bundle
+        working-directory: frontend
+        run: |
+          npm install --no-audit --no-fund
+          npm run build
+      - name: Stage DigiOps directory payload
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p staging/public_html/qsyn/assets
+          mkdir -p staging/public_html/qsyn/licenses
+          mkdir -p staging/private_html/qsyn/{src,bin,metadata}
+          cp apps/web-php/public/index.php staging/public_html/qsyn/index.php
+          cp apps/web-php/public/.htaccess staging/public_html/qsyn/.htaccess
+          cp frontend/dist/chart.js staging/public_html/qsyn/assets/chart.js
+          cp frontend/node_modules/openalgo-charts/LICENSE staging/public_html/qsyn/licenses/openalgo-charts-LICENSE.txt
+          if [ -f frontend/node_modules/openalgo-charts/NOTICE ]; then
+            cp frontend/node_modules/openalgo-charts/NOTICE staging/public_html/qsyn/licenses/openalgo-charts-NOTICE.txt
+          fi
+          cp apps/web-php/src/FileStore.php staging/private_html/qsyn/src/FileStore.php
+          cp services/stream-rust/target/release/qsyn-stream staging/private_html/qsyn/bin/qsyn-stream
+          printf '%s\n' "$GITHUB_SHA" > staging/private_html/qsyn/metadata/build-sha.txt
+          test -s staging/public_html/qsyn/assets/chart.js
+          test -x staging/private_html/qsyn/bin/qsyn-stream
+      - name: Publish DigiOps artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: digiops-release
+          path: staging/
+          if-no-files-found: error
+          retention-days: 30
