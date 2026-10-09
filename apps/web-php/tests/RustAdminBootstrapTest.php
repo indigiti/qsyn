@@ -44,6 +44,11 @@ try {
     checkBootstrap(!file_exists($codeFile), 'pairing code consumed');
     checkBootstrap(!RustAdminBootstrap::status()['available'], 'setup permanently disabled after registration');
     checkBootstrap(!RustAdminBootstrap::complete($code, 'another-test-password-' . bin2hex(random_bytes(12)))['ok'], 'replay rejected');
+    // The admin file must never be overwritten, even by another bootstrap
+    // attempt using an old pairing code.
+    $beforeReplay = file_get_contents($authFile);
+    checkBootstrap($beforeReplay === file_get_contents($authFile), 'replay preserves existing admin config');
+    checkBootstrap(!str_contains(file_get_contents(dirname(__DIR__) . '/src/RustAdminBootstrap.php'), '@link('), 'Cloudways setup does not depend on disabled link function');
     $json = json_decode((string)file_get_contents($authFile), true, 512, JSON_THROW_ON_ERROR);
     checkBootstrap(password_verify($password, $json['password_hash']), 'password saved only as hash');
     checkBootstrap(RustAdmin::attempt($password), 'normal administrator login works after setup');
