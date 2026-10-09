@@ -31,6 +31,12 @@ def probe(port: int) -> dict:
         return json.load(r)
 
 
+def stream_probe(port: int) -> dict:
+    with urlopen(f"http://127.0.0.1:{port}/qsyn/api/v1/diagnostics/rust-stream", timeout=5) as response:
+        assert response.status == 200
+        return json.load(response)
+
+
 def until(port: int, expected: str, demo_ws: str | None = None) -> dict:
     end = time.monotonic() + 8
     latest = {}
@@ -73,6 +79,9 @@ if __name__ == "__main__":
         offline = until(php_port, "offline")
         assert offline["http"] == "unreachable"
         assert offline["websocket"] == "not_tested"
+        assert stream_probe(php_port)["status"] == "offline"
+        print("PASS: simulated WebSocket sample endpoint reports offline")
+
         print("PASS: browser diagnostics reports offline when Rust is not running")
 
         for demo_enabled, expected in [(False, "demo_disabled"), (True, "demo_enabled")]:
@@ -89,6 +98,23 @@ if __name__ == "__main__":
                 assert actual["http"] == "healthy"
                 assert actual["trading_enabled"] is False
                 assert actual["upstox_connected"] is False
+                sample = stream_probe(php_port)
+                if not demo_enabled:
+                    assert sample["status"] == "demo_disabled", sample
+                    assert sample["quotes"] == []
+                    print("PASS: sample endpoint reports demo_disabled")
+                else:
+                    assert sample["status"] == "streaming", sample
+                    assert sample["websocket"] == "demo_enabled"
+                    assert sample["received"] == 2
+                    assert len(sample["quotes"]) == 2
+                    assert sample["quotes"][0]["price"] != sample["quotes"][1]["price"]
+                    for quote in sample["quotes"]:
+                        assert quote["symbol"] == "QSYN-DEMO"
+                        assert quote["source"] == "simulated"
+                        assert isinstance(quote["price"], float) and quote["price"] > 0
+                    print("PASS: PHP WebSocket bridge samples two simulated Rust quotes")
+
                 print(f"PASS: browser PHP to Rust reports online, WebSocket: {expected}")
             finally:
                 stop(rust)
