@@ -165,7 +165,16 @@ try {
   const freshPassword = 'strong-browser-only-setup-' + 'X'.repeat(24);
   await adminBrowser.locator('#setup-password').fill(freshPassword);
   await adminBrowser.locator('#setup-confirm').fill(freshPassword);
+  const firstRunResponsePromise = adminBrowser.waitForResponse(response =>
+    response.url().endsWith('/qsyn/api/v1/admin/rust/setup'), { timeout: 7000 });
   await adminBrowser.locator('#setup-button').click();
+  const firstRunResponse = await firstRunResponsePromise;
+  const firstRunStatus = firstRunResponse.status();
+  const firstRunResponseBody = await firstRunResponse.json();
+  if (firstRunStatus !== 200 || firstRunResponseBody.ok !== true) {
+    throw new Error('First-run setup API rejected request: HTTP ' + firstRunStatus +
+      ' / ' + String(firstRunResponseBody.error || 'unknown'));
+  }
   await adminBrowser.waitForFunction(() => {
     const text = document.getElementById('feedback')?.textContent || '';
     return text.includes('Administrator password created.')
