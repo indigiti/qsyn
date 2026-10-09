@@ -58,6 +58,10 @@ final class RustProbe
             'trading_enabled' => ($payload['trading_enabled'] ?? null) === true,
             'demo_runtime_control' => ($payload['demo_runtime_control'] ?? null) === true,
             'demo_ws_enabled' => ($payload['demo_ws_enabled'] ?? null) === true,
+            'runtime_version' => is_string($payload['runtime_version'] ?? null)
+                ? substr($payload['runtime_version'], 0, 32) : null,
+            'uptime_seconds' => is_int($payload['uptime_seconds'] ?? null)
+                && $payload['uptime_seconds'] >= 0 ? $payload['uptime_seconds'] : null,
             'latency_ms' => $latency,
         ];
     }
