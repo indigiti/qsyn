@@ -46,6 +46,21 @@ label{display:block;margin-bottom:10px;font-weight:600}code{color:#b6daff}.statu
   <p class="muted" id="activation-summary" role="status" aria-live="polite">Checking…</p>
   <div id="activation-checks"></div>
 </section>
+<section class="card" id="admin-first-run" hidden>
+  <h2>Create QSYN administrator password — first-time setup</h2>
+  <p class="muted">QSYN has generated a one-time setup code in its private runtime directory. Read that code through your authorized Cloudways private file manager or SFTP, then create a strong password here. <strong>Never share the code in chat, GitHub, or a screenshot.</strong></p>
+  <p class="muted">Private file (not a URL): <code>private_html/qsyn/runtime/admin-setup-code.txt</code></p>
+  <form id="setup-form" autocomplete="off">
+    <label for="setup-code">Private one-time setup code</label>
+    <input type="password" id="setup-code" autocomplete="off" minlength="64" maxlength="64" required>
+    <label for="setup-password">New administrator password (20 characters minimum)</label>
+    <input type="password" id="setup-password" autocomplete="new-password" minlength="20" required>
+    <label for="setup-confirm">Confirm administrator password</label>
+    <input type="password" id="setup-confirm" autocomplete="new-password" minlength="20" required>
+    <div class="grid"><button type="submit" id="setup-button">Create administrator password</button></div>
+  </form>
+  <p class="muted">This is a single-use pairing process. After setup, QSYN disables this form, invalidates the code, and uses normal administrator sign-in.</p>
+</section>
 <section class="card" id="admin-login">
   <h2>Administrator sign-in</h2>
   <p class="muted" id="login-help">Checking whether administrator control is configured…</p>
