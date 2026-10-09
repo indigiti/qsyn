@@ -207,3 +207,59 @@ disabled on deployments where the simulated feed is not needed.
 Once this is verified, the future product work is to implement an authenticated,
 multi-account Upstox feed adapter and a licensed synthetic data pathway,
 rather than using these simulated quotes as market data.
+
+## No-console simulated WebSocket operations
+
+The QSYN administrator panel at `/qsyn/admin/rust` now provides
+**Enable demo stream** and **Disable demo stream** buttons in addition to
+the existing Start, Stop, Restart and read-only tests. The buttons require
+the same administrator login, CSRF token, HTTPS request validation and
+secure session used for service management.
+
+The new Rust executable checks the private persistent file
+`private_html/qsyn/runtime/demo-websocket.flag` on each incoming demo
+WebSocket handshake. Value `1` enables simulated quotes; `0` disables
+them. The admin PHP API writes a randomized sibling file with mode 0600,
+then atomically renames it. No shell, process restart, or public Rust
+TCP port is needed to change the demo flag **once the new executable
+is running**. The old `QSYN_ENABLE_DEMO_WS` environment variable
+remains a fallback when the flag file does not exist.
+
+**Initial activation is different from ongoing operation:**
+
+1. Deploy the updated QSYN release in DigiOps. Its PHP admin page and Rust
+   binary are published to disk, but the old `nohup` process keeps
+   running the previous executable until separately restarted.
+2. Arrange **one controlled transition** to the new Rust binary with
+   Cloudways Support, confirming it is the QSYN process and leaving
+   QNEXT untouched. The new runtime reports
+   `demo_runtime_control=true` in `/health`.
+3. Configure the administrator password hash and
+   `QSYN_CONTROL_ENABLED=1` securely outside the website, using
+   Cloudways-approved PHP-FPM configuration. The feature is deliberately
+   *disabled by default* to prevent a public unauthenticated process
+   controller.
+4. Once authenticated in the admin page, use the Enable/Disable buttons.
+   Changes take effect for **new** simulated WebSocket sessions without
+   restarting Rust. Existing connections may continue transmitting until
+   disconnected.
+5. For browser Start/Stop/Restart, independently configure the provider
+   approved restricted service-control mechanism such as
+   `QSYN_SERVICE_MANAGER=direct` and the necessary PHP process functions.
+   Existing unmanaged `nohup` PIDs cannot be safely stopped from the
+   restricted direct controller.
+
+The private runtime directory must be writable by PHP and readable by the
+running Rust service. If Cloudways executes PHP and Rust as different users,
+ask Support to arrange a private group/ACL; do not move the flag under
+`public_html`, chmod it 0777, or enable arbitrary commands.
+
+This only controls `QSYN-DEMO` synthetic test quotes, not live Upstox
+market data, actual trading or QNEXT. The public diagnostics endpoint
+remains read-only.
+
+**Limit:** a fully browser-only **first bootstrap** is not safe without a
+trusted administrator identity. An operator must first provision those
+credentials through a secure provider interface; do not add a public
+first-user setup endpoint. Cloudways PHP execution restrictions may still
+require operator approval before web Start/Stop/Restart can work.

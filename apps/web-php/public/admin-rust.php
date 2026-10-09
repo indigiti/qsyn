@@ -43,6 +43,16 @@ label{display:block;margin-bottom:10px;font-weight:600}code{color:#b6daff}.statu
   </div>
   <p class="muted">If controls are unavailable, Cloudways must enable the approved restricted runtime: direct Rust mode or Supervisor. Starting a binary requires PHP execution permission and host support; without a watchdog it will not auto-restart after a crash or reboot.</p>
 </section>
+<section class="card" id="demo-config" hidden>
+  <h2>Demo feed control — no restart required</h2>
+  <p class="muted">Switch simulated WebSocket quotes on or off for new connections. This does not enable broker feeds or trading.</p>
+  <p>Rust demo feed: <span class="status" id="demo-mode">Checking…</span></p>
+  <div class="grid">
+    <button type="button" id="demo-enable" disabled>Enable demo stream</button>
+    <button type="button" class="secondary" id="demo-disable" disabled>Disable demo stream</button>
+  </div>
+  <p class="muted" id="demo-mode-help">Controls require an authenticated administrator and a compatible running Rust binary.</p>
+</section>
 <section class="card">
   <h2>Live connectivity</h2>
   <p class="muted">Checks whether PHP can reach the Rust HTTP endpoint and optional WebSocket handshake.</p>
@@ -52,7 +62,7 @@ label{display:block;margin-bottom:10px;font-weight:600}code{color:#b6daff}.statu
   <h2>Demo WebSocket stream</h2>
   <p class="muted">Samples exactly two simulated quotes from Rust through PHP. Not connected to Upstox or a public WebSocket.</p>
   <div class="grid"><button type="button" class="secondary" id="rust-stream-test">Test demo stream</button><output class="status" id="rust-stream-result" role="status">Not tested</output></div>
-  <p class="muted" id="rust-stream-samples" aria-live="polite">Demo streaming is disabled by default until Rust is started with QSYN_ENABLE_DEMO_WS=1.</p>
+  <p class="muted" id="rust-stream-samples" aria-live="polite">Demo streaming defaults to off. Once the upgraded Rust runtime and admin login are configured, toggle it using the buttons above without a console.</p>
 </section>
 <p id="feedback" class="muted" role="status" aria-live="polite"></p>
 </main>

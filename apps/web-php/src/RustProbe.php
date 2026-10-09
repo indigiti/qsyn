@@ -56,6 +56,8 @@ final class RustProbe
             'mode' => (string)($payload['mode'] ?? 'unknown'),
             'upstox_connected' => ($payload['upstox_connected'] ?? null) === true,
             'trading_enabled' => ($payload['trading_enabled'] ?? null) === true,
+            'demo_runtime_control' => ($payload['demo_runtime_control'] ?? null) === true,
+            'demo_ws_enabled' => ($payload['demo_ws_enabled'] ?? null) === true,
             'latency_ms' => $latency,
         ];
     }

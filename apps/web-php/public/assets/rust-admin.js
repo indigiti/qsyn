@@ -12,6 +12,32 @@ const managerStatus = byId('manager-status');
 const actions = ['start','stop','restart'];
 let csrf = '';
 let working = false;
+let demoWorking = false;
+
+function updateDemoControls(ready, enabled) {
+  byId('demo-enable').disabled = demoWorking || !ready || enabled === true;
+  byId('demo-disable').disabled = demoWorking || !ready || enabled !== true;
+}
+
+async function loadDemoState() {
+  const result = await request('demo');
+  const ready = result.engine_online && result.supported && result.writable;
+  if (!result.engine_online) {
+    byId('demo-mode').textContent = 'Rust offline';
+    byId('demo-mode-help').textContent = 'Start the Rust engine before changing its streaming mode.';
+  } else if (!result.supported) {
+    byId('demo-mode').textContent = 'Running older Rust binary';
+    byId('demo-mode-help').textContent = 'Deploy the updated Rust binary and restart the existing process once. Further demo toggles then work from the browser.';
+  } else if (!result.writable) {
+    byId('demo-mode').textContent = 'Private runtime not writable';
+    byId('demo-mode-help').textContent = 'Cloudways must grant the QSYN PHP application write access to its private runtime directory.';
+  } else {
+    byId('demo-mode').textContent = result.enabled ? 'Enabled (simulated data)' : 'Disabled';
+    byId('demo-mode-help').textContent = 'Changes apply to the next WebSocket connection without restarting Rust.';
+  }
+  updateDemoControls(ready, result.enabled);
+}
+
 
 async function request(path, data, token) {
   const opts = {
@@ -52,7 +78,11 @@ async function loadState() {
     form.hidden = false;
   }
   csrf = state.authenticated ? state.csrf : '';
+  byId('demo-config').hidden = !state.authenticated;
   showManager(state.manager);
+  if (state.authenticated) {
+    await loadDemoState();
+  }
 }
 
 form.addEventListener('submit', async event => {
@@ -88,6 +118,26 @@ for (const action of actions) {
     } finally {
       working = false;
       await loadState().catch(() => {});
+    }
+  });
+}
+
+for (const [action, enabled] of [['enable', true], ['disable', false]]) {
+  byId('demo-' + action).addEventListener('click', async () => {
+    if (demoWorking || !csrf) return;
+    demoWorking = true;
+    feedback.textContent = 'Updating simulated feed…';
+    updateDemoControls(false, false);
+    try {
+      await request('demo', {enabled}, csrf);
+      feedback.textContent = enabled ? 'Simulated WebSocket enabled.' : 'Simulated WebSocket disabled.';
+      await loadDemoState();
+      byId('rust-stream-test').click();
+    } catch (error) {
+      feedback.textContent = 'Demo mode could not be changed: ' + error.message;
+    } finally {
+      demoWorking = false;
+      await loadDemoState().catch(() => {});
     }
   });
 }

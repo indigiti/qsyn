@@ -169,6 +169,24 @@ fn stop(dir: &Path) -> io::Result<&'static str> {
     Err(io_error("shutdown_timeout"))
 }
 
+/// Opt-in Phase-0 demo setting controlled from the authenticated PHP admin.
+/// Reads private configuration on each handshake: no Rust restart required.
+/// An explicit on-disk 0/1 overrides the launch-time environment default.
+pub fn demo_ws_enabled() -> bool {
+    let fallback = env::var("QSYN_ENABLE_DEMO_WS").as_deref() == Ok("1");
+    let Ok(dir) = runtime_dir() else { return fallback };
+    let flag = dir.join("demo-websocket.flag");
+    let Ok(meta) = fs::symlink_metadata(&flag) else { return fallback };
+    if !meta.file_type().is_file() || meta.file_type().is_symlink() || meta.len() > 16 {
+        return fallback;
+    }
+    match fs::read_to_string(flag).ok().as_deref().map(str::trim) {
+        Some("1") => true,
+        Some("0") => false,
+        _ => fallback,
+    }
+}
+
 pub fn is_managed(args: &[String]) -> bool {
     args == [DAEMON_ARG]
 }

@@ -56,7 +56,7 @@ if ($route === '/qsyn/api/v1/diagnostics/rust' || $route === '/api/v1/diagnostic
 
 // Administrator-only Rust service control. Never accessible without a configured
 // admin password, valid PHP session, CSRF token and allowlisted local adapter.
-if (preg_match('#^(?:/qsyn)?/api/v1/admin/rust/(state|login|logout|action)$#', $route, $matches)) {
+if (preg_match('#^(?:/qsyn)?/api/v1/admin/rust/(state|login|logout|action|demo)$#', $route, $matches)) {
     $operation = $matches[1];
     $source = dirname(__DIR__) . '/src';
     if (!is_file($source . '/RustAdmin.php')) {
@@ -70,12 +70,12 @@ if (preg_match('#^(?:/qsyn)?/api/v1/admin/rust/(state|login|logout|action)$#', $
     \QSYN\Admin\RustAdmin::boot();
 
     $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
-    $expected = $operation === 'state' ? 'GET' : 'POST';
+    $expected = ($operation === 'state' || ($operation === 'demo' && $method === 'GET')) ? 'GET' : 'POST';
     if ($method !== $expected) {
         header('Allow: ' . $expected);
         respond(['error' => 'method_not_allowed'], 405);
     }
-    if ($operation !== 'state') {
+    if ($method === 'POST') {
         if (!\QSYN\Admin\RustAdmin::originAllowed($_SERVER)) {
             respond(['error' => 'origin_not_allowed'], 403);
         }
@@ -114,12 +114,29 @@ if (preg_match('#^(?:/qsyn)?/api/v1/admin/rust/(state|login|logout|action)$#', $
     if (!\QSYN\Admin\RustAdmin::authenticated()) {
         respond(['error' => 'unauthorized'], 401);
     }
+    if ($operation === 'demo') {
+        if (!is_file($source . '/RustDemoConfig.php') || !is_file($source . '/RustProbe.php')) {
+            respond(['error' => 'demo_control_unavailable'], 503);
+        }
+        require_once $source . '/RustProbe.php';
+        require_once $source . '/RustDemoConfig.php';
+        if ($method === 'GET') {
+            respond(\QSYN\Admin\RustDemoConfig::state());
+        }
+    }
     if (!\QSYN\Admin\RustAdmin::verifyCsrf((string)($_SERVER['HTTP_X_CSRF_TOKEN'] ?? ''))) {
         respond(['error' => 'csrf_invalid'], 403);
     }
     if ($operation === 'logout') {
         \QSYN\Admin\RustAdmin::logout();
         respond(['authenticated' => false]);
+    }
+    if ($operation === 'demo') {
+        if (!array_key_exists('enabled', $data) || !is_bool($data['enabled'])) {
+            respond(['error' => 'enabled_must_be_boolean'], 422);
+        }
+        $outcome = \QSYN\Admin\RustDemoConfig::change($data['enabled']);
+        respond($outcome, $outcome['ok'] ? 200 : 409);
     }
     if ($operation === 'action') {
         $action = (string)($data['action'] ?? '');
