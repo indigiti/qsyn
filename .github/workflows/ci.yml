@@ -26,8 +26,12 @@ jobs:
           php -l apps/web-php/src/FileStore.php
           php -l apps/web-php/public/index.php
           php -l apps/web-php/src/RustProbe.php
+          php -l apps/web-php/src/RustAdmin.php
+          php -l apps/web-php/src/RustSupervisor.php
+          php -l apps/web-php/public/admin-rust.php
           php -l apps/web-php/dev-router.php
           php apps/web-php/tests/FileStoreTest.php
+          php apps/web-php/tests/RustAdminTest.php
       - name: Demo endpoint smoke test
         run: |
           php -S 127.0.0.1:18080 -t apps/web-php/public apps/web-php/dev-router.php > /tmp/qsyn-php.log 2>&1 &
@@ -37,6 +41,8 @@ jobs:
           curl --fail --silent http://127.0.0.1:18080/qsyn/api/v1/health | grep -q '"status":"ok"'
           curl --fail --silent http://127.0.0.1:18080/qsyn/api/v1/demo/bars | grep -q '"mode":"simulated"'
           curl --fail --silent http://127.0.0.1:18080/qsyn/api/v1/diagnostics/rust | grep -q '"status":"offline"'
+          curl --fail --silent http://127.0.0.1:18080/qsyn/api/v1/admin/rust/state | grep -q '"configured":false'
+          curl --fail --silent http://127.0.0.1:18080/qsyn/admin/rust | grep -q 'Rust service control'
 
   rust:
     name: Rust synthetic engine tests
