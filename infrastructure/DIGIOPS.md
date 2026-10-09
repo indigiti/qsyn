@@ -62,3 +62,39 @@ Security: the Phase 0 endpoint exposes only non-sensitive status. Before introdu
 The button does NOT start the daemon. DigiOps packages the executable under private_html/qsyn/app/bin/qsyn-stream but does not yet launch or supervise it. Cloudways may therefore report offline; this is an accurate state report, not a UI error. Enable persistent startup only after validating Cloudways process permissions, restarts, isolation, and private routing.
 
 GitHub Actions starts temporary PHP and Rust processes in CI to test offline/online states and the WebSocket handshake; it then shuts them down. No real broker data or production credentials are involved.
+
+## Browser Start / Stop / Restart — opt-in and administrator-only
+
+The Phase 0 QSYN website includes an **administrator-only Rust service controls page**:
+
+- \`https://stage.digiti.in/qsyn/admin/rust\`
+- Start, Stop, Restart and Refresh status for the one fixed program \`qsyn-stream\`.
+- Separate read-only "Test Rust health" button connects through PHP to \`127.0.0.1:10251\`.
+- No SQL, Redis, RabbitMQ or production Node.js server required.
+
+**IMPORTANT:** This page does NOT bypass Cloudways restrictions or create a service manager. Its action buttons remain disabled unless the operator explicitly enables admin control and Cloudways provisions a local, restricted supervisorctl integration. No request accepts a shell command, PID, custom program, executable path, hostname or arbitrary URL. Only the fixed \`qsyn-stream\` process can be managed.
+
+### Server-side configuration (Cloudways Support / hosting administrator)
+
+The following environment variables must be injected **privately into PHP-FPM** (never into public files or GitHub):
+
+~~~text
+QSYN_CONTROL_ENABLED=1
+QSYN_ADMIN_PASSWORD_HASH=<bcrypt/Argon2 password_hash, generated on server>
+QSYN_SUPERVISORCTL_BIN=/usr/bin/supervisorctl
+QSYN_SUPERVISORCTL_CONFIG=/absolute/private/path/to/qsyn-only-supervisorctl.conf
+~~~
+
+Generate a password hash in PHP CLI using \`password_hash\` (do not write the plaintext password to logs or terminal history). \`QSYN_SUPERVISORCTL_BIN\` may also be \`/usr/local/bin/supervisorctl\`; other executables are rejected. The config must be an existing readable, non-symlink absolute file. Cloudways must ensure PHP can access **only a qsyn-stream-restricted supervisor endpoint**, not an unrestricted global root socket.
+
+See [Supervisor reference](supervisor/qsyn-stream.conf.example). The provider must install the real Supervisor program under its approved process-management setup with application-specific absolute paths, a private log directory and appropriate permissions.
+
+Cloudways [documents PHP execution functions as disabled by default](https://support.cloudways.com/en/articles/7891624-how-to-enable-php-functions). \`proc_open\`, \`proc_get_status\`, and \`proc_terminate\` must be supported for the opt-in adapter to operate. Do not indiscriminately enable every disabled PHP function; request the narrowest approved integration. If the host does not allow it, buttons remain disabled; deploy a separate restricted service controller instead.
+
+### Admin session protections
+
+A valid \`password_hash\` is required. Session cookies are Secure, HttpOnly and SameSite=Strict, scoped to \`/qsyn/\`; session IDs rotate at login, and sessions expire after 20 idle minutes. Every state-changing request requires an authenticated administrator session, strict-origin check, POST JSON and a per-session CSRF token. Stop and Restart also require a browser confirmation. The server applies five-attempt lockout per session; place this path behind an additional Cloudways IP allowlist or WAF/rate limit before enabling it on a public internet hostname.
+
+The status endpoint never returns shell output, private configuration paths, broker credentials or raw process logs. A successful supervisorctl command indicates only a **management request accepted**, not a passed health check; confirm using the separate Rust health probe. Controls are initially off and remain off if any configuration or capability check is missing.
+
+**Host permission remains unverified:** Nothing in the QSYN artifact or this panel starts Rust automatically. Production daemon setup must be confirmed by Cloudways and independently tested. Do not enable on the public staging hostname with real trading credentials until administration and privileges have been reviewed.
