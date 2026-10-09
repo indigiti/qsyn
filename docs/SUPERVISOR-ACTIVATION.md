@@ -53,3 +53,40 @@ restarts and the localhost health endpoint returns 200.
 
 Do not mark steps 3–5 passed from repository CI alone. Do not change the
 Supervisor unit, public ports, admin secrets, or QNEXT for these checks.
+
+## Staging acceptance: first unattended upgrade after Release #54
+
+Known-good staging baseline: `QSYN #54`, artifact `11643953373`,
+running commit `fee07ef502975663369b00f9fbe871a3a8732b14`.
+Cloudways verified `auto_activation=true`, Supervisor `RUNNING`,
+and the localhost Rust health response. Record the existing PID and
+`uptime_seconds` immediately before deployment.
+
+The next test release is deliberately a minimal **test-only** change under
+`services/`, so the new Rust binary contains a distinct embedded source SHA
+without changing HTTP routes, demo quote behavior, or broker/trading capability.
+Only the artifact produced by the **merged main** commit is eligible for the
+staging test; the PR's pre-merge artifact has a different identity.
+
+Deployment test:
+1. Confirm the new artifact's source SHA and GitHub checks, and confirm current
+   diagnostics still report the #54 baseline with `auto_activation=true`.
+2. Deploy the next release from DigiOps, with **no manual** `supervisorctl
+   restart`. Allow the running watcher to detect the atomically replaced inode.
+3. Observe `supervisorctl status qsyn-stream`: it should be `RUNNING` with a
+   **new PID**, started by Supervisor after the watcher exits 75.
+4. Confirm the direct localhost `/health` and public PHP diagnostics both
+   report `runtime_commit` matching the newly deployed **40-character SHA**,
+   `runtime_version=0.1.0`, `auto_activation=true`, `demo_ws_enabled=true`,
+   and `trading_enabled=false`.
+5. Run two-quote simulated WebSocket test. Save the before/after diagnostics
+   as evidence. No feature-development signoff until these checks pass.
+
+If DigiOps reports deployed but the old commit still runs, **do not
+manually restart and claim unattended activation passed**. Record the
+Supervisor and Rust logs and diagnose whether atomic replacement occurred.
+If health fails or the new binary does not stabilize, use the controlled
+recovery/rollback procedure, not a server-wide restart.
+
+Supervisor recovery and rollback to #54 are **separate acceptance tests**.
+Never assume they pass from the upgrade alone.
