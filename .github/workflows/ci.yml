@@ -25,6 +25,7 @@ jobs:
         run: |
           php -l apps/web-php/src/FileStore.php
           php -l apps/web-php/public/index.php
+          php -l apps/web-php/src/RustProbe.php
           php -l apps/web-php/dev-router.php
           php apps/web-php/tests/FileStoreTest.php
       - name: Demo endpoint smoke test
@@ -35,6 +36,7 @@ jobs:
           sleep 1
           curl --fail --silent http://127.0.0.1:18080/qsyn/api/v1/health | grep -q '"status":"ok"'
           curl --fail --silent http://127.0.0.1:18080/qsyn/api/v1/demo/bars | grep -q '"mode":"simulated"'
+          curl --fail --silent http://127.0.0.1:18080/qsyn/api/v1/diagnostics/rust | grep -q '"status":"offline"'
 
   rust:
     name: Rust synthetic engine tests
@@ -51,6 +53,7 @@ jobs:
         run: |
           cargo build --manifest-path services/stream-rust/Cargo.toml
           python3 services/stream-rust/tests/smoke_service.py
+          python3 apps/web-php/tests/RustWebProbeSmoke.py
 
   charts:
     name: OpenAlgo Charts production bundle
