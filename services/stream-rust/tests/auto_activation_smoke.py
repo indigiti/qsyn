@@ -117,6 +117,7 @@ def run() -> None:
             assert before["runtime_version"] == "0.1.0"
             assert before["runtime_commit"] == os.environ.get("QSYN_SOURCE_SHA", "development")
             assert before["demo_ws_enabled"] is True
+            assert supervised.poll() is None, "Supervised Rust exited before binary publication"
             publish_another_inode(binary)
             exit_code = supervised.wait(timeout=16)
             assert exit_code == 75, f"Expected Supervisor restart handoff (75), got {exit_code}"
@@ -131,6 +132,10 @@ def run() -> None:
             after = healthy(bind_port)
             assert after["auto_activation"] is True
             assert after["status"] == "ok"
+            assert after["runtime_commit"] == os.environ.get("QSYN_SOURCE_SHA", "development")
+            assert after["runtime_version"] == "0.1.0"
+            assert after["trading_enabled"] is False
+            assert after["upstox_connected"] is False
             assert after["demo_ws_enabled"] is True
             assert isinstance(after["uptime_seconds"], int)
             print("PASS: relaunched binary serves health and simulated WebSocket setting")
