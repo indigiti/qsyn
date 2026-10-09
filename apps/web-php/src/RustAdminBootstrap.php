@@ -148,24 +148,21 @@ final class RustAdminBootstrap
                 'enabled' => true,
                 'password_hash' => $hash,
             ], JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES) . "\n";
-            $temp = $directory . '/.admin-auth-' . bin2hex(random_bytes(8));
-            $handle = self::openOwnerOnly($temp, 'x');
+            // Cloudways can disable PHP link(). O_EXCL ('x') atomically
+            // reserves the final filename without replacing an existing
+            // configuration, even if another process races this setup lock.
+            // If writing fails, leave the reserved file in place and fail
+            // closed: never expose a second first-run claim opportunity.
+            $target = $directory . '/' . self::AUTH_FILE;
+            $handle = self::openOwnerOnly($target, 'x');
             if ($handle === false) return false;
             try {
-                $written = @fwrite($handle, $data) === strlen($data) &&
-                    @fflush($handle) && @chmod($temp, 0600);
+                $written = @fwrite($handle, $data) === strlen($data)
+                    && @fflush($handle) && @chmod($target, 0600);
             } finally {
                 fclose($handle);
             }
-            if (!$written) {
-                @unlink($temp);
-                return false;
-            }
-            // Atomic no-overwrite publish. A concurrent SFTP-created admin
-            // configuration must NEVER be silently replaced.
-            $published = @link($temp, $directory . '/' . self::AUTH_FILE);
-            @unlink($temp);
-            if (!$published) return false;
+            if (!$written || !RustAdmin::configured()) return false;
             @unlink($setupFile);
             return true;
         });
