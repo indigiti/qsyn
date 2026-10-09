@@ -71,7 +71,7 @@ async function loadState() {
   loginBox.hidden = state.authenticated;
   panel.hidden = !state.authenticated;
   if (!state.configured) {
-    loginHelp.textContent = 'Admin control is disabled. The server operator must configure QSYN_CONTROL_ENABLED and an administrator password hash.';
+    loginHelp.textContent = 'Admin control is disabled. A developer can provision private_html/qsyn/runtime/admin-auth.json (0600) securely; PHP-FPM credentials are an alternative. Never use public_html.';
     form.hidden = true;
   } else {
     loginHelp.textContent = 'Sign in with the dedicated QSYN administrator password.';

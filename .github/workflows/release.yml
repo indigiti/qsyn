@@ -35,6 +35,7 @@ jobs:
           php -l apps/web-php/src/RustProbe.php
           php -l apps/web-php/src/RustStreamProbe.php
           php -l apps/web-php/src/RustAdmin.php
+          php -l apps/web-php/tools/make-admin-config.php
           php -l apps/web-php/src/RustDemoConfig.php
           php -l apps/web-php/src/RustSupervisor.php
           php -l apps/web-php/public/admin-rust.php
@@ -66,6 +67,10 @@ jobs:
           mkdir -p staging/public/{assets,licenses}
           mkdir -p staging/private/app/{src,bin}
           mkdir -p staging/private/build
+          # The private runtime directory survives subsequent overlays. Only
+          # a harmless marker is packaged; never include admin-auth.json.
+          mkdir -p staging/private/runtime
+          printf 'QSYN private runtime; never store credentials in release artifacts.\n' > staging/private/runtime/README.txt
           cp apps/web-php/public/index.php staging/public/index.php
           cp apps/web-php/public/admin-rust.php staging/public/admin-rust.php
           cp apps/web-php/public/.htaccess staging/public/.htaccess
@@ -112,6 +117,8 @@ jobs:
           test -s staging/public/assets/rust-activation-readiness.js
           test -s staging/public/admin-rust.php
           test -s staging/private/app/src/RustAdmin.php
+          test -s staging/private/runtime/README.txt
+          test ! -f staging/private/runtime/admin-auth.json
           test -s staging/private/app/src/RustDemoConfig.php
           test -s staging/private/app/src/RustSupervisor.php
           test -s staging/private/app/src/RustProbe.php
@@ -151,6 +158,8 @@ jobs:
           test -s verified-release/public/assets/rust-activation-readiness.js
           test -s verified-release/public/admin-rust.php
           test -s verified-release/private/app/src/RustAdmin.php
+          test -s verified-release/private/runtime/README.txt
+          test ! -f verified-release/private/runtime/admin-auth.json
           test -s verified-release/private/app/src/RustDemoConfig.php
           test -s verified-release/private/app/src/RustSupervisor.php
           test -s verified-release/private/app/src/RustProbe.php
