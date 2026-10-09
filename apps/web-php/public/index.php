@@ -215,6 +215,9 @@ main{padding:20px;max-width:1600px;margin:auto} h1{font-size:20px;font-weight:60
 .chart-debug button{background:#253d5b;border:1px solid #4c709d;color:#f0f5ff;border-radius:6px;padding:7px 12px;cursor:pointer;margin-right:8px}
 .chart-debug button:disabled{opacity:.5;cursor:not-allowed}
 .chart-debug pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:340px;overflow:auto;font-size:12px;color:#b5d2f0}
+.chart-preview{margin-top:12px;border:1px solid #41536d;padding:10px;border-radius:8px;background:#080d14}
+.chart-preview img{display:block;width:100%;height:auto;max-height:640px;object-fit:contain}
+.chart-preview figcaption{font-size:12px;margin-top:8px;color:#a7bed8}
 </style>
 </head>
 <body>
@@ -251,7 +254,12 @@ main{padding:20px;max-width:1600px;margin:auto} h1{font-size:20px;font-weight:60
   <p>If candles disappear, check canvas rendering and CSP locally. Nothing is transmitted or changed.</p>
   <button type="button" id="chart-diagnose">Diagnose chart</button>
   <button type="button" id="chart-diagnostic-copy" disabled>Copy report</button>
+  <button type="button" id="chart-preview-button">Preview painted candle layer</button>
   <pre id="chart-diagnostic-report" role="status">Click Diagnose chart to inspect this browser.</pre>
+  <figure id="chart-canvas-preview" class="chart-preview" hidden>
+    <img id="chart-canvas-preview-image" alt="Direct PNG rendering of the painted candlestick base canvas, bypassing the chart's overlapping DOM layers.">
+    <figcaption>This image is generated entirely in your browser from the base chart canvas. If candles show here but not above, investigate the browser's overlay/compositing layers.</figcaption>
+  </figure>
 </details>
 <p class="note">No live Upstox feed, brokerage login or order execution is enabled. This chart uses deterministic demonstration OHLC data. Market-data source integration is a later phase.</p>
 </main>

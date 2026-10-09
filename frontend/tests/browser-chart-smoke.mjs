@@ -111,11 +111,49 @@ try {
   if (browserReport.chartBundleVersion === 'unversioned') {
     throw new Error('In-page diagnostics reported unversioned chart asset');
   }
+  if (typeof browserReport.canvases[1]?.opaqueCoveragePercent !== 'number') {
+    throw new Error('The chart overlay alpha was not measured');
+  }
+  if (browserReport.canvases[1].opaqueCoveragePercent > 90) {
+    throw new Error('Top canvas unexpectedly opaque; would obscure the painted candlestick layer');
+  }
+  await page.locator('#chart-preview-button').click();
+  await page.waitForFunction(() => {
+    const img = document.querySelector('#chart-canvas-preview-image');
+    return img && img.complete && img.naturalWidth > 0;
+  });
+  if (await page.locator('#chart-canvas-preview').isHidden()) {
+    throw new Error('Painted canvas image preview remained hidden');
+  }
+  await page.screenshot({ path: resolve(screenshots, 'chart-canvas-preview.png'), fullPage: true });
+
+  // Reproduce the reported devicePixelRatio=1.25 Chrome environment too.
+  const scaledPage = await browser.newPage({
+    viewport: { width: 1600, height: 920 }, deviceScaleFactor: 1.25,
+  });
+  scaledPage.on('pageerror', err => errors.push(err.stack || err.message));
+  await scaledPage.goto(origin + '/qsyn/', { waitUntil: 'networkidle', timeout: 20000 });
+  await scaledPage.waitForFunction(() => document.body.innerText.includes('120 bars'),
+    null, { timeout: 12000 });
+  await scaledPage.waitForTimeout(400);
+  await scaledPage.locator('details.chart-debug summary').click();
+  await scaledPage.locator('#chart-diagnose').click();
+  const scaledReport = JSON.parse(await scaledPage.locator('#chart-diagnostic-report').textContent());
+  if (scaledReport.browserDeviceScaleFactor !== 1.25
+      || scaledReport.coloredPixels.red < 25 || scaledReport.coloredPixels.green < 25) {
+    throw new Error('Chrome 125% DPR paint regression: ' + JSON.stringify(scaledReport));
+  }
+  if (scaledReport.canvases[1]?.opaqueCoveragePercent > 90) {
+    throw new Error('Opaque top canvas masks base layer at 125% DPR');
+  }
+  await scaledPage.screenshot({ path: resolve(screenshots, 'chart-125-percent.png'), fullPage: true });
+  await scaledPage.close();
+
   const violations = await page.evaluate(() => window.__qsynCspViolations);
   const bars = await (await page.request.get(origin + '/qsyn/api/v1/demo/bars')).json();
   console.log('CHART_BROWSER_DIAGNOSTICS ' + JSON.stringify({
     bars: bars.bars?.length, first: bars.bars?.[0], last: bars.bars?.at(-1),
-    initial, after, browserReport, violations, pageErrors: errors, consoleErrors: warnings,
+    initial, after, browserReport, scaledReport, violations, pageErrors: errors, consoleErrors: warnings,
     phpError: phpError.slice(-600),
   }));
   if (bars.bars?.length !== 120) throw Error('PHP failed to serve 120 demo bars');
