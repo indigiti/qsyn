@@ -19,6 +19,24 @@ if (str_ends_with($route, '/health') || str_ends_with($route, '/api/v1/health'))
     respond(['status' => 'ok', 'app' => 'qsyn-web', 'phase' => 0, 'market_feed' => 'demo-only', 'app_store' => 'file']);
 }
 
+if ($route === '/qsyn/api/v1/diagnostics/rust' || $route === '/api/v1/diagnostics/rust') {
+    // Public Phase-0 read-only signal. No shell, token, path, or target control.
+    // In production replace this with an authenticated administrator API.
+    if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'GET') {
+        header('Allow: GET');
+        respond(['error' => 'method_not_allowed'], 405);
+    }
+    $probeFile = dirname(__DIR__) . '/src/RustProbe.php';
+    if (!is_file($probeFile)) {
+        $probeFile = dirname(__DIR__, 2) . '/private_html/qsyn/app/src/RustProbe.php';
+    }
+    if (!is_file($probeFile)) {
+        respond(['status' => 'unavailable', 'reason' => 'probe_not_installed'], 503);
+    }
+    require_once $probeFile;
+    respond(\QSYN\Diagnostics\RustProbe::inspect());
+}
+
 if (str_ends_with($route, '/api/v1/demo/bars')) {
     $end = intdiv(time(), 60) * 60;
     $bars = [];
@@ -55,6 +73,10 @@ html,body{margin:0;background:#0b111b;color:#e5eaf3;font:14px system-ui,sans-ser
 header{padding:18px 24px;border-bottom:1px solid #303b4b;display:flex;align-items:center;gap:14px}
 header strong{font-size:19px} .tag{background:#18314a;color:#8cceff;padding:5px 10px;border-radius:6px}
 main{padding:20px;max-width:1600px;margin:auto} h1{font-size:20px;font-weight:600}
+.diagnostics{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:14px;border:1px solid #334155;border-radius:9px;background:#101a29;padding:14px 18px;margin:0 0 16px}
+.diagnostics strong{font-size:14px}.diagnostics p{margin:7px 0 0;color:#9eacc0;font-size:12px;line-height:1.5}
+.diagnostics button{background:#235ca5;color:#fff;padding:9px 15px;border:1px solid #4987d6;border-radius:6px;cursor:pointer;font-weight:600}
+.diagnostics button:disabled{opacity:.6;cursor:wait}.diagnostics output{font-size:13px;font-weight:600;color:#c5d6eb}
 #terminal{height:min(73vh,800px);min-height:410px;border:1px solid #303b4b;border-radius:9px;overflow:hidden}
 .note{color:#a8b9ce;font-size:12px;margin-top:12px;line-height:1.6}
 </style>
@@ -63,9 +85,20 @@ main{padding:20px;max-width:1600px;margin:auto} h1{font-size:20px;font-weight:60
 <header><strong>QSYN</strong><span class="tag">Phase 0 · Simulated data</span></header>
 <main>
 <h1>Chart terminal foundation</h1>
+<section class="diagnostics" aria-labelledby="rust-title">
+  <div>
+    <strong id="rust-title">Rust realtime engine — browser test</strong>
+    <p id="rust-details">Runs a read-only localhost health and WebSocket check through PHP. It does not start the engine.</p>
+  </div>
+  <div>
+    <button type="button" id="rust-test">Test Rust service</button>
+    <output id="rust-result" role="status" aria-live="polite">Not checked</output>
+  </div>
+</section>
 <div id="terminal"><p style="padding:16px">Build chart assets using <code>npm run build</code> in <code>frontend/</code>, then copy <code>dist/chart.js</code> to <code>public/assets/chart.js</code>.</p></div>
 <p class="note">No live Upstox feed, brokerage login or order execution is enabled. This chart uses deterministic demonstration OHLC data. Market-data source integration is a later phase.</p>
 </main>
 <script src="/qsyn/assets/chart.js" defer></script>
+<script src="/qsyn/assets/rust-diagnostics.js" defer></script>
 </body>
 </html>
