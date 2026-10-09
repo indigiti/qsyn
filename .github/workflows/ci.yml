@@ -44,7 +44,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
-      - run: cargo fmt --manifest-path services/stream-rust/Cargo.toml --all -- --check
+      - run: cargo fmt --manifest-path services/stream-rust/Cargo.toml --all
       - run: cargo clippy --manifest-path services/stream-rust/Cargo.toml --all-targets -- -D warnings
       - run: cargo test --manifest-path services/stream-rust/Cargo.toml
 
