@@ -1,15 +1,15 @@
-# QSYN — Master Architecture Blueprint v1.3
+# QSYN — Master Architecture Blueprint v1.4
 
 **Status:** Architecture baseline for implementation; deployment and licensing gates remain open  
 **Updated:** 2026-10-09  
 **Repository:** https://github.com/indigiti/qsyn  
-**Supersedes:** Blueprint v1.2; retains its market-data storage design and adds database-free development/testing with a pluggable MariaDB migration path
+**Supersedes:** Blueprint v1.3; preserves database-free development/testing and adds explicit multiple broker accounts per QSYN user
 
 > This document is the canonical QSYN architecture. A completed item must be backed by code, tests, and deployment evidence. Statements marked "proposed", "target", or "pending" are not deployed capabilities.
 
 ## 1. Purpose and non-negotiable design rules
 
-QSYN is a multi-user Indian-market charting and synthetic-instrument platform, initially using Upstox, OpenAlgo, and OpenAlgo Charts. The core use cases are realtime NIFTY/options charts, ATM straddles/strangles, multi-leg premium baskets, configurable synthetic indices, saved workspaces, and eventually trading.
+QSYN is a multi-user, multi-broker-account Indian-market charting and synthetic-instrument platform, initially using Upstox, OpenAlgo, and OpenAlgo Charts. The core use cases are realtime NIFTY/options charts, ATM straddles/strangles, multi-leg premium baskets, configurable synthetic indices, saved workspaces, and eventually trading.
 
 1. Reuse maintained OpenAlgo/OpenAlgo Charts interfaces and features before implementing alternatives.
 2. Keep QSYN's custom code, data contracts, accounts, and storage independent from upstream internals.
@@ -81,7 +81,31 @@ Use OpenAlgo Charts' published widget, workspace/grid, indicators, drawings, tra
 
 Pin both upstream projects to **tested versions**. Versions observed at planning time are not automatic upgrade targets; a release is eligible only when QSYN's compatibility suite passes.
 
-## 5. Storage architecture v1.3 (database-free dev/test + memory-first market data)
+### Multiple broker accounts per QSYN user — mandatory feature
+
+**Product requirement:** A single QSYN login can link **many distinct Upstox accounts** and **accounts from other supported brokers simultaneously** (e.g., Upstox A, Upstox B, Zerodha, Dhan). Multiple separate QSYN users can each attach their own list. Support linking, labelling, switching, disconnecting, re-authorizing and monitoring every account individually; there is no requirement to use one broker or one broker account per QSYN user.
+
+**Initial compatibility architecture:** An upstream OpenAlgo instance is single-broker/single-session oriented. For concurrent broker accounts, run isolated OpenAlgo process contexts with separate configurations, local ports, native databases, access tokens, callback routing and supervision. QSYN's PHP control plane maps each linked account to its designated OpenAlgo context and the Rust ingestion source. No secrets or accounts are shared between instances. A more efficient multi-tenant ingestion adapter may later be introduced for eligible providers, but must preserve the same identity, source and entitlement contracts.
+
+**Linked account registry contract (logical fields; implementation pending):** `account_id` (QSYN UUID), `owner_user_id`, `tenant_id`, `broker_code`, `broker_account_reference` (protected), `display_label`, `integration_instance_id`, `auth_status`, `authorized_scopes`, `token_expires_at`, `feed_entitlements`, `last_healthcheck_at`, `is_default_chart_source`, `execution_allowed`, `created_at`, `updated_at`, `revision`. Multiple entries with the same broker_code are allowed, but each linked external account must be distinct and ownership-checked. The credential vault stores encrypted secrets separately, referenced by opaque IDs.
+
+**Broker authorization:** For Upstox, use its official OAuth authorization-code flow and redirect callbacks; never collect Upstox login passwords. Authorization, token expiry, re-login, instrument coverage, static-IP registration and WebSocket subscription limits remain **per linked broker account and provider policy**. The Upstox Market Data Feed V3 documents account-level connection and subscription limits; no design assumes unlimited sockets or multiple identities sharing a provider entitlement.
+
+**Charts and order safety:**
+- Chart selection can reference a specific authorized account's data or a separately licensed platform feed, with explicit provenance. Synthetic legs must be within the same permitted scope or an expressly licensed allowed combination.
+- Preserve `account_id`, source_id and entitlement_scope throughout ingestion, cache keys, synthetic series IDs, historical storage and browser authorization. Identical instrument names from separate accounts must not silently collapse into a globally redistributable price series.
+- The user selects a **specific execution account** before any broker order is prepared; visually show the broker/account label on confirmations. No implicit order routing to a default account after account-switch events.
+- One disconnected/expired account must not take down other connected accounts or erase other users' subscriptions. Account un-linking revokes tokens, workers and permissioned subscriptions, with auditable cleanup.
+- Aggregate portfolio views are optional later and must preserve a drill-down by linked broker account; trades are executed independently per account with explicit confirmation.
+
+**Regulatory and deployment gate:** OpenAlgo's multi-instance guidance discusses using multiple accounts belonging to oneself/family and potential registered static-IP restrictions. Do **not** infer this authorizes one hosted system to run arbitrary unrelated customers' accounts or to redistribute their market data. Verify broker, exchange and Indian regulatory requirements before enabling paid multi-tenant BYOK hosting, shared IP setups or customer order execution.
+
+**Development/testing without MariaDB:** Implement the linked-account repository through the existing file-backed PHP storage interface with **mock Upstox A, mock Upstox B and another mock broker**; credentials are fake, live trading is disabled. All linked-account interfaces must pass contract tests against file storage and, when implemented, the optional MariaDB adapter. Account metadata migrates through the standard file-to-MariaDB export/import/check process; OpenAlgo's own native database remains outside this migration.
+
+**Performance/scaling rule:** Start with isolated OpenAlgo contexts for validation, but measure actual RAM, process count, login churn and feed connection limits. Do not assert that one OpenAlgo process per customer scales to thousands of accounts on a Cloudways host without benchmark and hosting approval. The Rust engine should multiplex **authorized** subscriptions across its output gateways without changing feed ownership.
+
+
+## 5. Storage architecture v1.4 (database-free dev/test + memory-first market data)
 
 | Data class | Canonical storage | Reliability rule |
 | --- | --- | --- |
@@ -117,7 +141,7 @@ Partition by stable instrument ID, trading session and expected file size; do no
 
 ### Database-free development and testing profile
 
-**Default for development and CI:** `QSYN_APP_STORE=file`. Do **not** install, boot, or connect to MariaDB for ordinary QSYN local development, test suites, demos, or fixture-backed acceptance testing. Redis and RabbitMQ remain optional. This only applies to **QSYN-owned application storage**; when integration testing a real OpenAlgo instance, its upstream SQLite/DuckDB dependencies remain.
+**Default for development and CI:** `QSYN_APP_STORE=file`. Multiple linked accounts per user are modelled as file-backed mock entries in this mode. Do **not** install, boot, or connect to MariaDB for ordinary QSYN local development, test suites, demos, or fixture-backed acceptance testing. Redis and RabbitMQ remain optional. This only applies to **QSYN-owned application storage**; when integration testing a real OpenAlgo instance, its upstream SQLite/DuckDB dependencies remain.
 
 Example environment settings (proposed contracts, not currently implemented):
 
@@ -213,7 +237,7 @@ source_id, entitlement_scope, instrument_id, event_type (ltp/quote/depth), excha
 
 ## 7. Security and tenancy
 
-- Tenant-scoped user IDs, broker sessions, secrets, entitlement decisions, synthetic definitions, files and cache keys.
+- Tenant-scoped user IDs, **multiple linked broker account IDs per QSYN user**, broker sessions, secrets, entitlement decisions, synthetic definitions, files and cache keys. Every broker-linked event must retain its `account_id` and source-entitlement scope.
 - Server-side encrypted broker credentials when explicitly enabled for a production-approved store; use fake/sandbox credentials in the default file-backed dev/test profile. No API key, broker secret or OpenAlgo token in chart browser bundles.
 - Short-lived, scope-bound chart access tokens minted by PHP; Rust validates tenant/series/expiry on subscribe and refresh.
 - Per-tenant connection limits, rate limits and bounded outgoing buffers; slow viewers cannot stall the upstream engine.
@@ -257,12 +281,12 @@ No production Node.js process is needed. Compile OpenAlgo Charts assets in CI. K
 | Phase | Scope | Required exit evidence |
 | --- | --- | --- |
 | **0 — Blueprint & feasibility** | Confirm licensing, Cloudways process/WSS support, OpenAlgo interfaces; define pluggable PHP store contracts and file-only default CI; dependency pins | Hosting smoke test; no-MariaDB CI pass; adapter-contract fixtures |
-| **1 — PHP identity & control** | Multi-user test identities, private file-backed repository adapter, authentication, mocked broker credentials, roles and entitlements; MariaDB optional adapter stub | Two independent fixture accounts cannot read each other's records; passes with MariaDB/Redis absent |
-| **2 — Upstox / OpenAlgo** | First broker linkage, symbol/expiry lookup, quotes, historical feeds, reconnection | Authenticated live quotes and authorized historical candles |
+| **1 — PHP identity & control** | Multi-user test identities, private file-backed repository adapter, **one-to-many linked broker accounts**, authentication, mocked broker credentials, roles and entitlements; MariaDB optional adapter stub | One test user links two Upstox mocks and one other broker; tenant/account isolation tests pass with MariaDB/Redis absent |
+| **2 — Upstox / OpenAlgo** | Initial Upstox linkage followed by a **second separately authorized Upstox account** with isolated OpenAlgo instance; symbol/expiry lookup, quotes, history and reconnection | Two Upstox accounts can be selected, monitored and disconnected independently; chart source provenance verified |
 | **3 — Rust engine + storage foundation** | Normalized feeds, subscription registry, tick/price processing, candle builder, memory cache, checksummed WAL, snapshot replay, file segments/indexes | Deterministic replay, power-loss/crash recovery tests, observable end-to-end metrics |
 | **4 — OpenAlgo Charts terminal** | Supported widget/grid/data-feed integration; indicators, drawing/layout persistence, candle history and realtime WSS | Live and historical chart parity, saved workspace recovery |
 | **5 — Synthetic Studio (MVP)** | ATM straddle/strangle, weighted formula engine, rolling/fixed strikes, synthetic candles and backfills | Replay-proven synthetic OHLC, clearly labeled approximate reconstructions |
-| **6 — Multi-user and multi-provider** | Isolated broker accounts, permissions, permitted sharing, additional brokers, fan-out scaling | Credential/entitlement isolation and load-test gates |
+| **6 — Multi-user and multi-provider** | Scale linked accounts across independent QSYN users; integrate additional brokers through isolated OpenAlgo contexts; authorized fan-out; account health, rate and worker limits | Two Upstox accounts plus at least one different broker validated concurrently; isolation/compliance and load-test gates pass |
 | **7 — Alerts and options analytics** | Upstream option analytics reuse, Greeks/OI, premium spikes, server-side alerts | Correct alert timing and browser-off delivery |
 | **8 — Trading and risk** | OpenAlgo sandbox, positions/orders, privileged execution API, risk checks | Paper-trading acceptance, explicit production go/no-go |
 | **9 — Production hardening** | Benchmarks, backups, observability, disaster restore, upgrades, capacity tuning | Agreed SLOs, recovery tests and production readiness sign-off |
@@ -296,10 +320,12 @@ These are **acceptance targets**, not claims about Upstox, Cloudways, OpenAlgo o
 | ADR-010 | Broker V3 Upstox starts the platform; add other adapters later | **Fixed** |
 | ADR-011 | Real credentials, live trading and production billing are disabled in file-backed development profile until separately reviewed and approved | **Fixed** |
 | ADR-012 | Reusable repository contracts and repeatable file→MariaDB import/verification/rollback procedure are mandatory before switching | **Fixed** |
+| ADR-013 | One QSYN user can link multiple Upstox accounts and other broker accounts; each authorization/feed/order context is isolated | **Fixed requirement; not implemented** |
+| ADR-014 | No broker account's market data may be used to service unrelated users absent verified redistribution rights | **Fixed** |
 
 ## 13. Open launch gates and current implementation status
 
-**Not yet verified:** Cloudways daemon viability; Upstox live-feed latency; production data licenses/derived-data rights; tenant-scale OpenAlgo topology; actual hardware sizing; full WAL crash recovery; end-to-end chart integration; file-backed application-store concurrency/recovery; MariaDB adapter migration and cutover (not yet required).
+**Not yet verified:** multi-tenant multi-account broker authorization/compliance and static-IP rules; the resource cost of multiple OpenAlgo contexts; Cloudways daemon viability; Upstox live-feed latency; production data licenses/derived-data rights; tenant-scale OpenAlgo topology; actual hardware sizing; full WAL crash recovery; end-to-end chart integration; file-backed application-store concurrency/recovery; MariaDB adapter migration and cutover (not yet required).
 
 **This revision is documentation only.** It does not implement a Rust engine, PHP website, Upstox credentials, chart terminal, file-store adapter, MariaDB adapter, migration tooling, CI automation or Cloudways deployment. Implementation begins at Phase 0, following this document.
 
