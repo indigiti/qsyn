@@ -1,3 +1,9 @@
+<?php
+// HTML is uncacheable; version fixed same-origin admin scripts so an old
+// cached runtime-control client cannot survive a newer DigiOps deployment.
+$rustAdminVersion = (string)(@filemtime(__DIR__ . '/assets/rust-admin.js') ?: '0');
+$rustStreamTestVersion = (string)(@filemtime(__DIR__ . '/assets/rust-stream-test.js') ?: '0');
+?>
 <!doctype html>
 <html lang="en">
 <head>
@@ -66,7 +72,7 @@ label{display:block;margin-bottom:10px;font-weight:600}code{color:#b6daff}.statu
 </section>
 <p id="feedback" class="muted" role="status" aria-live="polite"></p>
 </main>
-<script src="/qsyn/assets/rust-admin.js" defer></script>
-<script src="/qsyn/assets/rust-stream-test.js" defer></script>
+<script src="/qsyn/assets/rust-admin.js?v=<?= rawurlencode($rustAdminVersion) ?>" defer></script>
+<script src="/qsyn/assets/rust-stream-test.js?v=<?= rawurlencode($rustStreamTestVersion) ?>" defer></script>
 </body>
 </html>
