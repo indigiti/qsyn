@@ -90,12 +90,17 @@ final class RustAdmin
         ini_set('session.use_strict_mode', '1');
         ini_set('session.use_only_cookies', '1');
         ini_set('session.cookie_httponly', '1');
-        ini_set('session.cookie_secure', '1');
+        // Only CI loopback HTTP may use a non-Secure cookie. Real QSYN
+        // deployments always require HTTPS and Secure session cookies.
+        $host = (string)($_SERVER['HTTP_HOST'] ?? '');
+        $testLoopback = getenv('QSYN_ALLOW_HTTP_TEST') === '1'
+            && preg_match('/^(?:localhost|127\\.0\\.0\\.1)(?::[0-9]{1,5})?$/D', $host) === 1;
+        ini_set('session.cookie_secure', $testLoopback ? '0' : '1');
         session_name('QSYN_ADMIN_SESSION');
         session_set_cookie_params([
             'lifetime' => 0,
             'path' => '/qsyn/',
-            'secure' => true,
+            'secure' => !$testLoopback,
             'httponly' => true,
             'samesite' => 'Strict',
         ]);
