@@ -73,14 +73,14 @@ if (preg_match('#^/qsyn/api/v1/auth/(state|me|login|logout)$#', $route, $identit
 
 // Phase 1.3: session-owned simulated account control; disabled by default.
 // No real broker credentials, account linking or order execution.
-if (preg_match('#^/qsyn/api/v1/accounts/(list|get|link|rename|select|disconnect)$#', $route, $accountMatch)) {
+if (preg_match('#^/qsyn/api/v1/accounts/(list|get|bars|link|rename|select|disconnect)$#', $route, $accountMatch)) {
     $src = dirname(__DIR__) . '/src';
     if (!is_file($src . '/AccountApi.php')) {
         $src = dirname(__DIR__, 2) . '/private_html/qsyn/app/src';
     }
     foreach (['FileStore', 'UserRepository', 'FileUserRepository',
         'UserSession', 'IdentityApi', 'BrokerConnectionRepository',
-        'FileMockBrokerConnectionRepository', 'FileMockAccountSelection', 'AccountApi'] as $unit) {
+        'FileMockBrokerConnectionRepository', 'FileMockAccountSelection', 'SimulatedAccountBars', 'AccountApi'] as $unit) {
         if (!is_file($src . '/' . $unit . '.php')) {
             respond(['error' => 'mock_account_modules_unavailable'], 503);
         }
@@ -88,6 +88,38 @@ if (preg_match('#^/qsyn/api/v1/accounts/(list|get|link|rename|select|disconnect)
     }
     [$status, $payload] = \QSYN\Accounts\AccountApi::dispatch($accountMatch[1], $_SERVER);
     respond($payload, $status);
+}
+
+// Phase 1.4 isolated browser workspace; opt-in test/development only.
+// Deliberately separate from the legacy /qsyn/ chart and Rust admin page.
+if ($route === '/qsyn/app' || $route === '/qsyn/app/') {
+    $src = dirname(__DIR__) . '/src';
+    if (!is_file($src . '/IdentityApi.php')) {
+        $src = dirname(__DIR__, 2) . '/private_html/qsyn/app/src';
+    }
+    if (!is_file($src . '/IdentityApi.php')) {
+        respond(['error' => 'dashboard_unavailable'], 404);
+    }
+    require_once $src . '/IdentityApi.php';
+    $host = (string) ($_SERVER['HTTP_HOST'] ?? '');
+    $localhostTest = getenv('QSYN_ENV') === 'test' && getenv('QSYN_ALLOW_HTTP_TEST') === '1'
+        && preg_match('/^(?:127\.0\.0\.1|localhost)(?::[0-9]{1,5})?$/D', $host) === 1;
+    if (getenv('QSYN_DASHBOARD_ENABLED') !== '1'
+        || getenv('QSYN_MOCK_ACCOUNTS_ENABLED') !== '1'
+        || \QSYN\Identity\IdentityApi::privateRoot() === null
+        || (!$localhostTest && ($_SERVER['HTTPS'] ?? '') !== 'on'
+            && (string) ($_SERVER['SERVER_PORT'] ?? '') !== '443')) {
+        respond(['error' => 'dashboard_not_enabled'], 404);
+    }
+    header('Content-Type: text/html; charset=utf-8');
+    header('Cache-Control: private, no-store');
+    header('X-Frame-Options: DENY');
+    header('X-Robots-Tag: noindex, nofollow');
+    header('Content-Security-Policy: default-src ' . "'self'" .
+        '; script-src ' . "'self'" . '; style-src ' . "'self' 'unsafe-inline'" .
+        '; connect-src ' . "'self'" . '; img-src ' . "'self' data:" . '; frame-ancestors ' . "'none'" . ';');
+    require __DIR__ . '/account-dashboard.php';
+    exit;
 }
 
 // Administrator-only Rust service control. Never accessible without a configured

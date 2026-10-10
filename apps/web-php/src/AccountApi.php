@@ -28,7 +28,7 @@ final class AccountApi
         if (!UserSession::boot($server)) {
             return [403, ['error' => 'secure_transport_required']];
         }
-        $method = in_array($operation, ['list', 'get'], true) ? 'GET' : 'POST';
+        $method = in_array($operation, ['list', 'get', 'bars'], true) ? 'GET' : 'POST';
         if (($server['REQUEST_METHOD'] ?? 'GET') !== $method) {
             return [405, ['error' => 'method_not_allowed']];
         }
@@ -52,6 +52,17 @@ final class AccountApi
                 'accounts' => $accounts->listForOwner($tenant, $owner),
                 'selection' => $selection->current($tenant, $owner),
             ]];
+        }
+        if ($operation === 'bars') {
+            $selected = $selection->current($tenant, $owner);
+            if ($selected['account_id'] === null) {
+                return [409, ['error' => 'no_mock_chart_source_selected']];
+            }
+            $account = $accounts->getForOwner($tenant, $owner, $selected['account_id']);
+            if ($account === null || ($account['auth_status'] ?? '') !== 'mock_connected') {
+                return [409, ['error' => 'no_mock_chart_source_selected']];
+            }
+            return [200, SimulatedAccountBars::make($account)];
         }
         if ($operation === 'get') {
             $id = $_GET['id'] ?? null;

@@ -51,9 +51,12 @@ def run():
         proc = php_server(env, sessions, port)
         try:
             await_server(origin)
+            # Dashboard has an independent opt-in even with accounts enabled.
+            assert request(client()[0], origin, '/qsyn/app')[0] == 404
             guest, _ = client()
             assert request(guest, origin, ACCOUNTS + "list")[0] == 401
             assert request(guest, origin, ACCOUNTS + "get?id=bad")[0] == 401
+            assert request(guest, origin, ACCOUNTS + "bars")[0] == 401
             assert post(guest, origin, "link", {}, "x" * 64)[0] == 401
 
             alice, csrf, _ = login(origin, "tenant-one", "alice")
@@ -61,6 +64,8 @@ def run():
             other, other_csrf, _ = login(origin, "tenant-two", "alice")
 
             assert request(bob, origin, ACCOUNTS + "list")[1]["accounts"] == []
+            assert request(bob, origin, ACCOUNTS + "bars")[0] == 409
+            assert request(other, origin, ACCOUNTS + "bars")[0] == 409
             assert post(bob, origin, "link", {}, bob_csrf)[0] == 403
             assert request(other, origin, ACCOUNTS + "list")[1]["accounts"] == []
 
@@ -122,6 +127,12 @@ def run():
                 "account_id": a["account_id"], "expected_revision": 0
             }, csrf)
             assert status == 200 and chosen["selection"]["revision"] == 1
+            status, preview_a, _ = request(alice, origin, ACCOUNTS + "bars")
+            assert status == 200 and preview_a["account_id"] == a["account_id"], preview_a
+            assert preview_a["source"] == "account-scoped-mock-fixture"
+            assert preview_a["trading_enabled"] is False and len(preview_a["bars"]) == 120
+            assert request(bob, origin, ACCOUNTS + "bars")[0] == 409
+            assert request(other, origin, ACCOUNTS + "bars")[0] == 409
             assert post(alice, origin, "select", {
                 "account_id": b["account_id"], "expected_revision": 0
             }, csrf)[0] == 409
@@ -137,6 +148,7 @@ def run():
             }, csrf)
             assert status == 200 and disc["account"]["auth_status"] == "disconnected"
             assert disc["selection"] == {"account_id": None, "revision": 2}
+            assert request(alice, origin, ACCOUNTS + "bars")[0] == 409
             assert post(alice, origin, "select", {
                 "account_id": b["account_id"], "expected_revision": 2
             }, csrf)[0] == 409
@@ -152,6 +164,9 @@ def run():
             assert post(alice, origin, "select", {
                 "account_id": d["account_id"], "expected_revision": 2
             }, csrf)[0] == 200
+            status, preview_d, _ = request(alice, origin, ACCOUNTS + "bars")
+            assert status == 200 and preview_d["account_id"] == d["account_id"]
+            assert preview_d["bars"] != preview_a["bars"]
 
             assert request(other, origin, ACCOUNTS + "list")[1]["accounts"] == []
             assert post(alice, origin, "disconnect", {
