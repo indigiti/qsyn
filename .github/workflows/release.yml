@@ -126,7 +126,7 @@ jobs:
           # DigiOps adds the configured public_html/qsyn and private_html/qsyn
           # destination prefixes. Do NOT put those paths in the artifact.
           mkdir -p staging/public/{assets,licenses}
-          mkdir -p staging/private/app/{src,bin,tools}
+          mkdir -p staging/private/app/{src,bin,tools,ops}
           mkdir -p staging/private/build
           # The private runtime directory survives subsequent overlays. Only
           # a harmless marker is packaged; never include admin-auth.json.
@@ -186,6 +186,8 @@ jobs:
           cp services/stream-rust/target/release/qsyn-market-archive staging/private/app/bin/qsyn-market-archive
           cp services/stream-rust/target/release/qsyn-openalgo-feed staging/private/app/bin/qsyn-openalgo-feed
           cp services/stream-rust/target/release/qsyn-history-import staging/private/app/bin/qsyn-history-import
+          cp services/stream-rust/target/release/qsyn-private-chart staging/private/app/bin/qsyn-private-chart
+          cp ops/cloudways/qsyn-private-feed.supervisor.conf.example staging/private/app/ops/qsyn-private-feed.supervisor.conf.example
           cat > staging/RELEASE.json <<EOF
           {
             "schema": "DIGIOPS-BUILD/1",
@@ -256,6 +258,8 @@ jobs:
           test -x staging/private/app/bin/qsyn-market-archive
           test -x staging/private/app/bin/qsyn-openalgo-feed
           test -x staging/private/app/bin/qsyn-history-import
+          test -x staging/private/app/bin/qsyn-private-chart
+          test -s staging/private/app/ops/qsyn-private-feed.supervisor.conf.example
           test -s staging/RELEASE.json
           test -s staging/private/build/release.json
       - name: Publish DigiOps artifact
@@ -336,6 +340,8 @@ jobs:
           test -s verified-release/private/app/bin/qsyn-market-archive
           test -s verified-release/private/app/bin/qsyn-openalgo-feed
           test -s verified-release/private/app/bin/qsyn-history-import
+          test -s verified-release/private/app/bin/qsyn-private-chart
+          test -s verified-release/private/app/ops/qsyn-private-feed.supervisor.conf.example
           test -s verified-release/RELEASE.json
           test -s verified-release/private/build/release.json
           grep -F 'RewriteBase /qsyn/' verified-release/public/.htaccess

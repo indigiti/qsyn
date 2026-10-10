@@ -46,6 +46,12 @@ def service(broker, token):
                     "pe": {"symbol": "NIFTY29OCT2624500PE", "ltp": 70.3,
                            "oi": 300},
                 }]},
+                "/api/v1/orderstatus": {"status": "success", "data": {
+                    "orderid": "B123", "order_status": "complete",
+                    "symbol": "NIFTY29OCT2624500CE", "exchange": "NFO",
+                    "action": "BUY", "quantity": 25, "average_price": 101.5,
+                    "private_access_token": token,
+                }},
                 "/api/v1/positionbook": {"status": "success", "data": [
                     {"symbol": "NIFTY", "secret": token},
                 ]},
@@ -166,6 +172,24 @@ def main():
             funds = invoke(reg, "read", "tenant2", "bob", "zerodha-b", "funds")
             assert funds.returncode == 0
             assert json.loads(funds.stdout)["funds"]["m2munrealized"] == -32.5
+            status = invoke(reg, "read", "tenant1", "alice", "upstox-a",
+                            "order-status", json.dumps({"strategy":"QSYN Paper",
+                                                        "orderid":"B123"}))
+            assert status.returncode == 0, status.stderr
+            record = json.loads(status.stdout)
+            assert record["broker_order_id"] == "B123"
+            assert record["broker_order_status"] == "complete"
+            assert record["filled_quantity_verified"] is False
+            assert record["reconciliation_verified"] is False
+            assert KEY_A not in status.stdout
+            mismatch = invoke(reg, "read", "tenant1", "alice", "upstox-a",
+                              "order-status", json.dumps({"strategy":"QSYN Paper",
+                                                          "orderid":"DIFFERENT123"}))
+            assert mismatch.returncode != 0 and not mismatch.stdout
+            cross = invoke(reg, "read", "tenant2", "bob", "upstox-a",
+                           "order-status", json.dumps({"strategy":"QSYN Paper",
+                                                        "orderid":"B123"}))
+            assert cross.returncode != 0 and not cross.stdout
             positions = invoke(reg, "read", "tenant1", "alice", "upstox-a", "positions")
             assert json.loads(positions.stdout)["items_count"] == 1
 

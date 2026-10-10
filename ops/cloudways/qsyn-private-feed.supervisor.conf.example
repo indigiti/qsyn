@@ -1,0 +1,41 @@
+; QSYN private OpenAlgo worker template — not installed or enabled automatically.
+; Cloudways / Supervisor operator must substitute paths, IDs, symbols, verify
+; owner-only 0600 credentials and license files, and approve exchange rights.
+; Separate program per real broker account. Set autostart=false by design.
+[program:qsyn-private-feed-ACCOUNT_A]
+command=/ABSOLUTE/PRIVATE/app/bin/qsyn-openalgo-feed collect TENANT OWNER ACCOUNT NFO:ACTUAL_CE,NFO:ACTUAL_PE
+directory=/ABSOLUTE/PRIVATE/app
+user=ACCOUNT_UNIX_OWNER
+autostart=false
+autorestart=unexpected
+exitcodes=0
+startsecs=3
+startretries=3
+stopsignal=TERM
+stopwaitsecs=25
+stopasgroup=true
+killasgroup=true
+redirect_stderr=true
+stdout_logfile=/ABSOLUTE/PRIVATE/logs/qsyn-feed-A.log
+stdout_logfile_maxbytes=20MB
+stdout_logfile_backups=5
+environment=QSYN_PRIVATE_BROKER_GATEWAY="1",QSYN_PRIVATE_FEED_PROBE_ENABLED="1",QSYN_PRIVATE_FEED_RUNTIME_ENABLED="1",QSYN_PRIVATE_FEED_PERSIST_ENABLED="1",QSYN_PRIVATE_CHART_IPC_ENABLED="1",QSYN_OPENALGO_REGISTRY_FILE="/ABSOLUTE/PRIVATE/openalgo-registry.json",QSYN_PRIVATE_FEED_APPROVAL_FILE="/ABSOLUTE/PRIVATE/feed-persistence.json",QSYN_PRIVATE_CHART_IPC_SOCKET="/ABSOLUTE/PRIVATE/charts/market.ipc",QSYN_TRADING_ENABLED="0",QSYN_ENABLE_LIVE_TRADING="0"
+
+; Chart gateway is operator-only loopback WS. No public proxy route. A separate
+; audited session-to-ticket issuer and TLS ingress are not included here.
+[program:qsyn-private-chart-ACCOUNT_A]
+command=/ABSOLUTE/PRIVATE/app/bin/qsyn-private-chart serve 10444 /ABSOLUTE/PRIVATE/charts/market.ipc
+directory=/ABSOLUTE/PRIVATE/app
+user=ACCOUNT_UNIX_OWNER
+autostart=false
+autorestart=unexpected
+exitcodes=0
+startsecs=3
+startretries=3
+stopsignal=TERM
+stopwaitsecs=10
+redirect_stderr=true
+stdout_logfile=/ABSOLUTE/PRIVATE/logs/qsyn-chart-A.log
+stdout_logfile_maxbytes=10MB
+stdout_logfile_backups=3
+environment=QSYN_PRIVATE_CHART_GATEWAY_ENABLED="1",QSYN_PRIVATE_CHART_RIGHTS_FILE="/ABSOLUTE/PRIVATE/chart-display-rights.json",QSYN_PRIVATE_CHART_SIGNING_KEY_FILE="/ABSOLUTE/PRIVATE/chart-signing.key",QSYN_TRADING_ENABLED="0",QSYN_ENABLE_LIVE_TRADING="0"

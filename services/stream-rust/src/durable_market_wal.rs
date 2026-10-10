@@ -58,7 +58,7 @@ fn valid_quote(quote: &NormalizedQuote) -> bool {
         && quote.price > 0.0
 }
 
-pub(crate) fn root_check(root: &Path) -> io::Result<()> {
+pub fn root_check(root: &Path) -> io::Result<()> {
     if !root.is_absolute() || root.as_os_str().is_empty() {
         return Err(io::Error::new(io::ErrorKind::PermissionDenied, "absolute_private_root_required"));
     }
@@ -229,6 +229,40 @@ impl DurableMarketWal {
         self.sequence = next;
         self.poisoned = false;
         Ok(next)
+    }
+
+
+    /// Reconstruct per-instrument exchange-timestamp watermarks after a
+    /// collector restart. Reject any rows from a different owner/mode in
+    /// this archive: each live writer must use a dedicated private root.
+    pub fn private_watermarks(
+        &mut self,
+        scope: &Scope,
+        mode: &DataMode,
+        allowed: &[String],
+    ) -> io::Result<std::collections::HashMap<String, u64>> {
+        if !valid_scope(scope) || allowed.is_empty() || allowed.len() > 8
+            || allowed.iter().any(|v| v.is_empty()) {
+            return Err(io::Error::new(io::ErrorKind::InvalidInput, "invalid_private_watermark_scope"));
+        }
+        let mut latest = std::collections::HashMap::<String, u64>::new();
+        let result = scan(&mut self.file, |quote| {
+            if &quote.scope != scope || &quote.mode != mode
+                || !allowed.contains(&quote.instrument_id)
+            {
+                return Err(io::Error::new(io::ErrorKind::PermissionDenied,
+                    "private_market_archive_scope_mismatch"));
+            }
+            let ts = latest.entry(quote.instrument_id.clone()).or_default();
+            *ts = (*ts).max(quote.timestamp_ms);
+            Ok(())
+        });
+        self.file.seek(SeekFrom::End(0))?;
+        let report = result?;
+        if report.trailing_partial_frame_at.is_some() {
+            return Err(invalid("torn_wal_tail_requires_explicit_repair"));
+        }
+        Ok(latest)
     }
 
     pub fn last_sequence(&self) -> u64 { self.sequence }
