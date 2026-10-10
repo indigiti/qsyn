@@ -83,3 +83,7 @@ tr.atm{background:#163c3a}tr:hover{background:#243e51}
 .lab-alert.triggered{border-color:#3b8b76;color:#8ce7d5;background:#173633}
 @media(max-width:1080px){.lab-section{grid-template-columns:1fr}}
 @media(max-width:610px){.risk-grid,.greek-grid{gap:6px}.risk-item{padding:8px}.lab-section{gap:12px}.replay-buttons{flex-wrap:wrap}}
+
+/* Four-leg visibility must survive .two-col CSS grid rules. */
+[hidden]{display:none!important}
+#leg-chart-grid .chart-card{min-width:0}
