@@ -39,6 +39,38 @@ try {
             'supported_read_operations' => OpenAlgo::capabilities(),
             'trading_enabled' => false,
         ];
+    } elseif ($action === 'readiness' && count($argv) === 4) {
+        // This private, scoped preflight is an observation, not authorization
+        // to redistribute live data or route real broker orders.
+        $statuses = [];
+        foreach ($accounts as $account) {
+            if ($account['tenant_id'] !== $tenant || $account['owner_user_id'] !== $owner) {
+                continue;
+            }
+            $status = Registry::publicSummary($account);
+            $responding = false;
+            try {
+                $ping = OpenAlgo::request($account, 'ping');
+                $responding = ($ping['broker_session_responding'] ?? false) === true;
+            } catch (Throwable) {
+                // Isolate failures and do not disclose broker errors, secrets,
+                // private paths, provider responses or other accounts.
+            }
+            $status['broker_session_responding'] = $responding;
+            $status['readiness'] = $responding
+                ? 'private_session_only' : 'session_not_verified';
+            $statuses[] = $status;
+        }
+        $result = [
+            'schema' => 'QSYN-PRIVATE-BROKER-READINESS/1',
+            'accounts' => $statuses,
+            'market_entitlement_verified' => false,
+            'public_redistribution_allowed' => false,
+            'live_chart_ready' => false,
+            'order_execution_enabled' => false,
+            'operator_activation_required' => true,
+            'ui_mode' => 'unchanged',
+        ];
     } elseif ($action === 'read' && (count($argv) === 6 || count($argv) === 7)) {
         $accountId = $argv[4];
         $operation = $argv[5];
