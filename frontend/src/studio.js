@@ -1,5 +1,6 @@
 import { createWidget } from 'openalgo-charts/widget';
 import 'openalgo-charts/indicators';
+import { bindStudioLab } from './studio-lab.js';
 
 // Standalone public demo only. Never request or store broker credentials.
 // Strategies are reloaded as a single snapshot so chart widgets cannot
@@ -237,6 +238,12 @@ async function renderStrategy() {
     }
   }
   await chart('basket-chart', 'QSYN-PREMIUM-DEMO', data.bars);
+  bindStudioLab({
+    data,
+    config: JSON.parse(JSON.stringify(state)),
+    onStatus: status,
+    renderReplay: bars => chart('basket-chart', 'QSYN-PREMIUM-DEMO', bars),
+  });
   status('Loaded 120 synchronized simulated candles · ' + state.interval
     + ' · No live subscription, orders or broker session.');
 }
