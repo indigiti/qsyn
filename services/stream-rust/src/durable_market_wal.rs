@@ -30,7 +30,7 @@ fn invalid(message: &'static str) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, message)
 }
 
-fn crc32(bytes: &[u8]) -> u32 {
+pub(crate) fn crc32(bytes: &[u8]) -> u32 {
     let mut crc = !0u32;
     for byte in bytes {
         crc ^= u32::from(*byte);
@@ -58,7 +58,7 @@ fn valid_quote(quote: &NormalizedQuote) -> bool {
         && quote.price > 0.0
 }
 
-fn root_check(root: &Path) -> io::Result<()> {
+pub(crate) fn root_check(root: &Path) -> io::Result<()> {
     if !root.is_absolute() || root.as_os_str().is_empty() {
         return Err(io::Error::new(io::ErrorKind::PermissionDenied, "absolute_private_root_required"));
     }
