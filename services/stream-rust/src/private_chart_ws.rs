@@ -184,6 +184,75 @@ pub async fn serve(
 }
 #[cfg(test)]mod tests{
     use super::*;
+
+    #[tokio::test]
+    async fn private_loopback_ws_blocks_cross_account_and_revocation() {
+        use crate::market_pipeline::Scope;
+        use std::time::{SystemTime,UNIX_EPOCH};
+        let root=std::env::temp_dir().join(format!("qsyn-chart-ws-{}-{}",
+            std::process::id(),SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos()));
+        fs::create_dir(&root).unwrap();
+        #[cfg(unix)]
+        fs::set_permissions(&root,fs::Permissions::from_mode(0o700)).unwrap();
+        let secret=root.join("signing.key");
+        let rights=root.join("rights.json");
+        let socket=root.join("chart.ipc");
+        fs::write(&secret,[42u8;32]).unwrap();
+        #[cfg(unix)]
+        fs::set_permissions(&secret,fs::Permissions::from_mode(0o600)).unwrap();
+        let now=epoch_ms().unwrap();
+        let config=|display|json!({"schema":"QSYN-PRIVATE-CHART-ENTITLEMENT/1",
+            "tenant":"T","account":"A","owner":"U","broker":"upstox",
+            "instruments":["NFO|CE"],"license_id":"L1",
+            "can_display_to_this_user":display,
+            "broker_session_verified":true,"valid_until_ms":now+60_000});
+        fs::write(&rights,config(true).to_string()).unwrap();
+        #[cfg(unix)]
+        fs::set_permissions(&rights,fs::Permissions::from_mode(0o600)).unwrap();
+        let tmp_listener=TcpListener::bind(("127.0.0.1",0)).await.unwrap();
+        let port=tmp_listener.local_addr().unwrap().port();
+        drop(tmp_listener);
+        let gate_rights=rights.clone();let gate_key=secret.clone();let gate_socket=socket.clone();
+        let server=tokio::spawn(async move{
+            let _=serve(port,&gate_socket,&gate_rights,&gate_key).await;
+        });
+        tokio::time::sleep(Duration::from_millis(80)).await;
+        let signer=ChartSigner::new([42u8;32]);
+        let att=load_rights(&rights).unwrap();
+        let ticket=signer.issue(&att,"NFO|CE",epoch_ms().unwrap(),30_000).unwrap();
+        let (mut ws,_)=tokio_tungstenite::connect_async(
+            format!("ws://127.0.0.1:{port}")).await.unwrap();
+        ws.send(Message::Text(json!({"action":"authenticate",
+            "token":ticket}).to_string().into())).await.unwrap();
+        let reply=timeout(Duration::from_secs(2),ws.next()).await.unwrap()
+            .unwrap().unwrap().into_text().unwrap();
+        assert!(reply.contains("authentication_success"));
+        let unix=UnixDatagram::unbound().unwrap();
+        let candidate=CandidateQuote{
+            scope:Scope{tenant_id:"T".into(),account_id:"A".into(),
+                source_id:"privateOpenAlgo".into(),entitlement_id:"L1".into()},
+            instrument_id:"NFO|CE".into(),exchange_timestamp_ms:epoch_ms().unwrap()-50,
+            received_timestamp_ms:epoch_ms().unwrap(),price:102.0,stale:false,
+            entitlement_verified:false,publishable_to_public_studio:false,
+        };
+        unix.send_to(&serde_json::to_vec(&candidate).unwrap(),&socket).await.unwrap();
+        let tick=timeout(Duration::from_secs(2),ws.next()).await.unwrap()
+            .unwrap().unwrap().into_text().unwrap();
+        assert!(tick.contains("QSYN-PRIVATE-CHART-TICK/1"));
+        assert!(tick.contains("102.0"));
+        let mut wrong=candidate;
+        wrong.scope.account_id="B".into();wrong.price=777.0;
+        unix.send_to(&serde_json::to_vec(&wrong).unwrap(),&socket).await.unwrap();
+        assert!(timeout(Duration::from_millis(250),ws.next()).await.is_err());
+        fs::write(&rights,config(false).to_string()).unwrap();
+        tokio::time::sleep(Duration::from_millis(1200)).await;
+        // A connected client must not retain rights after revocation.
+        let closed=timeout(Duration::from_secs(2),ws.next()).await.unwrap();
+        assert!(!matches!(closed,Some(Ok(Message::Text(_)))));
+        server.abort();
+        fs::remove_dir_all(&root).unwrap();
+    }
+
     #[test]fn signed_ticket_matches_latest_rights_not_untrusted_claim(){
         let signer=ChartSigner::new([42;32]);
         let mut rights=EntitlementAttestation{tenant:"T".into(),account:"A".into(),
