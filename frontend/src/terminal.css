@@ -87,3 +87,45 @@ button:focus-visible,a:focus-visible{outline:2px solid var(--q-accent);outline-o
  .terminal-environment{font-size:9px;padding:5px}
 }
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{transition-duration:.01ms!important;animation-duration:.01ms!important}}
+
+
+/* Phase 2: functional chart workspace, local-only watchlist, and two-pane comparison. */
+.terminal-workspace{display:flex;flex-direction:column;gap:14px}
+.terminal-workspace-controls{padding:15px 18px}
+.terminal-workspace-header{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.terminal-workspace-header h2{margin:0;font-size:15px}
+.terminal-workspace-header p{margin:3px 0 0;color:var(--q-muted);font-size:11px}
+.terminal-secondary-action{color:var(--q-fg);background:var(--q-hover);border:1px solid var(--q-line)}
+.terminal-layout-tools{display:flex;flex-wrap:wrap;align-items:flex-end;gap:10px;margin-top:12px}
+.terminal-layout-tools label,.terminal-pane-heading label{display:flex;flex-direction:column;gap:4px;font-size:11px;color:var(--q-muted);font-weight:600}
+.terminal-layout-tools input,.terminal-layout-tools select,.terminal-pane-heading select,.terminal-search-label input{background:var(--q-bg);color:var(--q-fg);border:1px solid var(--q-line);border-radius:7px;padding:9px;font-size:12px;min-width:0}
+.terminal-layout-tools input{width:180px}.terminal-layout-tools select{width:170px}
+.terminal-delete-layout{border-color:var(--q-line);width:37px;height:37px}
+.terminal-workspace-grid{display:grid;grid-template-columns:minmax(0,1fr) 270px;gap:14px;align-items:start}
+.terminal-chart-panes{display:grid;grid-template-columns:minmax(0,1fr);gap:14px}
+.terminal-chart-panes.compared{grid-template-columns:repeat(2,minmax(0,1fr))}
+.terminal-chart-pane{min-width:0;border:1px solid transparent;border-radius:10px}
+.terminal-chart-pane.pane-active{border-color:color-mix(in srgb,var(--q-accent),transparent 40%)}
+.terminal-pane-heading{display:flex;align-items:center;justify-content:space-between;gap:9px;padding:10px;background:var(--q-card);border-radius:9px 9px 0 0;border:1px solid var(--q-line)}
+.terminal-pane-heading strong{font-size:12px}
+.terminal-pane-heading select{width:min(30vw,240px)}
+.terminal-chart-pane .terminal-chart-card{border-radius:0 0 9px 9px}
+.terminal-chart-panes.compared .terminal-chart-host{height:510px;min-height:410px}
+.terminal-chart-panes.compared .terminal-chart-card h2{font-size:14px}
+.terminal-watchlist{padding:14px;min-width:0}
+.terminal-watch-rows{margin:14px 0}
+.terminal-watch-row,.terminal-search-row{display:flex;align-items:center;gap:6px;justify-content:space-between;border-bottom:1px solid var(--q-line)}
+.terminal-watch-select{display:flex;flex-direction:column;text-align:left;gap:2px;background:none;border:0;color:var(--q-fg);padding:10px 2px;cursor:pointer;min-width:0}
+.terminal-watch-select strong{font-size:11px;overflow-wrap:anywhere}
+.terminal-watch-select small{font-size:10px;color:var(--q-muted)}
+.terminal-watch-select:hover,.terminal-search-row button:first-child:hover{color:var(--q-accent)}
+.terminal-search-label{display:flex;flex-wrap:wrap;align-items:center;gap:7px;font-size:11px;font-weight:700;color:var(--q-muted)}
+.terminal-search-label input{flex-basis:100%;width:100%;margin-bottom:7px}
+.terminal-search-results{max-height:235px;overflow-y:auto}
+.terminal-search-row button:first-child{background:none;border:0;text-align:left;color:var(--q-fg);font-size:10px;padding:10px 2px;cursor:pointer;overflow-wrap:anywhere;min-width:0}
+.terminal-studio-link{display:flex;align-items:center;justify-content:space-between;margin-top:17px;padding:11px;border-radius:7px;text-decoration:none;background:var(--q-hover);font-size:12px;color:var(--q-accent);font-weight:700}
+.terminal-studio-link:hover{text-decoration:underline}
+@media(max-width:1380px){.terminal-workspace-grid{grid-template-columns:minmax(0,1fr) 230px}.terminal-chart-panes.compared{grid-template-columns:1fr}}
+@media(max-width:1000px){.terminal-workspace-grid{grid-template-columns:minmax(0,1fr)}.terminal-chart-panes.compared{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:800px){.terminal-chart-panes.compared{grid-template-columns:1fr}}
+@media(max-width:700px){.terminal-layout-tools{align-items:stretch}.terminal-layout-tools label{flex:1 1 135px}.terminal-layout-tools input,.terminal-layout-tools select{width:100%}.terminal-layout-tools .terminal-action{align-self:end;min-height:37px}.terminal-delete-layout{align-self:end}.terminal-pane-heading select{width:min(55vw,210px)}}
