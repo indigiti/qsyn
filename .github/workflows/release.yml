@@ -149,6 +149,7 @@ jobs:
           cp apps/web-php/src/PrivateBrokerRegistry.php staging/private/app/src/PrivateBrokerRegistry.php
           cp apps/web-php/src/PrivateOpenAlgoReader.php staging/private/app/src/PrivateOpenAlgoReader.php
           cp apps/web-php/tools/private-broker-gateway.php staging/private/app/tools/private-broker-gateway.php
+          cp apps/web-php/tools/upstox-oauth.php staging/private/app/tools/upstox-oauth.php
           cp apps/web-php/tools/private-history-export.php staging/private/app/tools/private-history-export.php
           cp apps/web-php/tools/openalgo-local-probe.php staging/private/app/tools/openalgo-local-probe.php
           cp apps/web-php/tools/upstox-instrument-inspect.py staging/private/app/tools/upstox-instrument-inspect.py
@@ -178,6 +179,7 @@ jobs:
           cp apps/web-php/src/FileTerminalWorkspaceRepository.php staging/private/app/src/FileTerminalWorkspaceRepository.php
           cp apps/web-php/src/TerminalWorkspaceApi.php staging/private/app/src/TerminalWorkspaceApi.php
           cp apps/web-php/src/PrivateChartGrantApi.php staging/private/app/src/PrivateChartGrantApi.php
+          cp apps/web-php/src/UpstoxOperatorOAuth.php staging/private/app/src/UpstoxOperatorOAuth.php
           cp apps/web-php/src/FileMockAccountSelection.php staging/private/app/src/FileMockAccountSelection.php
           cp apps/web-php/src/AccountApi.php staging/private/app/src/AccountApi.php
           cp apps/web-php/src/SimulatedAccountBars.php staging/private/app/src/SimulatedAccountBars.php
@@ -194,6 +196,7 @@ jobs:
           cp services/stream-rust/target/release/qsyn-openalgo-feed staging/private/app/bin/qsyn-openalgo-feed
           cp services/stream-rust/target/release/qsyn-history-import staging/private/app/bin/qsyn-history-import
           cp services/stream-rust/target/release/qsyn-private-chart staging/private/app/bin/qsyn-private-chart
+          cp services/stream-rust/target/release/qsyn-upstox-worker staging/private/app/bin/qsyn-upstox-worker
           cp ops/cloudways/qsyn-private-feed.supervisor.conf.example staging/private/app/ops/qsyn-private-feed.supervisor.conf.example
           cat > staging/RELEASE.json <<EOF
           {
@@ -225,6 +228,8 @@ jobs:
           test -s staging/private/app/src/PrivateBrokerRegistry.php
           test -s staging/private/app/src/PrivateOpenAlgoReader.php
           test -s staging/private/app/tools/private-broker-gateway.php
+          test -s staging/private/app/tools/upstox-oauth.php
+          test -s staging/private/app/bin/qsyn-upstox-worker
           test -s staging/private/app/tools/private-history-export.php
           test ! -e staging/private/runtime/market-license.json
           test ! -e staging/private/runtime/openalgo-registry.json
@@ -257,6 +262,7 @@ jobs:
           test -s staging/private/app/src/FileTerminalWorkspaceRepository.php
           test -s staging/private/app/src/TerminalWorkspaceApi.php
           test -s staging/private/app/src/PrivateChartGrantApi.php
+          test -s staging/private/app/src/UpstoxOperatorOAuth.php
           test -s staging/private/app/src/FileMockAccountSelection.php
           test -s staging/private/app/src/AccountApi.php
           test -s staging/private/app/src/SimulatedAccountBars.php
@@ -346,6 +352,7 @@ jobs:
           test -s verified-release/private/app/src/FileTerminalWorkspaceRepository.php
           test -s verified-release/private/app/src/TerminalWorkspaceApi.php
           test -s verified-release/private/app/src/PrivateChartGrantApi.php
+          test -s verified-release/private/app/src/UpstoxOperatorOAuth.php
           test -s verified-release/private/app/src/FileMockAccountSelection.php
           test -s verified-release/private/app/src/AccountApi.php
           test -s verified-release/private/app/src/SimulatedAccountBars.php
@@ -360,6 +367,8 @@ jobs:
           test -s verified-release/private/app/bin/qsyn-openalgo-feed
           test -s verified-release/private/app/bin/qsyn-history-import
           test -s verified-release/private/app/bin/qsyn-private-chart
+          test -s verified-release/private/app/bin/qsyn-upstox-worker
+          test -s verified-release/private/app/tools/upstox-oauth.php
           test -s verified-release/private/app/ops/qsyn-private-feed.supervisor.conf.example
           test -s verified-release/RELEASE.json
           test -s verified-release/private/build/release.json

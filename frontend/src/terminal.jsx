@@ -18,6 +18,7 @@ import {
 import { createWidget } from 'openalgo-charts/widget';
 import 'openalgo-charts/indicators';
 import { QsynWorkspaceFeed } from './terminal-feed.js';
+import { PrivateAuthorizedChartFeed, validatePrivateChartScope } from './private-live-chart.js';
 import { checkPrivateWorkspace, savePrivateWorkspace } from './terminal-file-sync.js';
 import {
   SYMBOLS, DEFAULT_PANES, instrumentFor, searchInstruments, loadBrowserWorkspace,
@@ -26,7 +27,7 @@ import {
 import './terminal.css';
 
 const BASE = '/qsyn/terminal';
-const VIEWS = new Set(['dashboard', 'trading', 'tools']);
+const VIEWS = new Set(['dashboard', 'trading', 'tools', 'private-live']);
 const sections = [
   { label: 'Dashboard', view: 'dashboard', icon: LayoutDashboard },
   { label: 'Trading', view: 'trading', icon: CandlestickChart },
@@ -338,6 +339,79 @@ function ChartWorkspace({ theme }) {
     </div>
   </div>;
 }
+function PrivateMarketPanel({ account, instrument, label }) {
+  const ref = useRef(null);
+  const [status, setStatus] = useState('Connecting private account authorization…');
+  useEffect(() => {
+    const host = ref.current;
+    if (!host) return;
+    const feed = new PrivateAuthorizedChartFeed(account, instrument, setStatus);
+    let widget;
+    try {
+      widget = createWidget(host, {
+        feed, symbol:instrument, exchange:'UPSTOX_PRIVATE', interval:'1m',
+        intervals:['1m'], theme:'dark', persist:false, panels:true,
+      });
+      widget.ready.catch(() => setStatus('Private chart widget unavailable. No demo data substituted.'));
+    } catch {
+      setStatus('Private chart widget unavailable. No demo data substituted.');
+    }
+    return () => {
+      feed.destroy();
+      try { widget?.destroy(); } catch {}
+    };
+  }, [account, instrument]);
+  return <section className="terminal-chart-card">
+    <div className="terminal-card-head"><h2>{label} · <small>{instrument}</small></h2><span className="terminal-chip">PRIVATE ONLY</span></div>
+    <div className="terminal-chart-host" ref={ref} aria-label={'Private '+label+' licensed candlestick chart'} />
+    <p className="terminal-footnote" role="status">{status}</p>
+    <p className="terminal-footnote">Exchange last-trade timestamps. No historical candles until licensed backfill is verified.</p>
+  </section>;
+}
+function PrivateMarketWorkspace() {
+  const [access, setAccess] = useState('checking');
+  const [account, setAccount] = useState('');
+  const [ce, setCe] = useState('');
+  const [pe, setPe] = useState('');
+  const [selected, setSelected] = useState(null);
+  useEffect(() => {
+    const controller = new AbortController();
+    fetch('/qsyn/api/v1/auth/state', {credentials:'same-origin',cache:'no-store',signal:controller.signal})
+      .then(r => r.ok ? r.json() : null)
+      .then(r => {
+        if (!controller.signal.aborted) setAccess(
+          r?.authenticated === true && r?.profile === 'mock-only' ? 'private_test' : 'locked');
+      }).catch(() => { if (!controller.signal.aborted) setAccess('locked'); });
+    return () => controller.abort();
+  }, []);
+  const supported = validatePrivateChartScope(account.trim(), ce.trim()) &&
+    validatePrivateChartScope(account.trim(), pe.trim()) && ce.trim() !== pe.trim();
+  return <div className="terminal-page">
+    <header className="terminal-title"><div><p className="terminal-eyebrow">PRIVATE · READ ONLY</p>
+      <h1>Authorized CE/PE charts</h1><p>Separate from the simulated terminal. No public redistribution or order execution.</p>
+    </div></header>
+    <section className="terminal-surface terminal-live-controls">
+      {access === 'checking' && <p role="status">Checking private identity access…</p>}
+      {access === 'locked' && <p role="status">Unavailable. Requires an authenticated private development identity, verified Upstox entitlements, and an operator-provisioned WSS proxy. Simulation remains on the Trading tab.</p>}
+      {access === 'private_test' && <>
+        <p>Private test identity active. Enter only account and CE/PE keys approved in the private rights file. The grant issuer independently verifies access.</p>
+        <div className="terminal-layout-tools">
+          <label>Approved account alias<input aria-label="Approved account alias" value={account} maxLength={128} onChange={e => setAccount(e.target.value)}/></label>
+          <label>CE instrument key<input aria-label="Private CE key" placeholder="NSE_FO|12345" value={ce} maxLength={32} onChange={e=>setCe(e.target.value)}/></label>
+          <label>PE instrument key<input aria-label="Private PE key" placeholder="NSE_FO|12346" value={pe} maxLength={32} onChange={e=>setPe(e.target.value)}/></label>
+          <button className="terminal-action" type="button" disabled={!supported}
+            onClick={() => setSelected({account:account.trim(), ce:ce.trim(), pe:pe.trim()})}>Connect authorized charts</button>
+          <button className="terminal-action terminal-secondary-action" type="button" onClick={() => setSelected(null)}>Disconnect</button>
+        </div>
+        <p className="terminal-footnote">No broker secret or Upstox OAuth token is entered in the browser. Chart grants expire after 30 seconds and require current server-side rights.</p>
+      </>}
+    </section>
+    {access === 'private_test' && selected && <div className="terminal-private-chart-grid">
+      <PrivateMarketPanel key={selected.account + selected.ce} account={selected.account} instrument={selected.ce} label="Call option (CE)"/>
+      <PrivateMarketPanel key={selected.account + selected.pe} account={selected.account} instrument={selected.pe} label="Put option (PE)"/>
+    </div>}
+  </div>;
+}
 function StatusBox({ capabilities }) {
   const simulated = !capabilities || capabilities.market_data !== 'simulated' ||
     capabilities.execution_enabled !== false || capabilities.live_trading_enabled !== false;
@@ -368,6 +442,7 @@ function Dashboard({ capabilities, openView }) {
           <a className="terminal-quick" href={BASE + '?view=trading'}>Trading charts <CandlestickChart size={18}/></a>
           <a className="terminal-quick" href="/qsyn/studio">Synthetic Studio <Layers size={18}/></a>
           <a className="terminal-quick" href={BASE + '?view=tools'}>Tools & integrations <Wrench size={18}/></a>
+        <a className="terminal-quick" href={BASE + '?view=private-live'}>Private authorized CE/PE charts <LockKeyhole size={18}/></a>
         </section>
       </div>
       <section className="terminal-surface">
@@ -453,7 +528,7 @@ function App() {
         <span className="terminal-current"><current.icon size={16}/>{current.label}</span>
       </div>
       <div className="terminal-top-right">
-        <span className="terminal-environment">● SIMULATED</span>
+        <span className="terminal-environment">{view === 'private-live' ? '● PRIVATE · GATED' : '● SIMULATED'}</span>
         <button type="button" className="terminal-icon" aria-label="Toggle theme"
           onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
           {theme === 'dark' ? <Sun size={18}/> : <Moon size={18}/>}</button>
@@ -471,13 +546,14 @@ function App() {
       onClick={() => setSidebar(false)} />}
     <main id="terminal-main" className="terminal-main">
       <div className="terminal-alert" role="note"><ShieldAlert size={17}/>
-        <span><b>Simulation workspace.</b> No live market data, connected broker or executable orders.</span></div>
+        <span>{view === 'private-live' ? <><b>Restricted market data.</b> No feed is assumed connected; licensed account login and WSS proxy required. No orders.</> : <><b>Simulation workspace.</b> No live market data, connected broker or executable orders.</>}</span></div>
       {view === 'dashboard' && <Dashboard capabilities={capabilities} openView={openView}/>}
       {view === 'trading' && <div className="terminal-page">
         <header className="terminal-title"><div><p className="terminal-eyebrow">MARKET WORKSPACE</p><h1>Trading charts</h1>
           <p>OpenAlgo Charts 2.6.0 with QSYN's existing simulated PHP data adapter.</p></div></header>
         <ChartWorkspace theme={theme}/></div>}
       {view === 'tools' && <Tools/>}
+      {view === 'private-live' && <PrivateMarketWorkspace/>}
     </main>
     <nav className="terminal-bottom-nav" aria-label="Mobile quick navigation">
       {sections.map(s=><button type="button" key={s.view}

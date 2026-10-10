@@ -14,6 +14,8 @@ pub mod authorized_ingest;
 pub mod history_backfill;
 pub mod private_chart_hub;
 pub mod upstox_v3;
+pub mod upstox_worker;
+pub mod oms_live_gate;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Leg {

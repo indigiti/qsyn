@@ -52,6 +52,9 @@ jobs:
           python3 apps/web-php/tests/TerminalWorkspaceHttpSmoke.py
           php -l apps/web-php/src/PrivateChartGrantApi.php
           python3 apps/web-php/tests/PrivateChartGrantHttpSmoke.py
+          php -l apps/web-php/src/UpstoxOperatorOAuth.php
+          php -l apps/web-php/tools/upstox-oauth.php
+          php apps/web-php/tests/UpstoxOperatorOAuthTest.php
           php -l apps/web-php/src/FileMockAccountSelection.php
           php -l apps/web-php/src/AccountApi.php
           php -l apps/web-php/src/SimulatedAccountBars.php
@@ -185,7 +188,7 @@ jobs:
         run: node tests/browser-studio-smoke.mjs
         working-directory: frontend
       - name: Validate strict browser workspace state and simulated instrument whitelist
-        run: node --test tests/terminal-workspace.test.mjs tests/terminal-file-sync.test.mjs
+        run: node --test tests/terminal-workspace.test.mjs tests/terminal-file-sync.test.mjs tests/private-live-chart.test.mjs
         working-directory: frontend
       - name: Validate database-free OpenAlgo-style terminal in desktop/mobile Chromium
         run: node tests/browser-terminal-smoke.mjs

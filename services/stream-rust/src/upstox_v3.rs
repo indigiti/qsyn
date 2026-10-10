@@ -284,6 +284,19 @@ pub async fn observe_one_use_session(
     guid: &str,
     limit_seconds: u64,
 ) -> io::Result<V3SessionReport> {
+    observe_one_use_session_with_sink(redirect, decoder, ingest, guid, limit_seconds, None).await
+}
+
+/// Optional operator-private Unix datagram fanout. Only forward AFTER the
+/// private durable WAL acknowledges and CURRENT rights are re-read.
+pub async fn observe_one_use_session_with_sink(
+    redirect: &str,
+    decoder: &mut UpstoxV3Decoder,
+    ingest: &mut crate::authorized_ingest::PrivatePersistentIngest,
+    guid: &str,
+    limit_seconds: u64,
+    sink: Option<(&std::path::Path, &std::path::Path)>,
+) -> io::Result<V3SessionReport> {
     if !(1..=MAX_SESSION_SECONDS).contains(&limit_seconds) {
         return Err(denied("observation_duration_unbounded"));
     }
@@ -318,7 +331,29 @@ pub async fn observe_one_use_session(
                 report.frames += 1;
                 for quote in quotes {
                     // Durable WAL checks persistence rights AGAIN; then fsyncs.
-                    ingest.ingest(&quote, now)?;
+                    // Fail closed when rights expire, owner/account mismatch,
+                    // or legal display permission is revoked mid-session.
+                    if let Some((rights_path, socket_path)) = sink {
+                        let rights = crate::private_chart_ws::load_rights(rights_path)?;
+                        if rights.tenant != quote.scope.tenant_id
+                            || rights.account != quote.scope.account_id
+                            || rights.broker != "upstox"
+                            || rights.license_id != quote.scope.entitlement_id
+                            || !rights.broker_session_verified
+                            || !rights.can_display_to_this_user
+                            || rights.valid_until_ms <= now
+                            || !rights.instruments.contains(&quote.instrument_id) {
+                            return Err(denied("v3_current_chart_rights_revoked"));
+                        }
+                        ingest.ingest(&quote, now)?;
+                        let packet = serde_json::to_vec(&quote)?;
+                        if packet.len() > 4095 { return Err(denied("v3_private_packet_oversize")); }
+                        let unix = tokio::net::UnixDatagram::unbound()?;
+                        unix.send_to(&packet, socket_path).await
+                            .map_err(|_| denied("v3_private_chart_sink_unavailable"))?;
+                    } else {
+                        ingest.ingest(&quote, now)?;
+                    }
                     report.persisted_quotes += 1;
                     report.quote_candidates += 1;
                 }
