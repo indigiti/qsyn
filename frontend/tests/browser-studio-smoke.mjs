@@ -75,16 +75,19 @@ try {
   }
   await page.screenshot({ path: resolve(images, 'studio-chart-first-light.png'), fullPage: true });
   await page.locator('#toolbar-builder').click();
-  if (!(await page.locator('#strategy-drawer').isVisible())) {
-    throw new Error('Strategy builder drawer failed to open');
-  }
+  await page.waitForFunction(() => document.body.classList.contains('drawer-open') &&
+    document.getElementById('strategy-drawer')?.getAttribute('aria-hidden') === 'false' &&
+    getComputedStyle(document.getElementById('strategy-drawer')).visibility === 'visible',
+    null, { timeout: 5000 });
+  await page.locator('#strategy-drawer').waitFor({ state: 'visible', timeout: 5000 });
   if ((await page.locator('#toolbar-builder').getAttribute('aria-expanded')) !== 'true') {
     throw new Error('Strategy builder accessibility state was not updated');
   }
   await page.keyboard.press('Escape');
-  if (await page.locator('#strategy-drawer').isVisible()) {
-    throw new Error('Escape failed to close options builder');
-  }
+  await page.waitForFunction(() => !document.body.classList.contains('drawer-open') &&
+    document.getElementById('strategy-drawer')?.getAttribute('aria-hidden') === 'true',
+    null, { timeout: 5000 });
+  await page.locator('#strategy-drawer').waitFor({ state: 'hidden', timeout: 5000 });
   await page.locator('#toolbar-theme').click();
   await page.waitForFunction(() =>
     document.documentElement.dataset.theme === 'dark'
