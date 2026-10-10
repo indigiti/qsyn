@@ -1,7 +1,11 @@
 # QSYN Phase 1.6 — Private Security Gate and Staging Acceptance
 
-**Status:** source + CI validation only. QSYN Cloudways staging stays on the
-verified #58 runtime. Do **not** deploy or switch on the Phase 1 test-user
+**Status:** source + CI validation only. The operator reports QSYN Release
+#72, source <<BT>>30ae651feddba7f845b143859ee45efec17eb0ee<<BT>>, deployed on
+Cloudways; its active Rust commit has **not** been independently rechecked
+after that deployment. Phase 1.6 hardening is on main as
+<<BT>>371a270147faf69f9581d814b49e4bc71cefed70<<BT>> (Release #76),
+which is **not** the reported deployed version. Do **not** deploy or switch on the Phase 1 test-user
 login, mock broker accounts or dashboard at \`stage.digiti.in\`. There is no
 real Upstox session, market-feed entitlement or trading permission.
 
@@ -86,3 +90,59 @@ for disposable development fixtures, not regulatory audit compliance.
 The CI green status and local Chromium tests do not constitute
 production approval, penetration testing, compliance certification
 or an actual Cloudways staging security assessment.
+
+## Phase 1.7 — Public negative tests before private acceptance
+
+This milestone provides **verification tooling**, not private ingress
+provisioning. The public probe only makes anonymous read-only GET requests,
+sends no passwords, and makes no Cloudways changes.
+
+Run from a machine able to reach the deployed public QSYN endpoint:
+
+```sh
+python3 apps/web-php/tests/PublicStageProbe.py \
+  --url https://stage.digiti.in/qsyn \
+  --expected-commit 30ae651feddba7f845b143859ee45efec17eb0ee
+```
+
+Alternatively manually start **GitHub Actions → QSYN Public Staging
+Read-Only Acceptance → Run workflow**, entering the **full deployed
+runtime SHA**, not the current main commit.
+
+The probe fails unless all of these checks hold:
+
+- Public QSYN health responds `status=ok` over HTTPS.
+- Public sample candles remain explicitly `simulated`.
+- Rust diagnostics agree with the **exact** deployed commit when one
+  is supplied and report `trading_enabled=false` and
+  `upstox_connected=false`.
+- Public `GET /qsyn/api/v1/auth/state`,
+  `GET /qsyn/api/v1/accounts/list`, and `GET /qsyn/app`
+  return a denial (401/403/404/503), never an exposed mock session,
+  account list, login or dashboard.
+
+This script performs **no** login attempts, POSTs, administrator actions,
+broker queries or configuration updates. A failure can reflect staging
+network inaccessibility as well as failed security conditions. Passing
+public checks cannot establish private VPN or firewall enforcement.
+
+The public staging endpoints were not reachable from the assistant's
+web access during the #72 deployment report. **External acceptance
+remains unverified until actual probe output has been reviewed**.
+
+## Private environment handoff — outside GitHub
+
+Before enabling any Phase 1 account feature, an infrastructure operator
+must provision a **separate non-public test hostname** with HTTPS and
+a VPN or explicit ingress IP allowlist enforced outside PHP. A device
+outside that network must be independently shown unable to reach the
+private login, dashboard and account API.
+
+Only after those checks and express operator approval should a more
+recent hardened artifact be considered and the private environment's
+identity configuration reviewed. Never enable the Phase 1 switches
+on public `stage.digiti.in`. Keep real Upstox connectivity and
+trading disabled.
+
+GitHub CI and a release artifact do not prove the corresponding source
+is running on Cloudways.

@@ -1,0 +1,38 @@
+name: QSYN Public Staging Read-Only Acceptance
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_runtime_commit:
+        description: 'Exact full 40-character SHA confirmed as deployed by DigiOps (not current main)'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: qsyn-stage-readonly-acceptance
+  cancel-in-progress: false
+
+jobs:
+  public-negative:
+    name: Verify staging features stay off and runtime matches deployment
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      EXPECTED_RUNTIME_SHA: ${{ inputs.expected_runtime_commit }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run read-only public safety probe
+        run: |
+          set -euo pipefail
+          python3 apps/web-php/tests/PublicStageProbe.py \
+            --url 'https://stage.digiti.in/qsyn' \
+            --expected-commit "$EXPECTED_RUNTIME_SHA"
+      - name: Explain what this does not verify
+        if: success()
+        run: |
+          echo 'Public disabled-feature probes passed.'
+          echo 'This does NOT verify private VPN/IP restrictions or authorize login/dashboard enablement.'
+          echo 'Use an independently isolated hostname before any private acceptance.'
