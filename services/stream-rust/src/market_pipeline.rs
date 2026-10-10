@@ -40,7 +40,7 @@ pub struct WeightedLeg {
     pub quantity: f64,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Candle {
     pub open_time_ms: u64,
     pub open: f64,
