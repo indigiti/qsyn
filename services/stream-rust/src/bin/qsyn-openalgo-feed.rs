@@ -204,7 +204,7 @@ async fn main() {
         plan.scope.entitlement_id=approved.license_id.clone();
         let grant=PrivateIngestApproval{
             scope:plan.scope.clone(),
-            approved_instruments:approved.instruments,
+            approved_instruments:approved.instruments.clone(),
             licensed_persistence:approved.persistence_approved,
             broker_session_verified:approved.broker_session_verified,
             expires_ms:approved.valid_until_ms,
