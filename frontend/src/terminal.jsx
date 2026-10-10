@@ -18,9 +18,10 @@ import {
 import { createWidget } from 'openalgo-charts/widget';
 import 'openalgo-charts/indicators';
 import { QsynWorkspaceFeed } from './terminal-feed.js';
+import { checkPrivateWorkspace, savePrivateWorkspace } from './terminal-file-sync.js';
 import {
   SYMBOLS, DEFAULT_PANES, instrumentFor, searchInstruments, loadBrowserWorkspace,
-  storeBrowserWorkspace, saveNamedLayout,
+  storeBrowserWorkspace, saveNamedLayout, normalizeWorkspace,
 } from './terminal-workspace.js';
 import './terminal.css';
 
@@ -105,6 +106,9 @@ function browserStorage() {
 }
 function ChartWorkspace({ theme }) {
   const [saved, setSaved] = useState(() => loadBrowserWorkspace(browserStorage()));
+  const [scope, setScope] = useState('browser');
+  const [remote, setRemote] = useState({ status: 'checking' });
+  const [remoteBusy, setRemoteBusy] = useState(false);
   const [panes, setPanes] = useState(DEFAULT_PANES);
   const [active, setActive] = useState('primary');
   const [search, setSearch] = useState('');
@@ -113,6 +117,55 @@ function ChartWorkspace({ theme }) {
   const [revision, setRevision] = useState(0);
   const [notice, setNotice] = useState('Watchlist and layouts stay in this browser only.');
   const chartRefs = useRef(new Map());
+  useEffect(() => {
+    const controller = new AbortController();
+    checkPrivateWorkspace(fetch, controller.signal).then(next => {
+      if (!controller.signal.aborted) setRemote(next);
+    });
+    return () => controller.abort();
+  }, []);
+  async function refreshRemote() {
+    setRemoteBusy(true);
+    try {
+      const result = await checkPrivateWorkspace(fetch);
+      setRemote(result);
+      setNotice(result.status === 'ready'
+        ? 'Private file status refreshed. Loading it is optional.'
+        : 'Private file storage is unavailable; browser workspace remains unchanged.');
+    } finally { setRemoteBusy(false); }
+  }
+  function loadPrivate() {
+    if (remote.status !== 'ready') return;
+    // Keep owner-scoped data IN MEMORY. Never save private content into the
+    // shared, unscoped localStorage key, including on logout or user switch.
+    setSaved(remote.workspace);
+    setScope('private');
+    setPanes(DEFAULT_PANES);
+    setSnapshots({});
+    setLayoutName('');
+    setRevision(v => v + 1);
+    setNotice('Private workspace loaded for this authenticated test session. Changes need explicit Save private file.');
+  }
+  function returnToBrowser() {
+    setSaved(loadBrowserWorkspace(browserStorage()));
+    setScope('browser');
+    setPanes(DEFAULT_PANES);
+    setSnapshots({});
+    setLayoutName('');
+    setRevision(v => v + 1);
+    setNotice('Browser workspace restored. Private data was not copied to browser storage.');
+  }
+  async function savePrivate() {
+    if (remote.status !== 'ready' || !remote.canWrite || remoteBusy) return;
+    setRemoteBusy(true);
+    try {
+      const result = await savePrivateWorkspace(fetch, remote, saved);
+      setRemote(result);
+      setNotice('Private file saved at revision ' + result.revision + ' · development identities only.');
+    } catch (error) {
+      setNotice(error?.message || 'Private workspace save unavailable.');
+    } finally { setRemoteBusy(false); }
+  }
   const onMount = useCallback((id, widget) => {
     if (widget) chartRefs.current.set(id, widget);
     else chartRefs.current.delete(id);
@@ -120,8 +173,13 @@ function ChartWorkspace({ theme }) {
 
   function write(next) {
     try {
-      const stored = storeBrowserWorkspace(browserStorage(), next);
-      setSaved(stored);
+      if (scope === 'private') {
+        // Changes remain in memory until an explicit authenticated CAS write.
+        setSaved(normalizeWorkspace(next));
+        setNotice('Unsaved private workspace changes. Click Save private file.');
+      } else {
+        setSaved(storeBrowserWorkspace(browserStorage(), next));
+      }
       return true;
     } catch (error) {
       setNotice(error.message);
@@ -159,7 +217,7 @@ function ChartWorkspace({ theme }) {
     }
     try {
       const next = saveNamedLayout(saved, { name, panes, chartStates });
-      if (write(next)) setNotice('Layout saved in this browser. No server synchronization.');
+      if (write(next) && scope === 'browser') setNotice('Layout saved in this browser. No server synchronization.');
     } catch (error) { setNotice(error.message); }
   }
   function openLayout(name) {
@@ -170,7 +228,7 @@ function ChartWorkspace({ theme }) {
     setActive('primary');
     setLayoutName(layout.name);
     setRevision(v => v + 1);
-    setNotice('Opened local layout ' + layout.name + '.');
+    setNotice('Opened ' + scope + ' layout ' + layout.name + '.');
   }
   function deleteLayout() {
     const next = saved.layouts.filter(l => l.name !== layoutName);
@@ -180,7 +238,7 @@ function ChartWorkspace({ theme }) {
     }
     if (write({ ...saved, layouts: next })) {
       setLayoutName('');
-      setNotice('Local layout removed.');
+      if (scope === 'browser') setNotice('Browser layout removed.');
     }
   }
   const searchResults = searchInstruments(search);
@@ -208,6 +266,27 @@ function ChartWorkspace({ theme }) {
         <button type="button" className="terminal-icon terminal-delete-layout" aria-label="Delete saved layout"
           onClick={deleteLayout}><Trash2 size={16}/></button>
       </div>
+      <div className="terminal-file-controls" aria-label="Private file workspace controls">
+        <span className="terminal-file-status">
+          Storage: {scope === 'private' ? 'private session memory · save manually' : 'browser only'}
+          {' · '}{remote.status === 'ready' ? 'private development file available'
+            : remote.status === 'login_required' ? 'test login required'
+            : remote.status === 'checking' ? 'checking private storage'
+            : 'private sync disabled'}
+        </span>
+        {remote.status === 'ready' && <>
+          <button type="button" className="terminal-action terminal-secondary-action"
+            onClick={loadPrivate} disabled={remoteBusy}>Load private file</button>
+          {remote.canWrite && <button type="button" className="terminal-action terminal-secondary-action"
+            onClick={savePrivate} disabled={remoteBusy}>Save private file</button>}
+          {scope === 'private' && <button type="button" className="terminal-action terminal-secondary-action"
+            onClick={returnToBrowser}>Return to browser</button>}
+        </>}
+        {remote.status !== 'checking' && <button type="button" className="terminal-icon"
+          disabled={remoteBusy} aria-label="Refresh private file status" onClick={refreshRemote}>
+          <Activity size={15}/>
+        </button>}
+      </div>
       <p className="terminal-footnote" role="status">{notice}</p>
     </section>
     <div className="terminal-workspace-grid">
@@ -227,7 +306,7 @@ function ChartWorkspace({ theme }) {
         </div>)}
       </div>
       <aside className="terminal-watchlist terminal-surface" aria-label="Browser watchlist">
-        <div className="terminal-card-head"><h2>Watchlist</h2><span className="terminal-chip">Browser only</span></div>
+        <div className="terminal-card-head"><h2>Watchlist</h2><span className="terminal-chip">{scope === 'private' ? 'Private session' : 'Browser only'}</span></div>
         <p className="terminal-footnote">Select a row to chart in the active panel. No live quotes.</p>
         <div className="terminal-watch-rows">
           {saved.watchlist.length === 0 && <p className="terminal-footnote">Your watchlist is empty.</p>}
