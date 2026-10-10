@@ -54,6 +54,60 @@ if ($route === '/qsyn/api/v1/diagnostics/rust' || $route === '/api/v1/diagnostic
     respond(\QSYN\Diagnostics\RustProbe::inspect());
 }
 
+// Integrated Options Studio is a public, read-only simulation, NOT a broker API.
+// It is independent of disabled-by-default user/account/fixture features.
+if ($route === '/qsyn/api/v1/studio/market' || $route === '/qsyn/api/v1/studio/bars') {
+    if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'GET') {
+        header('Allow: GET');
+        respond(['error' => 'method_not_allowed'], 405);
+    }
+    $source = dirname(__DIR__) . '/src/SimulatedOptionsStudio.php';
+    if (!is_file($source)) {
+        $source = dirname(__DIR__, 2) . '/private_html/qsyn/app/src/SimulatedOptionsStudio.php';
+    }
+    if (!is_file($source)) {
+        respond(['error' => 'simulated_studio_unavailable'], 503);
+    }
+    require_once $source;
+    try {
+        $underlying = $_GET['underlying'] ?? 'NIFTY';
+        if (!is_string($underlying)) {
+            respond(['error' => 'invalid_demo_underlying'], 422);
+        }
+        if ($route === '/qsyn/api/v1/studio/market') {
+            respond(\QSYN\Studio\SimulatedOptionsStudio::market($underlying));
+        }
+        $expiry = $_GET['expiry'] ?? 'W1';
+        $interval = $_GET['interval'] ?? '1m';
+        $legs = $_GET['legs'] ?? '';
+        if (!is_string($expiry) || !is_string($interval) || !is_string($legs)
+            || strlen($legs) > 1400) {
+            respond(['error' => 'invalid_studio_parameters'], 422);
+        }
+        respond(\QSYN\Studio\SimulatedOptionsStudio::bars($underlying, $expiry, $interval, $legs));
+    } catch (\InvalidArgumentException $error) {
+        // Stable non-sensitive validation codes only; never echo arbitrary request data.
+        respond(['error' => $error->getMessage()], 422);
+    }
+}
+
+if ($route === '/qsyn/studio' || $route === '/qsyn/studio/') {
+    if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'GET') {
+        header('Allow: GET');
+        respond(['error' => 'method_not_allowed'], 405);
+    }
+    header('Content-Type: text/html; charset=utf-8');
+    header('Cache-Control: private, no-store');
+    header('X-Frame-Options: DENY');
+    header('X-Robots-Tag: noindex, nofollow');
+    header('Content-Security-Policy: default-src ' . "'self'" .
+        '; script-src ' . "'self'" . '; style-src ' . "'self'" .
+        '; connect-src ' . "'self'" . '; img-src ' . "'self' data:" .
+        '; frame-ancestors ' . "'none'" . ';');
+    require __DIR__ . '/studio.php';
+    exit;
+}
+
 // Deliberately disabled-by-default QSYN *user* identity test API.
 // Separate cookie and code from the Rust operations administrator.
 if (preg_match('#^/qsyn/api/v1/auth/(state|me|login|logout)$#', $route, $identityMatch)) {
@@ -322,7 +376,7 @@ main{padding:20px;max-width:1600px;margin:auto} h1{font-size:20px;font-weight:60
 </style>
 </head>
 <body>
-<header><strong>QSYN</strong><span class="tag">Phase 0 · Simulated data</span><a href="/qsyn/admin/rust" style="color:#a9caff;margin-left:auto">Rust administration</a></header>
+<header><strong>QSYN</strong><span class="tag">Demo · Simulated data</span><a href="/qsyn/studio" style="color:#79e1d0;font-weight:700;margin-left:auto">Open Options &amp; Synthetic Studio ↗</a><a href="/qsyn/admin/rust" style="color:#a9caff">Rust administration</a></header>
 <main>
 <div class="chart-top">
   <h1>Chart terminal foundation</h1>
