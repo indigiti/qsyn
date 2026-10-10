@@ -14,6 +14,8 @@ const intervals = ['1m', '5m', '15m'];
 let state = { underlying: 'NIFTY', expiry: 'W1', interval: '1m', legs: [] };
 let market = null;
 let currentBars = null;
+const mountedCharts = new Map();
+const chartGenerations = new Map();
 
 function status(message, error = false) {
   $('status').textContent = message;
@@ -149,6 +151,13 @@ function sourceFeed(symbol, bars) {
 }
 async function chart(rootId, symbol, bars) {
   const root = $(rootId);
+  const generation = (chartGenerations.get(rootId) || 0) + 1;
+  chartGenerations.set(rootId, generation);
+  const previous = mountedCharts.get(rootId);
+  if (previous) {
+    previous.destroy(); // release canvas, observers, listeners and replay frames
+    mountedCharts.delete(rootId);
+  }
   root.replaceChildren();
   if (!bars.length || bars.some(b => !(b.low <= Math.min(b.open, b.close)
     && b.high >= Math.max(b.open, b.close)))) {
@@ -159,9 +168,23 @@ async function chart(rootId, symbol, bars) {
     interval: state.interval, theme: 'dark',
     navigation: { defaultVisibleBars: 90, mousePan: 'horizontal' },
   });
-  await widget.ready;
-  return widget;
+  mountedCharts.set(rootId, widget);
+  try {
+    await widget.ready;
+    if (generation !== chartGenerations.get(rootId)) return null;
+    return widget;
+  } catch (error) {
+    if (generation !== chartGenerations.get(rootId)) return null;
+    widget.destroy();
+    mountedCharts.delete(rootId);
+    throw error;
+  }
 }
+window.addEventListener('pagehide', () => {
+  for (const widget of mountedCharts.values()) widget.destroy();
+  mountedCharts.clear();
+});
+
 function drawPayoff(points) {
   const canvas = $('payoff');
   const width = Math.max(240, Math.floor(canvas.clientWidth));
@@ -226,16 +249,21 @@ async function renderStrategy() {
   $('basket-title').textContent = state.underlying + ' · ' + state.expiry + ' · '
     + state.legs.map(l => l.type + ' ' + l.strike).join(' + ');
   drawPayoff(data.payoff);
-  for (let i = 0; i < 2; ++i) {
-    if (data.legs[i]) {
-      const leg = data.legs[i];
-      $('leg-title-' + i).textContent = leg.side + ' ' + leg.qty + ' × '
-        + state.underlying + ' ' + leg.strike + ' ' + leg.type;
-      await chart('leg-chart-' + i, 'QSYN-LEG-' + i, leg.bars);
-    } else {
-      $('leg-title-' + i).textContent = 'No second leg';
-      $('leg-chart-' + i).textContent = 'Add another simulated leg to compare option charts.';
+  for (let i = 0; i < 4; ++i) {
+    const panel = $('leg-panel-' + i);
+    const leg = data.legs[i];
+    panel.hidden = !leg;
+    if (!leg) {
+      const previous = mountedCharts.get('leg-chart-' + i);
+      if (previous) {
+        previous.destroy();
+        mountedCharts.delete('leg-chart-' + i);
+      }
+      continue;
     }
+    $('leg-title-' + i).textContent = leg.side + ' ' + leg.qty + ' × '
+      + state.underlying + ' ' + leg.strike + ' ' + leg.type;
+    await chart('leg-chart-' + i, 'QSYN-LEG-' + i, leg.bars);
   }
   await chart('basket-chart', 'QSYN-PREMIUM-DEMO', data.bars);
   bindStudioLab({
