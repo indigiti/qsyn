@@ -95,7 +95,8 @@ if (preg_match('/^[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?(?::[0-9]{1,5})?$/D',
     || in_array($hostname, [
         'stage.digiti.in', 'digiti.in', 'www.digiti.in', 'localhost',
     ], true)
-    || filter_var($hostname, FILTER_VALIDATE_IP) !== false) {
+    || filter_var($hostname, FILTER_VALIDATE_IP) !== false
+    || filter_var($hostname, FILTER_VALIDATE_DOMAIN, FILTER_FLAG_HOSTNAME) === false) {
     preflightFail('invalid_or_public_private_host');
 }
 
