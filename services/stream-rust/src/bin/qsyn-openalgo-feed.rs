@@ -2,8 +2,11 @@
 //! This is a *private diagnostic*, not public live charting or trade routing.
 use qsyn_stream::market_pipeline::Scope;
 use qsyn_stream::openalgo_stream::{probe, Subscription};
-use qsyn_stream::private_live_pipeline::{observe, PrivateFeedPlan};
+use qsyn_stream::private_live_pipeline::{observe, observe_with_sink, PrivateFeedPlan};
+use qsyn_stream::authorized_ingest::{PrivateIngestApproval,PrivatePersistentIngest};
 use serde_json::{json, Value};
+use serde::Deserialize;
+use std::time::{SystemTime, UNIX_EPOCH};
 use std::fs;
 use std::io;
 use std::path::Path;
@@ -94,6 +97,40 @@ fn subscriptions(csv: &str) -> io::Result<Vec<Subscription>> {
     }).collect()
 }
 
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct FeedStorageApproval {
+    schema:String, tenant:String, owner:String, account:String, broker:String,
+    license_id:String, instruments:Vec<String>,
+    persistence_approved:bool, broker_session_verified:bool,
+    valid_until_ms:u64, archive_root:String,
+}
+fn now_ms()->io::Result<u64>{
+    Ok(SystemTime::now().duration_since(UNIX_EPOCH)
+        .map_err(|_|rejected())?.as_millis() as u64)
+}
+fn read_storage_approval(
+    tenant:&str,owner:&str,account:&str,broker:&str,
+    subscriptions:&[Subscription],
+)->io::Result<FeedStorageApproval>{
+    let path=std::env::var("QSYN_PRIVATE_FEED_APPROVAL_FILE").map_err(|_|rejected())?;
+    let config:FeedStorageApproval=serde_json::from_slice(&private_file(&path)?)
+        .map_err(|_|rejected())?;
+    if config.schema!="QSYN-PRIVATE-PERSISTENCE-ATTESTATION/1"
+        || !config.persistence_approved || !config.broker_session_verified
+        || config.tenant != tenant || config.owner != owner
+        || config.account != account || config.broker != broker
+        || !safe_id(&config.license_id) || config.valid_until_ms<=now_ms()?
+        || !std::path::Path::new(&config.archive_root).is_absolute()
+        || subscriptions.iter().any(|sub| {
+            !config.instruments.contains(&format!("{}|{}",sub.exchange,sub.symbol))
+        }) {
+        return Err(rejected());
+    }
+    Ok(config)
+}
+
 #[tokio::main]
 async fn main() {
     let result = async {
@@ -108,7 +145,7 @@ async fn main() {
         let [cmd, tenant, owner, account, instruments] = args.as_slice() else {
             return Err(rejected());
         };
-        if !["inspect", "observe"].contains(&cmd.as_str()) || ![tenant, owner, account].iter().all(|x| safe_id(x)) {
+        if !["inspect", "observe", "collect"].contains(&cmd.as_str()) || ![tenant, owner, account].iter().all(|x| safe_id(x)) {
             return Err(rejected());
         }
         let (port, broker, api_key) = config(tenant, owner, account)?;
@@ -135,8 +172,48 @@ async fn main() {
             ws_port: port, broker, scope, subscriptions: subs, legs,
             max_skew_ms: 500, observe_seconds: 120, max_reconnects: 4,
         };
-        let report = observe(&plan, &api_key).await?;
-        Ok(json!(report))
+        if cmd == "observe" {
+            let report = observe(&plan, &api_key).await?;
+            return Ok(json!(report));
+        }
+        if std::env::var("QSYN_PRIVATE_FEED_PERSIST_ENABLED").as_deref()!=Ok("1"){
+            return Err(rejected());
+        }
+        let approved=read_storage_approval(tenant,owner,account,&plan.broker,&plan.subscriptions)?;
+        plan.scope.entitlement_id=approved.license_id.clone();
+        let grant=PrivateIngestApproval{
+            scope:plan.scope.clone(),
+            approved_instruments:approved.instruments,
+            licensed_persistence:approved.persistence_approved,
+            broker_session_verified:approved.broker_session_verified,
+            expires_ms:approved.valid_until_ms,
+            max_delay_ms:5000,
+        };
+        let mut collector=PrivatePersistentIngest::open(
+            Path::new(&approved.archive_root),grant,now_ms()?)?;
+        let mut observations=0u64;
+        let mut connections=0u64;
+        // The operator's process supervisor restarts unexpected failures.
+        // This long-running collector stops at attestation expiry, and never
+        // silently renews broker exchange/data use permissions.
+        loop {
+            if now_ms()? >= approved.valid_until_ms {break;}
+            let run=observe_with_sink(&plan,&api_key,|candidate|{
+                collector.ingest(candidate,now_ms()?)?;
+                Ok(())
+            }).await?;
+            observations+=run.synchronized_updates;
+            connections+=u64::from(run.authenticated_sessions);
+            tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+        }
+        Ok(json!({
+            "schema":"QSYN-PRIVATE-PERSISTENT-COLLECTOR/1",
+            "records_synced":collector.stored,
+            "synchronized_updates":observations,
+            "authenticated_sessions":connections,
+            "private_only":true,"public_live_charts":false,
+            "broker_order_execution":false
+        }))
     }.await;
     match result {
         Ok(data) => println!("{data}"),
