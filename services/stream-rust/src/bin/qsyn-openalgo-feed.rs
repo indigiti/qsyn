@@ -168,7 +168,7 @@ async fn main() {
             instrument_id: format!("{}|{}", s.exchange, s.symbol),
             quantity: 1.0,
         }).collect();
-        let plan = PrivateFeedPlan {
+        let mut plan = PrivateFeedPlan {
             ws_port: port, broker, scope, subscriptions: subs, legs,
             max_skew_ms: 500, observe_seconds: 120, max_reconnects: 4,
         };
