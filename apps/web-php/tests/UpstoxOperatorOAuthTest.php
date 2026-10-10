@@ -46,6 +46,20 @@ try {
     }
     ok($api->status()['token_stored'] === false);
 
+    // A provider-supplied token_type must not silently permit other schemes.
+    $url = $api->begin('upstoxclient123', 'https://example.test/qsyn/upstox-callback', 'USER123');
+    parse_str((string) parse_url($url, PHP_URL_QUERY), $query);
+    try {
+        $api->finish($query['state'], 'single-use-code', 'supersecret-client',
+            static fn (): array => ['user_id' => 'USER123', 'token_type' => 'Basic',
+                'access_token' => str_repeat('x', 80)]);
+        throw new RuntimeException('unsupported_token_scheme_accepted');
+    } catch (RuntimeException $ex) {
+        ok($ex->getMessage() === 'oauth_broker_identity_not_verified');
+    }
+
+    // Official Get Token API response documents access_token/user_id but does
+    // not promise a token_type property: a valid response must still work.
     $url = $api->begin('upstoxclient123', 'https://example.test/qsyn/upstox-callback', 'USER123');
     parse_str((string) parse_url($url, PHP_URL_QUERY), $query);
     $secret = 'server-secret-not-for-client';
@@ -55,7 +69,7 @@ try {
             ok($form['client_secret'] === $secret);
             ok($form['grant_type'] === 'authorization_code');
             ok($form['code'] === 'one-use-code123');
-            return ['user_id' => 'USER123', 'token_type' => 'Bearer',
+            return ['user_id' => 'USER123',
                 'access_token' => str_repeat('t', 96)];
         });
     ok($result['account_verified'] && $result['trading_enabled'] === false);

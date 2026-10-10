@@ -138,7 +138,9 @@ final class UpstoxOperatorOAuth
         if (!is_array($result) || ($result['user_id'] ?? null) !== $pending['expected_user_id']
             || !is_string($result['access_token'] ?? null)
             || !preg_match('/^[A-Za-z0-9._~+\/=\-]{20,8192}$/D', $result['access_token'])
-            || !in_array($result['token_type'] ?? null, ['Bearer', 'bearer'], true)) {
+            || (array_key_exists('token_type', $result)
+                && (!is_string($result['token_type'])
+                    || strcasecmp($result['token_type'], 'Bearer') !== 0))) {
             throw new RuntimeException('oauth_broker_identity_not_verified');
         }
         // No refresh_token assumption: Upstox auth codes are one-use.
