@@ -10,7 +10,7 @@ fn main() {
             let settings = WorkerSettings::from_private_file(Path::new(path));
             match (op.as_str(), settings) {
                 ("check", Ok(_)) => {
-                    println!(r#"{"status":"ready_for_operator_review","connection_tested":false,"market_feed":"not_verified","trading_enabled":false}"#);
+                    println!("{}", r#"{"status":"ready_for_operator_review","connection_tested":false,"market_feed":"not_verified","trading_enabled":false}"#);
                     Ok(())
                 }
                 ("run", Ok(settings)) if std::env::var("QSYN_UPSTOX_WORKER_ENABLE").as_deref() == Ok("1")
