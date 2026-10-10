@@ -101,7 +101,7 @@ if ($route === '/qsyn/studio' || $route === '/qsyn/studio/') {
     header('X-Frame-Options: DENY');
     header('X-Robots-Tag: noindex, nofollow');
     header('Content-Security-Policy: default-src ' . "'self'" .
-        '; script-src ' . "'self'" . '; style-src ' . "'self'" .
+        '; script-src ' . "'self'" . '; style-src ' . "'self' 'unsafe-inline'" .
         '; connect-src ' . "'self'" . '; img-src ' . "'self' data:" .
         '; frame-ancestors ' . "'none'" . ';');
     require __DIR__ . '/studio.php';
