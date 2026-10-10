@@ -58,7 +58,7 @@ fn valid_quote(quote: &NormalizedQuote) -> bool {
         && quote.price > 0.0
 }
 
-pub(crate) fn root_check(root: &Path) -> io::Result<()> {
+pub fn root_check(root: &Path) -> io::Result<()> {
     if !root.is_absolute() || root.as_os_str().is_empty() {
         return Err(io::Error::new(io::ErrorKind::PermissionDenied, "absolute_private_root_required"));
     }
