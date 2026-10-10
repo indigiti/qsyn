@@ -38,7 +38,7 @@ final class PrivateOpenAlgoReader
     public static function capabilities(): array
     {
         return array_merge(array_keys(self::SIMPLE), array_keys(self::SYMBOL),
-            ['history', 'expiry', 'chain', 'search', 'multiquotes']);
+            ['history', 'expiry', 'chain', 'search', 'multiquotes', 'order-status']);
     }
 
     /** @return array<string, mixed> */
@@ -60,6 +60,18 @@ final class PrivateOpenAlgoReader
             $path = self::SYMBOL[$operation];
             self::keys($args, ['symbol', 'exchange']);
             self::symbol($args['symbol'], $args['exchange']);
+            $body = $args;
+        } elseif ($operation === 'order-status') {
+            // OpenAlgo orderstatus is POST transport with READ semantics.
+            // Never expose an order-mutation API from this helper.
+            $path = 'orderstatus';
+            self::keys($args, ['strategy', 'orderid']);
+            if (!is_string($args['strategy'])
+                || preg_match('/^[A-Za-z0-9 _.-]{1,64}$/D', $args['strategy']) !== 1
+                || !is_string($args['orderid'])
+                || preg_match('/^[A-Za-z0-9_-]{1,100}$/D', $args['orderid']) !== 1) {
+                throw new \InvalidArgumentException('invalid_broker_order_identity');
+            }
             $body = $args;
         } elseif ($operation === 'history') {
             $path = 'history';
@@ -224,6 +236,35 @@ final class PrivateOpenAlgoReader
             }
             $result['ltp'] = $price;
             $result['timestamp_ms'] = null; // quote REST is not an exchange-time proof
+        } elseif ($op === 'order-status') {
+            $data = $body['data'] ?? null;
+            if (!is_array($data) || !is_string($data['orderid'] ?? null)
+                || preg_match('/^[A-Za-z0-9_-]{1,100}$/D', $data['orderid']) !== 1) {
+                throw new \RuntimeException('invalid_upstream_order_status');
+            }
+            $state = $data['order_status'] ?? null;
+            if (!is_string($state) || !in_array(strtolower($state),
+                ['complete','completed','open','pending','rejected','cancelled',
+                 'canceled','trigger pending','partially filled'], true)) {
+                throw new \RuntimeException('unknown_broker_order_status');
+            }
+            $result['broker_order_id'] = $data['orderid'];
+            $result['broker_order_status'] = strtolower($state);
+            foreach (['quantity', 'average_price'] as $numeric) {
+                $result[$numeric] = self::finite($data[$numeric] ?? null);
+            }
+            foreach (['symbol', 'exchange', 'action'] as $identity) {
+                $value = $data[$identity] ?? null;
+                if (!is_string($value) ||
+                    preg_match('/^[A-Za-z0-9_.-]{1,100}$/D', $value) !== 1) {
+                    throw new \RuntimeException('invalid_order_contract_identity');
+                }
+                $result[$identity] = $value;
+            }
+            // Upstream orderbook/orderstatus may NOT contain filled quantity;
+            // never infer fills from "complete" or assume 1 order = 1 trade.
+            $result['filled_quantity_verified'] = false;
+            $result['reconciliation_verified'] = false;
         } elseif ($op === 'history') {
             $rows = $body['data'] ?? null;
             if (!is_array($rows) || count($rows) > 10000) {
