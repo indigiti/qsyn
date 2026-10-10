@@ -1,0 +1,96 @@
+name: QSYN OpenAlgo Full Application Foundation
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/openalgo-foundation.yml"
+      - "ops/openalgo/**"
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/openalgo-foundation.yml"
+      - "ops/openalgo/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-openalgo-foundation:
+    name: Pin, build and package native OpenAlgo application
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout QSYN
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Load approved upstream SHA
+        id: openalgo-pin
+        run: |
+          echo "sha=$(python3 -c 'import json; print(json.load(open("ops/openalgo/upstream.lock.json"))["commit"])')" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout pinned native OpenAlgo upstream
+        uses: actions/checkout@v4
+        with:
+          repository: marketcalls/openalgo
+          ref: ${{ steps.openalgo-pin.outputs.sha }}
+          path: vendor/openalgo
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Verify exact source revision and native application
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C vendor/openalgo rev-parse HEAD)" = "${{ steps.openalgo-pin.outputs.sha }}"
+          test -f vendor/openalgo/app.py
+          test -f vendor/openalgo/License.md
+          test -f vendor/openalgo/frontend/src/App.tsx
+          test -f vendor/openalgo/frontend/src/pages/Trading.tsx
+          grep -q "const Trading = lazy" vendor/openalgo/frontend/src/App.tsx
+          grep -q "openalgo-charts" vendor/openalgo/frontend/package.json
+
+      - name: Setup Node for upstream Vite/React build
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Offline packaging security tests
+        run: |
+          python3 -m py_compile ops/openalgo/package.py ops/openalgo/test_package.py
+          python3 ops/openalgo/test_package.py
+
+      - name: Install locked OpenAlgo frontend dependencies
+        working-directory: vendor/openalgo/frontend
+        run: npm ci --no-audit --no-fund
+
+      - name: Build the original OpenAlgo React UI and OpenAlgo Charts
+        working-directory: vendor/openalgo/frontend
+        run: npm run build
+
+      - name: Build isolated, native OpenAlgo source + UI archive
+        run: |
+          python3 ops/openalgo/package.py --checkout vendor/openalgo --output dist/openalgo-foundation
+          test -s dist/openalgo-foundation/qsyn-openalgo-foundation.tar.gz
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          manifest = json.loads(Path("dist/openalgo-foundation/OPENALGO-FOUNDATION-MANIFEST.json").read_text())
+          assert manifest["schema"] == "QSYN-OPENALGO-FOUNDATION-ARTIFACT/1"
+          assert manifest["deployment"] == "NOT_DEPLOYED"
+          assert manifest["frontend_chart_library_version"] == "2.6.0"
+          assert manifest["broker_tokens_included"] is False
+          print("Native UI package validated:", manifest["source_commit"])
+          PY
+
+      - name: Publish isolated installation candidate (NOT a DigiOps deploy)
+        uses: actions/upload-artifact@v4
+        with:
+          name: qsyn-openalgo-foundation
+          path: |
+            dist/openalgo-foundation/qsyn-openalgo-foundation.tar.gz
+            dist/openalgo-foundation/OPENALGO-FOUNDATION-MANIFEST.json
+          if-no-files-found: error
+          retention-days: 14
