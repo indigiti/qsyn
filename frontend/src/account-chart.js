@@ -34,8 +34,8 @@ async function mount(root, expectedId) {
   }
   currentAccount = expectedId;
   const feed = {
-    getBars: ({ symbol, exchange, interval }) => {
-      if (symbol !== 'QSYN-MOCK' || exchange !== 'QSYN' || interval !== '1m') {
+    getBars: ({ symbol, interval }) => {
+      if (symbol !== 'QSYN-MOCK' || interval !== '1m') {
         return Promise.resolve([]);
       }
       return fetchMockHistory(expectedId);
