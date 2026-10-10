@@ -69,6 +69,8 @@ jobs:
           python3 apps/web-php/tests/PublicStageProbeTest.py
           python3 -m py_compile apps/web-php/tests/PrivateIngressProbe.py apps/web-php/tests/VerifyPrivateIngressEvidence.py apps/web-php/tests/PrivateIngressProbeTest.py
           python3 apps/web-php/tests/PrivateIngressProbeTest.py
+          php -l apps/web-php/tools/private-demo-fixtures.php
+          python3 apps/web-php/tests/PrivateDemoFixtureTest.py
           php apps/web-php/tools/phase1-stage-preflight.php
           if QSYN_IDENTITY_ENABLED=1 php apps/web-php/tools/phase1-stage-preflight.php; then
             echo 'ERROR: enabled test identity escaped staging preflight' >&2
@@ -103,7 +105,7 @@ jobs:
           # DigiOps adds the configured public_html/qsyn and private_html/qsyn
           # destination prefixes. Do NOT put those paths in the artifact.
           mkdir -p staging/public/{assets,licenses}
-          mkdir -p staging/private/app/{src,bin}
+          mkdir -p staging/private/app/{src,bin,tools}
           mkdir -p staging/private/build
           # The private runtime directory survives subsequent overlays. Only
           # a harmless marker is packaged; never include admin-auth.json.
@@ -131,6 +133,7 @@ jobs:
           cp apps/web-php/src/FileMockBrokerConnectionRepository.php staging/private/app/src/FileMockBrokerConnectionRepository.php
           cp apps/web-php/src/UserRepository.php staging/private/app/src/UserRepository.php
           cp apps/web-php/src/FileUserRepository.php staging/private/app/src/FileUserRepository.php
+          cp apps/web-php/tools/private-demo-fixtures.php staging/private/app/tools/private-demo-fixtures.php
           cp apps/web-php/src/IdentityThrottle.php staging/private/app/src/IdentityThrottle.php
           cp apps/web-php/src/UserSession.php staging/private/app/src/UserSession.php
           cp apps/web-php/src/IdentityApi.php staging/private/app/src/IdentityApi.php
@@ -182,6 +185,7 @@ jobs:
           test -s staging/private/app/src/FileMockBrokerConnectionRepository.php
           test -s staging/private/app/src/UserRepository.php
           test -s staging/private/app/src/FileUserRepository.php
+          test -s staging/private/app/tools/private-demo-fixtures.php
           test -s staging/private/app/src/IdentityThrottle.php
           test -s staging/private/app/src/UserSession.php
           test -s staging/private/app/src/IdentityApi.php
@@ -243,6 +247,7 @@ jobs:
           test -s verified-release/private/app/src/FileMockBrokerConnectionRepository.php
           test -s verified-release/private/app/src/UserRepository.php
           test -s verified-release/private/app/src/FileUserRepository.php
+          test -s verified-release/private/app/tools/private-demo-fixtures.php
           test -s verified-release/private/app/src/IdentityThrottle.php
           test -s verified-release/private/app/src/UserSession.php
           test -s verified-release/private/app/src/IdentityApi.php
