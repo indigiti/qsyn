@@ -1,12 +1,13 @@
 name: QSYN Public Staging Read-Only Acceptance
 
 on:
-  # Runs automatically once when this workflow is merged to main.
+  # Runs when the probe/workflow changes on main. External GET checks only.
   # Nothing is deployed; the runner sends anonymous read-only GET requests.
   push:
     branches: [main]
     paths:
       - '.github/workflows/public-stage-acceptance.yml'
+      - 'apps/web-php/tests/PublicStageProbe.py'
   workflow_dispatch:
     inputs:
       expected_runtime_commit:

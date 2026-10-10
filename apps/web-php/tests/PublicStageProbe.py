@@ -77,21 +77,27 @@ def assert_public_baseline(opener, origin, prefix, expected_commit):
     def inspect(path):
         status, result, headers = get_json(opener, origin, prefix + path)
         checks.append((path, status))
+        # Safe external-runner diagnostics: status and media class only.
+        # Never print response bodies, cookies, CSRF values or private fields.
+        media = headers.get("Content-Type", "").lower()
+        response_kind = ("json" if "json" in media else
+                         "html" if "html" in media else "other")
+        print(f"OBSERVE {path}: HTTP {status}, response={response_kind}", flush=True)
         return status, result, headers
 
     status, health, _ = inspect("/api/v1/health")
     if status != 200 or not isinstance(health, dict) or health.get("status") != "ok":
-        raise AssertionError("Public QSYN web health is not OK")
+        raise AssertionError(f"Public QSYN web health is not OK (HTTP {status}; JSON object={isinstance(health, dict)})")
 
     status, demo, _ = inspect("/api/v1/demo/bars")
     if status != 200 or not isinstance(demo, dict) or demo.get("mode") != "simulated":
-        raise AssertionError("Public demo bars are missing or not explicitly simulated")
+        raise AssertionError(f"Public demo bars are missing or not explicitly simulated (HTTP {status}; JSON object={isinstance(demo, dict)})")
     if not isinstance(demo.get("bars"), list) or len(demo["bars"]) < 1:
         raise AssertionError("Public demo has no bars")
 
     status, rust, _ = inspect("/api/v1/diagnostics/rust")
     if status != 200 or not isinstance(rust, dict):
-        raise AssertionError("Public read-only Rust diagnostic is unavailable")
+        raise AssertionError(f"Public read-only Rust diagnostic is unavailable (HTTP {status}; JSON object={isinstance(rust, dict)})")
     runtime = rust.get("status")
     if runtime == "online":
         if rust.get("trading_enabled") is not False or rust.get("upstox_connected") is not False:
