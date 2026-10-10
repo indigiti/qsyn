@@ -119,8 +119,12 @@ try {
     putenv('QSYN_ENV=test');
     putenv('QSYN_ALLOW_HTTP_TEST=1');
     $loopback = ['HTTP_HOST' => '127.0.0.1:18888', 'HTTP_ORIGIN' => 'http://127.0.0.1:18888',
-        'REMOTE_ADDR' => '127.0.0.1'];
+        'REMOTE_ADDR' => '127.0.0.1', 'SERVER_ADDR' => '127.0.0.1'];
     identityCheck(UserSession::originAllowed($loopback), 'Test-only same-origin rejected');
+    identityCheck(!UserSession::loopbackTest(array_replace($loopback,
+        ['REMOTE_ADDR' => '198.51.100.10'])), 'Host-spoofed remote client bypassed HTTP test gate');
+    identityCheck(!UserSession::loopbackTest(array_replace($loopback,
+        ['SERVER_ADDR' => '198.51.100.10'])), 'Public listener bypassed HTTP test gate');
     identityCheck(!UserSession::originAllowed($loopback + ['HTTP_SEC_FETCH_SITE' => 'cross-site']),
         'Cross-site fetch marker accepted');
     identityCheck(!UserSession::originAllowed(array_replace($loopback,

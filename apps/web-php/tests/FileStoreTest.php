@@ -36,4 +36,24 @@ check(fails(fn() => $store->get('../escape', 'abc')), 'path traversal blocked');
 check(fails(fn() => $store->get('workspaces', '../escape')), 'id traversal blocked');
 check($store->get('workspaces', 'missing') === null, 'new record not found');
 check(is_file($root . '/workspaces/abc.json'), 'record persisted to disk');
-echo "PASS: file-backed storage checks (10 assertions)\n";
+// Fail closed against symlinked paths, permissive storage, and legacy records.
+chmod($root . '/workspaces/abc.json', 0644);
+check(fails(fn () => $store->get('workspaces', 'abc')), 'World-readable JSON record accepted');
+chmod($root . '/workspaces/abc.json', 0600);
+chmod($root . '/workspaces', 0777);
+check(fails(fn () => $store->get('workspaces', 'abc')), 'World-writable collection accepted');
+chmod($root . '/workspaces', 0700);
+chmod($root, 0777);
+check(fails(fn () => new FileStore($root)), 'World-writable private root accepted');
+chmod($root, 0700);
+symlink($root . '/workspaces/abc.json', $root . '/workspaces/linked.json');
+check(fails(fn () => $store->get('workspaces', 'linked')), 'Record symlink accepted');
+unlink($root . '/workspaces/linked.json');
+symlink($root . '/workspaces', $root . '/linked_collection');
+check(fails(fn () => $store->get('linked_collection', 'abc')), 'Collection symlink accepted');
+unlink($root . '/linked_collection');
+symlink($root . '/workspaces/abc.json', $root . '/workspaces/new.json.lock');
+check(fails(fn () => $store->put('workspaces', 'new', ['unsafe' => true])),
+    'Lockfile symlink accepted');
+unlink($root . '/workspaces/new.json.lock');
+echo "PASS: private FileStore revisions and symlink/permissions checks\n";

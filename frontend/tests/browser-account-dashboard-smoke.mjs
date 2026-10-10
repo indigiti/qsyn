@@ -60,8 +60,17 @@ function launch(env, sessions, assigned) {
 }
 
 async function signIn(page, origin, tenant, username) {
-  await page.goto(origin + '/qsyn/app', { waitUntil: 'networkidle' });
-  await page.locator('#sign-in').waitFor({ state: 'visible' });
+  const response = await page.goto(origin + '/qsyn/app', { waitUntil: 'networkidle' });
+  if (!response || response.status() !== 200) {
+    throw new Error('Mock dashboard route denied: HTTP ' + response?.status() +
+      ' body=' + (await page.locator('body').innerText()).slice(0, 500));
+  }
+  try {
+    await page.locator('#sign-in').waitFor({ state: 'visible', timeout: 6000 });
+  } catch (error) {
+    throw new Error('Mock dashboard did not render sign-in: ' +
+      (await page.locator('body').innerText()).slice(0, 600) + '; ' + error.message);
+  }
   await page.locator('#tenant-input').fill(tenant);
   await page.locator('#user-input').fill(username);
   await page.locator('#password-input').fill(sourcePassword);

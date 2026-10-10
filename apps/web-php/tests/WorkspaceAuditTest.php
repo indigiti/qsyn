@@ -92,6 +92,28 @@ try {
     $audit->record('tenant-two', $c['user_id'], 'auth.login', 'completed');
     $logs = $store->listRecords('mock_audit_events');
     checkWorkspace(count($logs) === 3, 'Durable audit events are missing');
+    checkWorkspace($audit->verifyAll()['verified_events'] === 3,
+        'Newly sealed audit records failed HMAC verification');
+    $signingKey = $root . '/mock-audit-hmac.key';
+    checkWorkspace((fileperms($signingKey) & 0777) === 0600,
+        'Private integrity key must be owner-only');
+    $firstEvent = $root . '/mock_audit_events/' . $logs[0]['id'] . '.json';
+    $originalAudit = (string) file_get_contents($firstEvent);
+    $editedAudit = str_replace('"state": "intent"', '"state": "completed"', $originalAudit);
+    if ($editedAudit === $originalAudit) {
+        $editedAudit = str_replace('"event": "auth.login"', '"event": "auth.logout"', $originalAudit);
+    }
+    if ($editedAudit === $originalAudit) {
+        $editedAudit = str_replace('"tenant_id": "tenant-one"', '"tenant_id": "tenant-two"', $originalAudit);
+    }
+    checkWorkspace($editedAudit !== $originalAudit, 'Audit tampering fixture did not alter record');
+    file_put_contents($firstEvent, $editedAudit);
+    checkWorkspace(rejectWorkspace(fn() => $audit->verifyAll()),
+        'Tampered audit metadata must fail verification');
+    file_put_contents($firstEvent, $originalAudit);
+    checkWorkspace($audit->verifyAll()['verified_events'] === 3,
+        'Restored audit records must pass integrity verification');
+
     $matching = array_values(array_filter($logs, static fn($row) =>
         ($row['data']['correlation_id'] ?? '') === $intent['correlation_id']));
     checkWorkspace(count($matching) === 2, 'Audit correlation not durable');
@@ -115,7 +137,8 @@ try {
     putenv('QSYN_ALLOW_HTTP_TEST=1');
     mkdir($root . '/php-sessions', 0700);
     session_save_path($root . '/php-sessions');
-    checkWorkspace(UserSession::boot(['HTTP_HOST' => '127.0.0.1:18000']),
+    checkWorkspace(UserSession::boot(['HTTP_HOST' => '127.0.0.1:18000',
+        'REMOTE_ADDR' => '127.0.0.1', 'SERVER_ADDR' => '127.0.0.1']),
         'Unable to create independent user session');
     UserSession::login($b);
     checkWorkspace(UserSession::principal($users)['username'] === 'bob',

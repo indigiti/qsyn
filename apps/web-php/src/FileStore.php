@@ -16,7 +16,7 @@ final class FileStore
 
     public function __construct(string $root)
     {
-        if ($root === '') {
+        if ($root === '' || is_link($root)) {
             throw new InvalidArgumentException('Storage directory is required');
         }
         if (!is_dir($root) && !mkdir($root, 0700, true) && !is_dir($root)) {
@@ -26,7 +26,17 @@ final class FileStore
         if ($real === false) {
             throw new RuntimeException('Cannot resolve storage root');
         }
+        clearstatcache(true, $real);
+        $mode = fileperms($real);
+        if ($mode === false || ($mode & 0007) !== 0 || ($mode & 0020) !== 0) {
+            throw new RuntimeException('Unsafe private storage permissions');
+        }
         $this->root = $real;
+    }
+
+    public function rootPath(): string
+    {
+        return $this->root;
     }
 
     private function path(string $collection, string $id): string
@@ -39,14 +49,30 @@ final class FileStore
         if (!is_dir($dir) && !mkdir($dir, 0700, true) && !is_dir($dir)) {
             throw new RuntimeException('Cannot create collection');
         }
+        if (is_link($dir)) {
+            throw new RuntimeException('Collection symlink not allowed');
+        }
+        clearstatcache(true, $dir);
+        $mode = fileperms($dir);
+        if ($mode === false || ($mode & 0007) !== 0 || ($mode & 0020) !== 0) {
+            throw new RuntimeException('Unsafe collection permissions');
+        }
         return $dir . '/' . $id . '.json';
     }
 
     public function get(string $collection, string $id): ?array
     {
         $path = $this->path($collection, $id);
+        if (is_link($path)) {
+            throw new RuntimeException('Record symlink not allowed');
+        }
         if (!is_file($path)) {
             return null;
+        }
+        clearstatcache(true, $path);
+        $mode = fileperms($path);
+        if ($mode === false || ($mode & 0077) !== 0) {
+            throw new RuntimeException('Unsafe private record permissions');
         }
         $bytes = file_get_contents($path);
         if ($bytes === false) {
@@ -97,10 +123,14 @@ final class FileStore
     public function put(string $collection, string $id, array $data, ?int $expectedRevision = null): array
     {
         $path = $this->path($collection, $id);
+        if (is_link($path . '.lock') || is_link($path)) {
+            throw new RuntimeException('Record lock or file symlink not allowed');
+        }
         $lock = fopen($path . '.lock', 'c');
         if ($lock === false) {
             throw new RuntimeException('Cannot open record lock');
         }
+        chmod($path . '.lock', 0600);
         $tmp = null;
         try {
             if (!flock($lock, LOCK_EX)) {

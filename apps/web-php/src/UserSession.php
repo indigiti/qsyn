@@ -12,8 +12,17 @@ final class UserSession
     public static function loopbackTest(array $server): bool
     {
         $host = (string) ($server['HTTP_HOST'] ?? '');
+        // PHP's built-in localhost test server exposes its bound address as
+        // SERVER_NAME instead of SERVER_ADDR. Do not accept that fallback
+        // under Apache/FPM where SERVER_NAME may reflect request headers.
+        $listener = PHP_SAPI === 'cli-server'
+            ? (string) ($server['SERVER_NAME'] ?? '')
+            : (string) ($server['SERVER_ADDR'] ?? '');
         return getenv('QSYN_ENV') === 'test'
             && getenv('QSYN_ALLOW_HTTP_TEST') === '1'
+            // Both endpoints must be local; a spoofed Host header is insufficient.
+            && (string) ($server['REMOTE_ADDR'] ?? '') === '127.0.0.1'
+            && $listener === '127.0.0.1'
             && preg_match('/^(?:127\.0\.0\.1|localhost)(?::[0-9]{1,5})?$/D', $host) === 1;
     }
 

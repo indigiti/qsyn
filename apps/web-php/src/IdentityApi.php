@@ -21,6 +21,24 @@ final class IdentityApi
             || !in_array(getenv('QSYN_ENV'), ['test', 'development'], true)) {
             return null;
         }
+        // Default to real loopback-only test traffic; development HTTPS
+        // requires an exact private ingress hostname and explicit opt-in.
+        // These environment assertions do not substitute for VPN/firewall
+        // isolation, which must be independently verified before rollout.
+        if (getenv('QSYN_ENV') === 'test') {
+            if (!UserSession::loopbackTest($_SERVER)) {
+                return null;
+            }
+        } else {
+            $configuredHost = (string) (getenv('QSYN_IDENTITY_ALLOWED_HOST') ?: '');
+            $host = (string) ($_SERVER['HTTP_HOST'] ?? '');
+            if (getenv('QSYN_PRIVATE_STAGING_CONFIRMED') !== '1'
+                || $configuredHost === '' || $host !== $configuredHost
+                || preg_match('/^[a-zA-Z0-9.-]+(?::[0-9]{1,5})?$/D', $host) !== 1
+                || !UserSession::secureRequest($_SERVER)) {
+                return null;
+            }
+        }
         $configured = (string) (getenv('QSYN_IDENTITY_STORAGE_DIR') ?: '');
         if (!str_starts_with($configured, '/') || str_contains($configured, '/..')
             || !is_dir($configured) || is_link($configured)) {
@@ -28,9 +46,10 @@ final class IdentityApi
         }
         $root = realpath($configured);
         $public = realpath((string) ($_SERVER['DOCUMENT_ROOT'] ?? ''));
+        clearstatcache(true, $configured);
         $mode = fileperms($configured);
         if ($root === false || $root === '/' || $mode === false
-            || ($mode & 0007) !== 0
+            || ($mode & 0007) !== 0 || ($mode & 0020) !== 0
             || ($public !== false && ($root === $public || str_starts_with($root, $public . '/')))) {
             return null;
         }
