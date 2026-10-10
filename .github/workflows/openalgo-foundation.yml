@@ -62,6 +62,12 @@ jobs:
           python3 -m py_compile ops/openalgo/package.py ops/openalgo/test_package.py
           python3 ops/openalgo/test_package.py
 
+      - name: Validate Cloudways host preflight is read-only and never asserts approval
+        run: |
+          python3 -m py_compile ops/openalgo/test_host_readiness.py
+          python3 ops/openalgo/test_host_readiness.py
+          sh ops/openalgo/host-readiness.sh | grep -Fx 'host_approved=NO'
+
       - name: Install locked OpenAlgo frontend dependencies
         working-directory: vendor/openalgo/frontend
         run: npm ci --no-audit --no-fund
