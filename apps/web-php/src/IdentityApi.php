@@ -46,6 +46,7 @@ final class IdentityApi
         }
         $root = realpath($configured);
         $public = realpath((string) ($_SERVER['DOCUMENT_ROOT'] ?? ''));
+        clearstatcache(true, $configured);
         $mode = fileperms($configured);
         if ($root === false || $root === '/' || $mode === false
             || ($mode & 0007) !== 0 || ($mode & 0020) !== 0
