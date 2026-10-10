@@ -71,6 +71,25 @@ if (preg_match('#^/qsyn/api/v1/auth/(state|me|login|logout)$#', $route, $identit
     respond($payload, $status);
 }
 
+// Phase 1.3: session-owned simulated account control; disabled by default.
+// No real broker credentials, account linking or order execution.
+if (preg_match('#^/qsyn/api/v1/accounts/(list|get|link|rename|select|disconnect)$#', $route, $accountMatch)) {
+    $src = dirname(__DIR__) . '/src';
+    if (!is_file($src . '/AccountApi.php')) {
+        $src = dirname(__DIR__, 2) . '/private_html/qsyn/app/src';
+    }
+    foreach (['FileStore', 'UserRepository', 'FileUserRepository',
+        'UserSession', 'IdentityApi', 'BrokerConnectionRepository',
+        'FileMockBrokerConnectionRepository', 'FileMockAccountSelection', 'AccountApi'] as $unit) {
+        if (!is_file($src . '/' . $unit . '.php')) {
+            respond(['error' => 'mock_account_modules_unavailable'], 503);
+        }
+        require_once $src . '/' . $unit . '.php';
+    }
+    [$status, $payload] = \QSYN\Accounts\AccountApi::dispatch($accountMatch[1], $_SERVER);
+    respond($payload, $status);
+}
+
 // Administrator-only Rust service control. Never accessible without a configured
 // admin password, valid PHP session, CSRF token and allowlisted local adapter.
 if (preg_match('#^(?:/qsyn)?/api/v1/admin/rust/(state|login|logout|action|demo|setup)$#', $route, $matches)) {

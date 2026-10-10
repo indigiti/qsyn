@@ -14,7 +14,7 @@ use QSYN\Storage\FileStore;
  */
 final class IdentityApi
 {
-    private static function privateRoot(): ?string
+    public static function privateRoot(): ?string
     {
         if (getenv('QSYN_IDENTITY_ENABLED') !== '1'
             || !in_array(getenv('QSYN_ENV'), ['test', 'development'], true)) {
