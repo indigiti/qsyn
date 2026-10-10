@@ -63,11 +63,48 @@ export class PrivateAuthorizedChartFeed {
     this.sockets = new Set();
   }
   async getBars(request) {
-    if (request.symbol !== this.instrument || request.exchange !== 'UPSTOX_PRIVATE'
-        || request.interval !== '1m') return [];
-    // We NEVER merge unlicensed simulated OHLC into the private real chart.
-    // History is empty until a licensed account-scoped archive REST API exists.
-    return [];
+    if (this.ended || request.symbol !== this.instrument ||
+        request.exchange !== 'UPSTOX_PRIVATE' || request.interval !== '1m') return [];
+    // History uses a SECOND short-lived, instrument-scoped PHP grant: neither
+    // an Upstox token nor a signed grant is kept in browser storage or URL.
+    let grant;
+    try {
+      grant = await fetchPrivateChartGrant(this.fetcher, this.account, this.instrument);
+      if (this.ended) return [];
+      const response = await this.fetcher('/qsyn/private-chart/history', {
+        method: 'GET', credentials: 'same-origin', cache: 'no-store',
+        headers: { Accept:'application/json', Authorization:'Bearer ' + grant.ticket },
+      });
+      if (!response.ok) throw new Error('Private history not provisioned');
+      const data = await response.json();
+      if (data.schema !== 'QSYN-UPSTOX-PRIVATE-HISTORY/1' ||
+          data.source !== 'licensed_private_history' ||
+          data.account !== this.account || data.instrument !== this.instrument ||
+          data.exchange !== 'UPSTOX_PRIVATE' || data.interval !== '1m' ||
+          data.trading_enabled !== false ||
+          data.public_redistribution_allowed !== false ||
+          !Array.isArray(data.bars) || data.bars.length > 1200) {
+        throw new Error('Private historical source or account invalid.');
+      }
+      let previous = 0;
+      for (const row of data.bars) {
+        if (!Number.isSafeInteger(row.time) || row.time <= previous ||
+            row.time > Date.now() / 1000 ||
+            !['open','high','low','close'].every(k => Number.isFinite(row[k]) && row[k] >= 0) ||
+            row.close <= 0 || row.low > Math.min(row.open, row.close) ||
+            row.high < Math.max(row.open, row.close)) {
+          throw new Error('Private historical candle validation failed.');
+        }
+        previous = row.time;
+      }
+      this.onState(data.bars.length
+        ? 'Licensed historical option-leg candles loaded (coverage not certified).'
+        : 'No licensed history files imported for this instrument.');
+      return this.ended ? [] : data.bars;
+    } catch {
+      if (!this.ended) this.onState('Private historical data unavailable; no demo prices used.');
+      return [];
+    }
   }
   subscribeBars(request, onBar) {
     if (this.ended || request.symbol !== this.instrument ||
