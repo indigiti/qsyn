@@ -32,6 +32,7 @@ jobs:
       - name: Test PHP
         run: |
           php -l apps/web-php/public/index.php
+          php -l apps/web-php/public/terminal.php
           php -l apps/web-php/src/RustProbe.php
           php -l apps/web-php/src/RustStreamProbe.php
           php -l apps/web-php/src/RustAdmin.php
@@ -136,6 +137,9 @@ jobs:
           cp apps/web-php/public/admin-rust.php staging/public/admin-rust.php
           cp apps/web-php/public/.htaccess staging/public/.htaccess
           cp frontend/dist/chart.js staging/public/assets/chart.js
+          cp frontend/dist/terminal.js staging/public/assets/terminal.js
+          cp frontend/dist/terminal.css staging/public/assets/terminal.css
+          cp apps/web-php/public/terminal.php staging/public/terminal.php
           cp frontend/dist/studio.js staging/public/assets/studio.js
           cp apps/web-php/public/assets/studio.css staging/public/assets/studio.css
           cp apps/web-php/public/studio.php staging/public/studio.php
@@ -206,6 +210,9 @@ jobs:
           test -s staging/public/index.php
           test -s staging/public/.htaccess
           test -s staging/public/assets/chart.js
+          test -s staging/public/assets/terminal.js
+          test -s staging/public/assets/terminal.css
+          test -s staging/public/terminal.php
           test -s staging/public/assets/studio.js
           test -s staging/public/assets/studio.css
           test -s staging/public/studio.php
@@ -287,6 +294,9 @@ jobs:
           test -s verified-release/public/index.php
           test -s verified-release/public/.htaccess
           test -s verified-release/public/assets/chart.js
+          test -s verified-release/public/assets/terminal.js
+          test -s verified-release/public/assets/terminal.css
+          test -s verified-release/public/terminal.php
           test -s verified-release/public/assets/studio.js
           test -s verified-release/public/assets/studio.css
           test -s verified-release/public/studio.php
@@ -346,6 +356,7 @@ jobs:
           test -s verified-release/private/build/release.json
           grep -F 'RewriteBase /qsyn/' verified-release/public/.htaccess
           php -l verified-release/public/index.php
+          php -l verified-release/public/terminal.php
           php -r '$m=json_decode(file_get_contents("verified-release/RELEASE.json"),true,512,JSON_THROW_ON_ERROR); if(($m["schema"]??"")!=="DIGIOPS-BUILD/1" || ($m["public"]??"")!=="public") exit(1);'
           if test -d verified-release/public_html; then
             echo 'ERROR: nested public_html is not a DigiOps entrypoint' >&2
