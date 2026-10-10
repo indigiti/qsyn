@@ -1,6 +1,12 @@
 name: QSYN Public Staging Read-Only Acceptance
 
 on:
+  # Runs automatically once when this workflow is merged to main.
+  # Nothing is deployed; the runner sends anonymous read-only GET requests.
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/public-stage-acceptance.yml'
   workflow_dispatch:
     inputs:
       expected_runtime_commit:
@@ -21,7 +27,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     env:
-      EXPECTED_RUNTIME_SHA: ${{ inputs.expected_runtime_commit }}
+      # Push acceptance is pinned to the last operator-confirmed deployed
+      # runtime, #78. Manual invocations continue to take a supplied SHA.
+      EXPECTED_RUNTIME_SHA: ${{ github.event_name == 'workflow_dispatch' && inputs.expected_runtime_commit || 'ccc92c161f5c5d6d45e02808cffabb40b7181bc4' }}
     steps:
       - uses: actions/checkout@v4
       - name: Run read-only public safety probe
@@ -36,3 +44,4 @@ jobs:
           echo 'Public disabled-feature probes passed.'
           echo 'This does NOT verify private VPN/IP restrictions or authorize login/dashboard enablement.'
           echo 'Use an independently isolated hostname before any private acceptance.'
+          echo 'This read-only check does not deploy QSYN or enable user identity.'
