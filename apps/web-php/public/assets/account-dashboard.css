@@ -45,3 +45,16 @@ form input:focus,form select:focus{border-color:#72d7cb;box-shadow:0 0 0 2px #72
 .rename-form button{flex-shrink:0}
 @media(max-width:920px){.workspace-grid{grid-template-columns:1fr}.chart-panel{order:-1}.intro{align-items:stretch}.topbar{gap:8px}.environment-label{font-size:9px}}
 @media(max-width:540px){.layout{padding-top:22px}.topbar{padding:12px}.environment-label{display:none}.panel{padding:16px}.login-panel{margin:20px auto;padding:23px}.session-label{font-size:11px}.chart-empty{min-height:300px}#account-chart{min-height:310px}}
+
+/* Phase 1.5: layout preferences are saved server-side per selected mock account. */
+.workspace-grid.focus{grid-template-columns:minmax(0,1fr)}
+.workspace-grid.focus .accounts-panel{display:none}
+.workspace-preferences{padding:12px 14px 15px;margin:0 0 16px;border:1px solid #35556a;border-radius:9px;background:#0b2131}
+.workspace-preferences-title{font-size:12px;font-weight:700;color:#c8eae8;display:flex;align-items:center;gap:11px}
+.workspace-fields{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end}
+.workspace-fields>div{flex:1;min-width:125px}
+.workspace-fields label{margin:9px 0 5px}
+.workspace-fields select{padding:8px 9px;font-size:12px}
+.workspace-fields .button{margin-bottom:0;min-height:36px}
+.workspace-preferences.read-only .workspace-fields select{opacity:.7}
+@media(max-width:920px){.workspace-grid.focus .accounts-panel{display:none}}
