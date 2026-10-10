@@ -65,6 +65,9 @@ jobs:
           python3 apps/web-php/tests/PrivateIngressProbeTest.py
           python3 -m py_compile apps/web-php/tests/PrivateBaselineProbe.py apps/web-php/tests/PrivateBaselineProbeTest.py
           python3 apps/web-php/tests/PrivateBaselineProbeTest.py
+          php -l apps/web-php/src/SimulatedOptionsStudio.php
+          php -l apps/web-php/public/studio.php
+          php apps/web-php/tests/SimulatedOptionsStudioTest.php
           php -l apps/web-php/tools/private-demo-fixtures.php
           python3 apps/web-php/tests/PrivateDemoFixtureTest.py
           php -l apps/web-php/tools/private-deployment-preflight.php
@@ -154,6 +157,9 @@ jobs:
         working-directory: frontend
       - name: Check account dashboard, role isolation and simulated chart painting
         run: node tests/browser-account-dashboard-smoke.mjs
+        working-directory: frontend
+      - name: Check synthetic Options Studio, multi-chart rendering and saved layouts
+        run: node tests/browser-studio-smoke.mjs
         working-directory: frontend
       - uses: actions/upload-artifact@v4
         if: always()

@@ -71,6 +71,9 @@ jobs:
           python3 apps/web-php/tests/PrivateIngressProbeTest.py
           python3 -m py_compile apps/web-php/tests/PrivateBaselineProbe.py apps/web-php/tests/PrivateBaselineProbeTest.py
           python3 apps/web-php/tests/PrivateBaselineProbeTest.py
+          php -l apps/web-php/src/SimulatedOptionsStudio.php
+          php -l apps/web-php/public/studio.php
+          php apps/web-php/tests/SimulatedOptionsStudioTest.php
           php -l apps/web-php/tools/private-demo-fixtures.php
           python3 apps/web-php/tests/PrivateDemoFixtureTest.py
           php -l apps/web-php/tools/private-deployment-preflight.php
@@ -119,6 +122,10 @@ jobs:
           cp apps/web-php/public/admin-rust.php staging/public/admin-rust.php
           cp apps/web-php/public/.htaccess staging/public/.htaccess
           cp frontend/dist/chart.js staging/public/assets/chart.js
+          cp frontend/dist/studio.js staging/public/assets/studio.js
+          cp apps/web-php/public/assets/studio.css staging/public/assets/studio.css
+          cp apps/web-php/public/studio.php staging/public/studio.php
+          cp apps/web-php/src/SimulatedOptionsStudio.php staging/private/app/src/SimulatedOptionsStudio.php
           cp frontend/dist/account-chart.js staging/public/assets/account-chart.js
           cp apps/web-php/public/assets/account-dashboard.js staging/public/assets/account-dashboard.js
           cp apps/web-php/public/assets/account-dashboard.css staging/public/assets/account-dashboard.css
@@ -172,6 +179,10 @@ jobs:
           test -s staging/public/index.php
           test -s staging/public/.htaccess
           test -s staging/public/assets/chart.js
+          test -s staging/public/assets/studio.js
+          test -s staging/public/assets/studio.css
+          test -s staging/public/studio.php
+          test -s staging/private/app/src/SimulatedOptionsStudio.php
           test -s staging/public/assets/chart-diagnostics.js
           test -s staging/public/assets/rust-diagnostics.js
           test -s staging/public/assets/rust-stream-test.js
@@ -233,6 +244,10 @@ jobs:
           test -s verified-release/public/index.php
           test -s verified-release/public/.htaccess
           test -s verified-release/public/assets/chart.js
+          test -s verified-release/public/assets/studio.js
+          test -s verified-release/public/assets/studio.css
+          test -s verified-release/public/studio.php
+          test -s verified-release/private/app/src/SimulatedOptionsStudio.php
           test -s verified-release/public/assets/chart-diagnostics.js
           test -s verified-release/public/assets/rust-diagnostics.js
           test -s verified-release/public/assets/rust-stream-test.js
