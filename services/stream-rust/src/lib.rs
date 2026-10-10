@@ -3,6 +3,7 @@
 //! never from independently aggregated constituent highs and lows.
 
 pub mod market_pipeline;
+pub mod durable_market_wal;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Leg {
