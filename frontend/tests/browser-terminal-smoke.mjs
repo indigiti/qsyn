@@ -57,6 +57,29 @@ try {
     throw new Error('Missing unambiguous simulation provenance label');
   if(!(await page.locator('.terminal-nav-item.locked:disabled').count()===3))
     throw new Error('Broker-dependent navigation is not explicitly disabled');
+  // Chart compare and AT-MONEY synthetic demos use only whitelisted public simulations.
+  await page.getByRole('button',{name:'Compare two charts'}).click();
+  await page.waitForFunction(()=>document.querySelectorAll('#qsyn-secondary-chart canvas').length>0);
+  await page.getByRole('combobox',{name:'Comparison instrument'}).selectOption('QSYN-NIFTY-STRADDLE');
+  await page.waitForResponse(r=>r.url().includes('/qsyn/api/v1/studio/bars?') && r.status()===200,{timeout:12000});
+  await page.getByRole('textbox',{name:'Layout name'}).fill('Simulated pair');
+  await page.getByRole('button',{name:'Save layout'}).click();
+  await page.getByRole('textbox',{name:'Find simulated instruments'}).fill('FINNIFTY');
+  if(await page.locator('.terminal-search-row').count()!==1)
+    throw new Error('Instrument search did not stay inside approved demo registry');
+  await page.getByRole('button',{name:'Watch QSYN-FINNIFTY-STRADDLE'}).click();
+  if(await page.locator('.terminal-watch-row').count()!==3)
+    throw new Error('Browser watchlist add failed');
+  await page.reload({waitUntil:'networkidle'});
+  await page.getByRole('combobox',{name:'Saved layouts'}).selectOption('Simulated pair');
+  await page.waitForFunction(()=>document.querySelectorAll('#qsyn-secondary-chart canvas').length>0);
+  if(await page.locator('.terminal-watch-row').count()!==3)
+    throw new Error('Browser-local watchlist did not survive reload');
+  if(await page.getByRole('combobox',{name:'Comparison instrument'}).inputValue()!=='QSYN-NIFTY-STRADDLE')
+    throw new Error('Named layout did not restore synthetic comparison');
+  await page.getByRole('button',{name:'Single chart'}).click();
+  if(await page.locator('#qsyn-secondary-chart').count()!==0)
+    throw new Error('Second chart remained after comparison disabled');
   const raw=await page.request.post(origin+'/qsyn/terminal');
   if(raw.status()!==405)throw new Error('Terminal accepted POST');
   const bundle=await page.locator('script[src*="/assets/terminal.js"]').getAttribute('src');
