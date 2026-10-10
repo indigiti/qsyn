@@ -101,6 +101,8 @@ if ($route === '/qsyn/app' || $route === '/qsyn/app/') {
     if (!is_file($src . '/IdentityApi.php')) {
         respond(['error' => 'dashboard_unavailable'], 404);
     }
+    // IdentityApi private-root gating also validates UserSession transport.
+    require_once $src . '/UserSession.php';
     require_once $src . '/IdentityApi.php';
     $host = (string) ($_SERVER['HTTP_HOST'] ?? '');
     $localhostTest = getenv('QSYN_ENV') === 'test' && getenv('QSYN_ALLOW_HTTP_TEST') === '1'
