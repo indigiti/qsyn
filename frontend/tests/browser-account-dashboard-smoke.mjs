@@ -146,8 +146,25 @@ try {
   await page.waitForTimeout(1100);
   const firstPaint = await painted(page);
   if (firstPaint.green < 25 || firstPaint.red < 25) {
+    const detail = await page.evaluate(async () => {
+      const response = await fetch('/qsyn/api/v1/accounts/bars', { credentials: 'same-origin' });
+      const data = await response.json();
+      const root = document.getElementById('account-chart');
+      const rect = root.getBoundingClientRect();
+      return {
+        status: response.status, source: data.source, mode: data.mode,
+        account: data.account_id, bars: data.bars?.length,
+        dimensions: { width: rect.width, height: rect.height },
+        chartText: root.innerText.slice(0, 400),
+        canvases: [...root.querySelectorAll('canvas')].map(c => ({
+          width: c.width, height: c.height,
+          css: { display: getComputedStyle(c).display, opacity: getComputedStyle(c).opacity },
+        })),
+      };
+    });
+    await page.screenshot({ path: resolve(images, 'account-dashboard-debug.png'), fullPage: true });
     throw new Error('Selected mock account failed to paint candlesticks: ' +
-      JSON.stringify(firstPaint));
+      JSON.stringify({ ...firstPaint, detail, pageErrors: failures }));
   }
   const firstBars = await page.evaluate(async () =>
     (await fetch('/qsyn/api/v1/accounts/bars', { credentials: 'same-origin' })).json());
