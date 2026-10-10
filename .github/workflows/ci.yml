@@ -65,6 +65,8 @@ jobs:
           python3 apps/web-php/tests/PrivateIngressProbeTest.py
           php -l apps/web-php/tools/private-demo-fixtures.php
           python3 apps/web-php/tests/PrivateDemoFixtureTest.py
+          php -l apps/web-php/tools/private-deployment-preflight.php
+          python3 apps/web-php/tests/PrivateDeploymentPreflightTest.py
           php apps/web-php/tools/phase1-stage-preflight.php
           if QSYN_IDENTITY_ENABLED=1 php apps/web-php/tools/phase1-stage-preflight.php; then
             echo 'ERROR: enabled test identity escaped staging preflight' >&2
