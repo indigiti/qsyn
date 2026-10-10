@@ -128,6 +128,38 @@ def main():
             assert records["trading_enabled"] is False
             assert "zerodha-b" not in inventory.stdout and KEY_A not in inventory.stdout
 
+            readiness_a = invoke(reg, "readiness", "tenant1", "alice")
+            assert readiness_a.returncode == 0, readiness_a.stderr
+            a_status = json.loads(readiness_a.stdout)
+            assert a_status["schema"] == "QSYN-PRIVATE-BROKER-READINESS/1"
+            assert len(a_status["accounts"]) == 1
+            assert a_status["accounts"][0]["account_id"] == "upstox-a"
+            assert a_status["accounts"][0]["broker_session_responding"] is True
+            assert a_status["accounts"][0]["readiness"] == "private_session_only"
+            assert a_status["market_entitlement_verified"] is False
+            assert a_status["public_redistribution_allowed"] is False
+            assert a_status["live_chart_ready"] is False
+            assert a_status["order_execution_enabled"] is False
+            assert "zerodha-b" not in readiness_a.stdout
+            assert KEY_A not in readiness_a.stdout and KEY_B not in readiness_a.stdout
+
+            # A broken provider must not affect other tenant readiness.
+            b.shutdown()
+            b.server_close()
+            tb.join(timeout=2)
+            readiness_b = invoke(reg, "readiness", "tenant2", "bob")
+            assert readiness_b.returncode == 0, readiness_b.stderr
+            b_status = json.loads(readiness_b.stdout)
+            assert len(b_status["accounts"]) == 1
+            assert b_status["accounts"][0]["account_id"] == "zerodha-b"
+            assert b_status["accounts"][0]["broker_session_responding"] is False
+            assert b_status["accounts"][0]["readiness"] == "session_not_verified"
+            assert "upstox-a" not in readiness_b.stdout
+            # Restore fake B to allow the remaining existing tests to run.
+            b, tb = service("zerodha", KEY_B)
+            items["accounts"][1]["rest_port"] = b.server_port
+            write_registry(items)
+
             for tenant, owner, account, broker in (
                 ("tenant1", "alice", "upstox-a", "upstox"),
                 ("tenant2", "bob", "zerodha-b", "zerodha"),
