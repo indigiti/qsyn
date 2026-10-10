@@ -4,13 +4,16 @@ declare(strict_types=1);
 require_once dirname(__DIR__) . '/src/FileStore.php';
 require_once dirname(__DIR__) . '/src/BrokerConnectionRepository.php';
 require_once dirname(__DIR__) . '/src/FileMockBrokerConnectionRepository.php';
+require_once dirname(__DIR__) . '/src/FileMockAccountSelection.php';
 
 use QSYN\Accounts\FileMockBrokerConnectionRepository;
+use QSYN\Accounts\FileMockAccountSelection;
 use QSYN\Storage\FileStore;
 
 $root = sys_get_temp_dir() . '/qsyn-mock-accounts-' . bin2hex(random_bytes(8));
 $store = new FileStore($root);
 $accounts = new FileMockBrokerConnectionRepository($store);
+$selections = new FileMockAccountSelection($store, $accounts);
 
 function assertAccount(bool $condition, string $message): void
 {
@@ -82,6 +85,20 @@ try {
     expectRejected(fn () => $accounts->disconnectMock('tenant-two', 'user-a',
         $a['account_id'], 1), 'Cross-tenant disconnect unexpectedly succeeded');
 
+    assertAccount($selections->current('tenant-one', 'user-a') ===
+        ['account_id' => null, 'revision' => 0], 'Default selection must start empty');
+    $selectedA = $selections->choose('tenant-one', 'user-a', $a['account_id'], 0);
+    assertAccount($selectedA['account_id'] === $a['account_id'] && $selectedA['revision'] === 1,
+        'Selecting first Upstox account must publish single CAS record');
+    expectRejected(fn () => $selections->choose('tenant-one', 'user-a',
+        $b['account_id'], 0), 'Stale selection update accepted');
+    expectRejected(fn () => $selections->choose('tenant-one', 'user-b',
+        $a['account_id'], 0), 'Cross-owner source selection accepted');
+    expectRejected(fn () => $selections->choose('tenant-two', 'user-a',
+        $a['account_id'], 0), 'Cross-tenant source selection accepted');
+    assertAccount($selections->current('tenant-one', 'user-b')['account_id'] === null,
+        'Owner B inherited owner A chart selection');
+
     $disconnected = $accounts->disconnectMock('tenant-one', 'user-a', $a['account_id'], 1);
     assertAccount($disconnected['revision'] === 2 && $disconnected['auth_status'] === 'disconnected',
         'Mock account disconnect failed to persist');
@@ -95,6 +112,26 @@ try {
     assertAccount($accounts->getForOwner('tenant-one', 'user-a',
         $b['account_id'])['auth_status'] === 'mock_connected',
         'Disconnecting Upstox A must not disconnect Upstox B');
+
+    assertAccount($selections->current('tenant-one', 'user-a') ===
+        ['account_id' => null, 'revision' => 1],
+        'Disconnected account must not remain selected');
+    expectRejected(fn () => $selections->choose('tenant-one', 'user-a',
+        $a['account_id'], 1), 'Disconnected account reselected');
+    $selectedB = $selections->choose('tenant-one', 'user-a', $b['account_id'], 1);
+    assertAccount($selectedB['revision'] === 2 &&
+        $selections->current('tenant-one', 'user-a')['account_id'] === $b['account_id'],
+        'Replacement chart selection not effective');
+    $renamed = $accounts->renameMock('tenant-one', 'user-a',
+        $b['account_id'], 'Upstox B renamed', 1);
+    assertAccount($renamed['revision'] === 2 && $renamed['display_label'] === 'Upstox B renamed',
+        'Rename must use revision CAS');
+    expectRejected(fn () => $accounts->renameMock('tenant-one', 'user-a',
+        $b['account_id'], 'stale label', 1), 'Stale rename unexpectedly accepted');
+    expectRejected(fn () => $accounts->renameMock('tenant-one', 'user-b',
+        $b['account_id'], 'foreign label', 2), 'Cross-owner rename succeeded');
+    expectRejected(fn () => $accounts->renameMock('tenant-two', 'user-a',
+        $b['account_id'], 'foreign label', 2), 'Cross-tenant rename succeeded');
 
     $stored = $store->listRecords('mock_broker_accounts');
     assertAccount(count($stored) === 5, 'Private collection did not store all five records');
