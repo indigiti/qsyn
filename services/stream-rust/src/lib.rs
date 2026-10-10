@@ -7,6 +7,7 @@ pub mod durable_market_wal;
 pub mod immutable_candles;
 pub mod offline_rebuild;
 pub mod openalgo_stream;
+pub mod private_live_pipeline;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Leg {
