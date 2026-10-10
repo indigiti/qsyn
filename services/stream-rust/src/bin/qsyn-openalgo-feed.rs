@@ -60,7 +60,7 @@ fn config(tenant: &str, owner: &str, account: &str) -> io::Result<(u16, String, 
         for value in ["account_id", "tenant_id", "owner_user_id"] {
             if !item[value].as_str().is_some_and(safe_id) { return Err(rejected()); }
         }
-        if port < 1025 || port > 65535 || ws_port < 1025 || ws_port > 65535
+        if !(1025..=65535).contains(&port) || !(1025..=65535).contains(&ws_port)
             || !used_ports.insert(port) || !used_ports.insert(ws_port)
             || !used_keys.insert(key_path) || !safe_id(broker)
         {
