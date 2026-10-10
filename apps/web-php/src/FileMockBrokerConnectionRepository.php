@@ -11,9 +11,8 @@ use RuntimeException;
  * Phase 1 development adapter: fake linked broker account metadata ONLY.
  *
  * Never persist Upstox tokens, live broker account references, order details
- * or customer credentials here. No HTTP route calls this adapter yet.
- * Authenticating the actor and passing a trusted tenant/user context is a
- * prerequisite for wiring any account API to this repository.
+ * or customer credentials here. Only authenticated, opted-in mock account
+ * controllers may call this adapter; callers must supply a trusted principal.
  */
 final class FileMockBrokerConnectionRepository implements BrokerConnectionRepository
 {
@@ -157,6 +156,34 @@ final class FileMockBrokerConnectionRepository implements BrokerConnectionReposi
             return null;
         }
         return self::present($record);
+    }
+
+    public function renameMock(
+        string $tenantId,
+        string $ownerUserId,
+        string $accountId,
+        string $displayLabel,
+        int $expectedRevision
+    ): array {
+        $account = $this->getForOwner($tenantId, $ownerUserId, $accountId);
+        if ($account === null) {
+            throw new RuntimeException('Mock account not found');
+        }
+        $label = trim($displayLabel);
+        if ($label === '' || strlen($label) > 60 || $expectedRevision < 1) {
+            throw new InvalidArgumentException('Invalid account rename');
+        }
+        if (($account['auth_status'] ?? '') !== 'mock_connected') {
+            throw new RuntimeException('Mock account disconnected');
+        }
+        $data = $this->store->get(self::COLLECTION, $accountId)['data'];
+        $data['display_label'] = $label;
+        $data['updated_at'] = gmdate('c');
+        // Ownership was checked above; revision CAS prevents stale rename or
+        // accidental resurrection after a concurrent disconnect.
+        return self::present($this->store->put(
+            self::COLLECTION, $accountId, $data, $expectedRevision
+        ));
     }
 
     public function disconnectMock(
