@@ -34,13 +34,15 @@ final class AccountApi
         $intent = $audit->record($tenant, $owner, $event, 'intent', $resource);
         try {
             $result = $mutation();
-            $id = $resource ?? ($result['account_id'] ?? null);
-            $audit->record($tenant, $owner, $event, 'completed', $id, $intent['correlation_id']);
-            return $result;
         } catch (\Throwable $error) {
             $audit->record($tenant, $owner, $event, 'rejected', $resource, $intent['correlation_id']);
             throw $error;
         }
+        // A failed completion-log write must leave an unmatched intent, not
+        // a false "rejected" record for an operation that already succeeded.
+        $id = $resource ?? ($result['account_id'] ?? null);
+        $audit->record($tenant, $owner, $event, 'completed', $id, $intent['correlation_id']);
+        return $result;
     }
 
     /** @return array{0:int,1:array<string,mixed>} */
