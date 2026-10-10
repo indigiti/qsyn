@@ -10,6 +10,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use std::fs;
 use std::io;
 use std::path::Path;
+#[cfg(unix)] use std::os::unix::fs::FileTypeExt;
+#[cfg(unix)] use std::os::unix::net::UnixDatagram;
 
 #[cfg(unix)]
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
@@ -131,6 +133,25 @@ fn read_storage_approval(
     Ok(config)
 }
 
+
+#[cfg(unix)]
+fn chart_ipc() -> io::Result<Option<(UnixDatagram,std::path::PathBuf)>> {
+    if std::env::var("QSYN_PRIVATE_CHART_IPC_ENABLED").as_deref()!=Ok("1") {
+        return Ok(None);
+    }
+    let path=std::env::var("QSYN_PRIVATE_CHART_IPC_SOCKET").map_err(|_|rejected())?;
+    let path=std::path::PathBuf::from(path);
+    let parent=path.parent().ok_or_else(rejected)?;
+    qsyn_stream::durable_market_wal::root_check(parent)?;
+    let meta=fs::symlink_metadata(&path)?;
+    if !meta.file_type().is_socket() || meta.file_type().is_symlink()
+        || meta.permissions().mode()&0o077!=0
+        || meta.uid()!=unsafe{libc::geteuid()} {
+        return Err(rejected());
+    }
+    Ok(Some((UnixDatagram::unbound()?,path)))
+}
+
 #[tokio::main]
 async fn main() {
     let result = async {
@@ -191,6 +212,9 @@ async fn main() {
         };
         let mut collector=PrivatePersistentIngest::open(
             Path::new(&approved.archive_root),grant,now_ms()?)?;
+        #[cfg(unix)]
+        let ipc=chart_ipc()?;
+        let mut last_license_check=0u64;
         let mut observations=0u64;
         let mut connections=0u64;
         // The operator's process supervisor restarts unexpected failures.
@@ -199,7 +223,30 @@ async fn main() {
         loop {
             if now_ms()? >= approved.valid_until_ms {break;}
             let run=observe_with_sink(&plan,&api_key,|candidate|{
-                collector.ingest(candidate,now_ms()?)?;
+                let now=now_ms()?;
+                // Recheck externally approved data rights frequently, not
+                // just at worker start. Revocation must stop this collector.
+                if now.saturating_sub(last_license_check)>1_000 {
+                    let current=read_storage_approval(
+                        tenant,owner,account,&plan.broker,&plan.subscriptions)?;
+                    if current.license_id!=approved.license_id
+                        || current.archive_root!=approved.archive_root
+                        || current.valid_until_ms!=approved.valid_until_ms
+                        || current.instruments!=approved.instruments {
+                        return Err(rejected());
+                    }
+                    last_license_check=now;
+                }
+                let was=collector.stored;
+                collector.ingest(candidate,now)?;
+                if collector.stored>was {
+                    #[cfg(unix)]
+                    if let Some((socket,path))=&ipc {
+                        let payload=serde_json::to_vec(candidate)?;
+                        if payload.len()>4095 {return Err(rejected());}
+                        socket.send_to(&payload,path)?;
+                    }
+                }
                 Ok(())
             }).await?;
             observations+=run.synchronized_updates;
