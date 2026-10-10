@@ -77,6 +77,58 @@ $cssVersion = (string) (@filemtime(__DIR__ . '/assets/studio.css') ?: '0');
     <p class="fine">Chain previews use the W1 simulation, independent of selected payoff horizon. Never exchange LTP.</p>
   </section>
  </div>
+ <div class="lab-section">
+ <section class="panel risk-panel" aria-labelledby="risk-title">
+  <div class="panel-heading"><div><p class="eyebrow">SCENARIO + MODEL</p><h2 id="risk-title">Risk &amp; Greeks laboratory</h2></div><span class="pill">FICTIONAL MODEL</span></div>
+  <div class="risk-grid">
+   <div class="risk-item"><span>Sampled minimum P&amp;L</span><strong id="risk-min">—</strong></div>
+   <div class="risk-item"><span>Sampled maximum P&amp;L</span><strong id="risk-max">—</strong></div>
+   <div class="risk-item"><span>Sampled breakevens</span><strong id="risk-breakeven">—</strong></div>
+   <div class="risk-item"><span>Premium max drawdown</span><strong id="risk-drawdown">—</strong></div>
+  </div>
+  <div class="greek-grid">
+   <div><span>Model Δ (delta)</span><strong id="greek-delta">—</strong></div>
+   <div><span>Model Γ (gamma)</span><strong id="greek-gamma">—</strong></div>
+   <div><span>Model Vega / 1% vol</span><strong id="greek-vega_per_pct">—</strong></div>
+   <div><span>Model Theta / day</span><strong id="greek-theta_per_day">—</strong></div>
+  </div>
+  <p class="fine" id="risk-warning">Illustrative risk analytics, not market values.</p>
+ </section>
+ <section class="panel" aria-labelledby="replay-title">
+  <div class="panel-heading"><div><p class="eyebrow">HISTORICAL SIMULATION</p><h2 id="replay-title">120-bar strategy replay</h2></div><span class="pill">LOCAL TIMELINE</span></div>
+  <p class="fine">Move through previously generated fictional candles. Only the basket chart rewinds; component panels retain their full histories. The slider does not request a live exchange feed.</p>
+  <div class="replay-controls">
+    <input id="replay-position" type="range" min="19" max="119" value="119" aria-label="Replay bar position">
+    <output id="replay-marker" aria-live="polite">120 / 120 · full history</output>
+    <div class="replay-buttons">
+      <button type="button" id="replay-start" class="secondary">Start</button>
+      <button type="button" id="replay-play" class="secondary">Play replay</button>
+      <button type="button" id="replay-end" class="secondary">Latest</button>
+    </div>
+  </div>
+ </section>
+ <section class="panel" aria-labelledby="paper-title">
+  <div class="panel-heading"><div><p class="eyebrow">PAPER EXECUTION ONLY</p><h2 id="paper-title">Simulated position journal</h2></div><span class="pill">BROWSER-LOCAL</span></div>
+  <p class="fine">Practice opening and closing a fictional strategy at displayed leg premiums. P&amp;L is in premium points, not INR. No trade requests, server orders, holdings or broker accounts are created.</p>
+  <div class="paper-actions">
+    <button type="button" id="paper-open" class="primary">Open paper position only</button>
+    <button type="button" id="paper-clear" class="secondary">Clear closed journal</button>
+  </div>
+  <div class="paper-overview">Open simulated positions: <strong id="paper-open-count">0</strong> / 5 · Per-position fictional premium cap 20,000</div>
+  <div id="paper-positions" class="lab-records" aria-live="polite">No simulated paper positions recorded.</div>
+ </section>
+ <section class="panel" aria-labelledby="alert-title">
+  <div class="panel-heading"><div><p class="eyebrow">FOREGROUND PRICE STUDY</p><h2 id="alert-title">Strategy alerts</h2></div><span class="pill">NOT SERVER MONITORED</span></div>
+  <p class="fine">Set a simulated basket-premium threshold. Alerts evaluate when you view or replay candles in this tab only; they cannot notify you while the browser is closed.</p>
+  <div class="alert-controls">
+    <select id="alert-direction" aria-label="Alert direction"><option value="above">At or above</option><option value="below">At or below</option></select>
+    <input id="alert-threshold" type="number" min="0.01" max="1000000" step="0.01" value="100" aria-label="Simulated premium threshold">
+    <button type="button" id="alert-add" class="secondary">Add alert</button>
+    <button type="button" id="alert-clear" class="secondary">Clear alerts</button>
+  </div>
+  <div id="alert-records" class="lab-records" aria-live="polite">No foreground simulation alerts yet.</div>
+ </section>
+ </div>
  <div id="status" role="status" aria-live="polite" class="status">Loading simulated strategy…</div>
 </section>
 </div>
