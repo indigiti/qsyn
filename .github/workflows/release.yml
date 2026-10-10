@@ -257,6 +257,7 @@ jobs:
           test -s staging/private/app/src/FileTerminalWorkspaceRepository.php
           test -s staging/private/app/src/TerminalWorkspaceApi.php
           test -s staging/private/app/src/PrivateChartGrantApi.php
+          test -s staging/private/app/src/UpstoxOperatorOAuth.php
           test -s staging/private/app/src/FileMockAccountSelection.php
           test -s staging/private/app/src/AccountApi.php
           test -s staging/private/app/src/SimulatedAccountBars.php
