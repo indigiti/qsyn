@@ -58,6 +58,10 @@ jobs:
           php -l apps/web-php/public/account-dashboard.php
           python3 apps/web-php/tests/AccountHttpSmoke.py
           php apps/web-php/tests/SimulatedAccountBarsTest.php
+          php -l apps/web-php/src/FileMockWorkspaceRepository.php
+          php -l apps/web-php/src/FileMockAuditLog.php
+          php -l apps/web-php/tests/WorkspaceAuditTest.php
+          php apps/web-php/tests/WorkspaceAuditTest.php
           php apps/web-php/tests/RustAdminTest.php
           php apps/web-php/tests/RustAdminBootstrapTest.php
           php apps/web-php/tests/RustDemoConfigTest.php
@@ -121,6 +125,8 @@ jobs:
           cp apps/web-php/src/FileMockAccountSelection.php staging/private/app/src/FileMockAccountSelection.php
           cp apps/web-php/src/AccountApi.php staging/private/app/src/AccountApi.php
           cp apps/web-php/src/SimulatedAccountBars.php staging/private/app/src/SimulatedAccountBars.php
+          cp apps/web-php/src/FileMockWorkspaceRepository.php staging/private/app/src/FileMockWorkspaceRepository.php
+          cp apps/web-php/src/FileMockAuditLog.php staging/private/app/src/FileMockAuditLog.php
           cp apps/web-php/src/RustProbe.php staging/private/app/src/RustProbe.php
           cp apps/web-php/src/RustStreamProbe.php staging/private/app/src/RustStreamProbe.php
           cp apps/web-php/src/RustAdmin.php staging/private/app/src/RustAdmin.php
@@ -170,6 +176,8 @@ jobs:
           test -s staging/private/app/src/FileMockAccountSelection.php
           test -s staging/private/app/src/AccountApi.php
           test -s staging/private/app/src/SimulatedAccountBars.php
+          test -s staging/private/app/src/FileMockWorkspaceRepository.php
+          test -s staging/private/app/src/FileMockAuditLog.php
           test -s staging/public/account-dashboard.php
           test -s staging/public/assets/account-dashboard.js
           test -s staging/public/assets/account-dashboard.css
@@ -229,6 +237,8 @@ jobs:
           test -s verified-release/private/app/src/FileMockAccountSelection.php
           test -s verified-release/private/app/src/AccountApi.php
           test -s verified-release/private/app/src/SimulatedAccountBars.php
+          test -s verified-release/private/app/src/FileMockWorkspaceRepository.php
+          test -s verified-release/private/app/src/FileMockAuditLog.php
           test -s verified-release/public/account-dashboard.php
           test -s verified-release/public/assets/account-dashboard.js
           test -s verified-release/public/assets/account-dashboard.css

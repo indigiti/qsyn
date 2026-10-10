@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace QSYN\Identity;
 
 use QSYN\Storage\FileStore;
+use QSYN\Audit\FileMockAuditLog;
 
 /**
  * Development/test API boundary. Disabled without explicit private storage,
@@ -90,6 +91,12 @@ final class IdentityApi
             return [403, ['error' => 'csrf_invalid']];
         }
         if ($operation === 'logout') {
+            if ($principal !== null) {
+                (new FileMockAuditLog(new FileStore($private)))->record(
+                    (string) $principal['tenant_id'], (string) $principal['user_id'],
+                    'auth.logout', 'completed'
+                );
+            }
             UserSession::logout();
             return [200, ['authenticated' => false, 'csrf' => UserSession::csrf()]];
         }
@@ -117,6 +124,10 @@ final class IdentityApi
         if ($user === null) {
             return [401, ['error' => 'invalid_credentials']];
         }
+        (new FileMockAuditLog(new FileStore($private)))->record(
+            (string) $user['tenant_id'], (string) $user['user_id'],
+            'auth.login', 'completed'
+        );
         UserSession::login($user);
         return [200, [
             'authenticated' => true,

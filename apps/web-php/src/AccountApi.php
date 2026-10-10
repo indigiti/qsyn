@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace QSYN\Accounts;
 
 use InvalidArgumentException;
+use QSYN\Audit\FileMockAuditLog;
 use QSYN\Identity\FileUserRepository;
 use QSYN\Identity\IdentityApi;
 use QSYN\Identity\UserSession;
@@ -16,6 +17,34 @@ use RuntimeException;
  */
 final class AccountApi
 {
+    /**
+     * Write the intent *before* the mutation so a successful mutation cannot
+     * happen without at least a private durable audit record. Completion and
+     * rejection records share a correlation ID. No request bodies or labels
+     * are ever written to the audit stream.
+     */
+    private static function audited(
+        FileMockAuditLog $audit,
+        string $tenant,
+        string $owner,
+        string $event,
+        ?string $resource,
+        callable $mutation
+    ): array {
+        $intent = $audit->record($tenant, $owner, $event, 'intent', $resource);
+        try {
+            $result = $mutation();
+        } catch (\Throwable $error) {
+            $audit->record($tenant, $owner, $event, 'rejected', $resource, $intent['correlation_id']);
+            throw $error;
+        }
+        // A failed completion-log write must leave an unmatched intent, not
+        // a false "rejected" record for an operation that already succeeded.
+        $id = $resource ?? ($result['account_id'] ?? null);
+        $audit->record($tenant, $owner, $event, 'completed', $id, $intent['correlation_id']);
+        return $result;
+    }
+
     /** @return array{0:int,1:array<string,mixed>} */
     public static function dispatch(string $operation, array $server): array
     {
@@ -28,7 +57,7 @@ final class AccountApi
         if (!UserSession::boot($server)) {
             return [403, ['error' => 'secure_transport_required']];
         }
-        $method = in_array($operation, ['list', 'get', 'bars'], true) ? 'GET' : 'POST';
+        $method = in_array($operation, ['list', 'get', 'bars', 'workspace'], true) ? 'GET' : 'POST';
         if (($server['REQUEST_METHOD'] ?? 'GET') !== $method) {
             return [405, ['error' => 'method_not_allowed']];
         }
@@ -45,12 +74,24 @@ final class AccountApi
         }
         $accounts = new FileMockBrokerConnectionRepository($store);
         $selection = new FileMockAccountSelection($store, $accounts);
+        $workspace = new FileMockWorkspaceRepository($store, $accounts);
+        $audit = new FileMockAuditLog($store);
 
         if ($operation === 'list') {
             return [200, [
                 'mode' => 'simulated',
                 'accounts' => $accounts->listForOwner($tenant, $owner),
                 'selection' => $selection->current($tenant, $owner),
+            ]];
+        }
+        if ($operation === 'workspace') {
+            $selected = $selection->current($tenant, $owner);
+            if ($selected['account_id'] === null) {
+                return [409, ['error' => 'no_mock_chart_source_selected']];
+            }
+            return [200, [
+                'mode' => 'simulated',
+                'workspace' => $workspace->getForOwner($tenant, $owner, $selected['account_id']),
             ]];
         }
         if ($operation === 'bars') {
@@ -115,6 +156,27 @@ final class AccountApi
         try {
             $id = $body['account_id'] ?? null;
             $revision = $body['expected_revision'] ?? null;
+            if ($operation === 'save-workspace') {
+                $currentSelection = $selection->current($tenant, $owner);
+                $settings = $body['settings'] ?? null;
+                if (!is_string($id) || strlen($id) > 48 || !is_int($revision)
+                    || $revision < 0 || !is_array($settings)) {
+                    return [422, ['error' => 'invalid_account_fields']];
+                }
+                // Account ID is a CAS guard, not an authorization selector.
+                // The session's *current* selected source remains authoritative.
+                if ($currentSelection['account_id'] === null
+                    || $currentSelection['account_id'] !== $id) {
+                    return [409, ['error' => 'chart_source_changed']];
+                }
+                $validated = FileMockWorkspaceRepository::settings($settings);
+                return [200, [
+                    'workspace' => self::audited($audit, $tenant, $owner,
+                        'workspace.save', $id, fn (): array =>
+                            $workspace->saveForOwner($tenant, $owner, $id, $validated, $revision)),
+                    'mode' => 'simulated',
+                ]];
+            }
             if ($operation === 'link') {
                 $broker = $body['broker_code'] ?? null;
                 $reference = $body['mock_reference'] ?? null;
@@ -124,7 +186,8 @@ final class AccountApi
                     return [422, ['error' => 'invalid_account_fields']];
                 }
                 return [201, [
-                    'account' => $accounts->linkMock($tenant, $owner, $broker, $reference, $label),
+                    'account' => self::audited($audit, $tenant, $owner, 'account.link', null,
+                        fn (): array => $accounts->linkMock($tenant, $owner, $broker, $reference, $label)),
                     'mode' => 'simulated',
                 ]];
             }
@@ -138,13 +201,15 @@ final class AccountApi
                     return [422, ['error' => 'invalid_account_fields']];
                 }
                 return [200, [
-                    'account' => $accounts->renameMock($tenant, $owner, $id, $label, $revision),
+                    'account' => self::audited($audit, $tenant, $owner, 'account.rename', $id,
+                        fn (): array => $accounts->renameMock($tenant, $owner, $id, $label, $revision)),
                     'mode' => 'simulated',
                 ]];
             }
             if ($operation === 'select') {
                 return [200, [
-                    'selection' => $selection->choose($tenant, $owner, $id, $revision),
+                    'selection' => self::audited($audit, $tenant, $owner, 'account.select', $id,
+                        fn (): array => $selection->choose($tenant, $owner, $id, $revision)),
                     'mode' => 'simulated',
                 ]];
             }
@@ -153,7 +218,8 @@ final class AccountApi
                     return [422, ['error' => 'invalid_account_fields']];
                 }
                 return [200, [
-                    'account' => $accounts->disconnectMock($tenant, $owner, $id, $revision),
+                    'account' => self::audited($audit, $tenant, $owner, 'account.disconnect', $id,
+                        fn (): array => $accounts->disconnectMock($tenant, $owner, $id, $revision)),
                     // The selection may still contain the old ID; current()
                     // masks disconnected accounts without rewriting a second
                     // record inside a non-atomic multi-file transaction.
@@ -170,6 +236,7 @@ final class AccountApi
                 'Revision conflict', 'Mock broker account already linked' =>
                     [409, ['error' => 'revision_conflict']],
                 'Mock account disconnected' => [409, ['error' => 'account_disconnected']],
+                'Invalid chart workspace settings' => [422, ['error' => 'invalid_workspace_settings']],
                 default => throw $error,
             };
         }

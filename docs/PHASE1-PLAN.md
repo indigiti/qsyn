@@ -200,3 +200,64 @@ pixel painting, versioned selection, source switch with different
 fake candle data, disconnect revocation, viewer/tenant isolation,
 cross-site safety and logout. Default-off dashboard route is validated
 by PHP HTTP regression. **No staging deployment during this slice.**
+
+
+## Phase 1.5 — Server-owned mock chart workspaces and security audit
+
+Phase 1.5 remains **development-only and disabled by default**.
+Do not configure the public Cloudways application to enable the
+identity, accounts or dashboard switches. Verified #58 remains the
+running staging baseline. No Upstox keys, real quotes or orders are added.
+
+**Workspace preferences.** A \`FileMockWorkspaceRepository\` stores
+one revisioned workspace document for each *tenant + authenticated user +
+mock broker account*. The accepted layout settings are deliberately
+small and actually applied by the browser's chart: \`theme=dark|light\`,
+\`visible_bars=60|100|120\`, and \`layout=split|focus\`. Source identity,
+market symbol, subscriptions, trading permissions and broker credentials
+cannot be changed through workspace settings.
+
+- \`GET /qsyn/api/v1/accounts/workspace\` reads the current session's
+  *selected, connected* mock account and returns default settings when
+  no saved document exists. It never accepts an account ID query selector.
+- \`POST /qsyn/api/v1/accounts/save-workspace\` requires \`account_id\`
+  matching the *currently selected account* as a concurrency check,
+  \`expected_revision\` and a strictly validated settings object.
+  Only member/tenant-admin can save, while a viewer can inspect their
+  selected workspace. The expected revision is checked atomically by
+  private FileStore; stale changes return 409. Switching to a different
+  source in another tab returns 409 instead of writing that source.
+- The dashboard restores saved settings on reload and across login/logout.
+  OpenAlgo Charts no longer uses per-browser \`persist\`/localStorage
+  for mock chart state; the authenticated owner's private workspace
+  is authoritative. A focus layout has a **Show accounts** navigation
+  escape without modifying the stored preference.
+- Disconnecting the selected mock broker account makes its bars and
+  workspace unreachable through the session-bound endpoints.
+  Historical private metadata remains, but never implies feed access.
+
+**Write-only private development audit.** \`FileMockAuditLog\` persists
+individual 0600 append-only-style JSON records, with a random event ID,
+authenticated tenant/actor IDs, fixed action/state, an optional mock
+account ID and correlation ID, and timestamp. Successful test-user
+login/logout events are recorded without passwords. Every mock account
+link/rename/select/disconnect and workspace save writes an \`intent\`
+*before* mutating private records, then a correlated \`completed\` or
+\`rejected\` result. No HTTP audit listing, broker tokens, labels,
+request bodies or client-provided IP headers are stored.
+
+This is **not a production immutable audit log**, nor is the
+development FileStore a transactional database: a process failure
+between intent and completion may leave an unmatched intent, and a
+failed outcome write after successful mutation may leave only an
+intent. Such attempts remain inspectable from private storage. Do not
+use this layer for real customers, financial transactions or execution.
+
+Exit checks run in GitHub Actions: PHP store contracts, file permissions,
+valid/invalid workspace settings, CAS conflicts, cross-tenant ownership,
+client-supplied identity rejection, CSRF, browser-context isolation,
+session inactivity/absolute timeout, immediate disabled-user revocation,
+mock audit correlation/secret exclusion, Chromium real candle rendering,
+persisted focus/dark/light and per-account layout restoration, and
+logout/login source continuity. No staging or production rollout in
+this phase.

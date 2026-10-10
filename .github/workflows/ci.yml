@@ -52,6 +52,10 @@ jobs:
           php -l apps/web-php/public/account-dashboard.php
           python3 apps/web-php/tests/AccountHttpSmoke.py
           php apps/web-php/tests/SimulatedAccountBarsTest.php
+          php -l apps/web-php/src/FileMockWorkspaceRepository.php
+          php -l apps/web-php/src/FileMockAuditLog.php
+          php -l apps/web-php/tests/WorkspaceAuditTest.php
+          php apps/web-php/tests/WorkspaceAuditTest.php
           php apps/web-php/tests/RustAdminTest.php
           php apps/web-php/tests/RustAdminBootstrapTest.php
           php apps/web-php/tests/RustDemoConfigTest.php
