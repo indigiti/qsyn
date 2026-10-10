@@ -129,6 +129,7 @@ jobs:
       - name: Build and exercise Rust HTTP + WebSocket service
         run: |
           cargo build --manifest-path services/stream-rust/Cargo.toml
+          QSYN_MARKET_ARCHIVE_BINARY=services/stream-rust/target/debug/qsyn-market-archive python3 services/stream-rust/tests/market_archive_cli_smoke.py
           python3 services/stream-rust/tests/smoke_service.py
           python3 services/stream-rust/tests/direct_control_smoke.py
           python3 services/stream-rust/tests/auto_activation_smoke.py
