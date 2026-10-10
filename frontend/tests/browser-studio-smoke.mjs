@@ -204,9 +204,13 @@ try {
   await page.reload({ waitUntil: 'networkidle' });
   await page.waitForFunction(() => document.querySelector('#status')?.textContent?.includes('Loaded 120 synchronized'),
     null, { timeout: 25000 });
+  await page.locator('#toolbar-workspaces').click();
+  await page.locator('#strategy-drawer').waitFor({ state: 'visible', timeout: 5000 });
   if (!(await page.locator('#saved-list').innerText()).includes('Synthetic Test Workspace')) {
     throw new Error('Local browser workspace did not survive reload');
   }
+  await page.locator('#drawer-close').click();
+  await page.locator('#strategy-drawer').waitFor({ state: 'hidden', timeout: 5000 });
   await page.locator('#toolbar-underlying').selectOption('BANKNIFTY');
   await page.waitForFunction(() => document.querySelector('#atm')?.textContent?.includes('strike step 100'));
   await page.locator('#toolbar-render').click();
