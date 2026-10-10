@@ -137,13 +137,11 @@ where
                 records, durable_bytes: good, trailing_partial_frame_at: None, last_sequence: sequence,
             });
         }
-        if first < HEADER_BYTES {
-            if file.read_exact(&mut header[first..]).is_err() {
-                return Ok(ScanReport {
-                    records, durable_bytes: good, trailing_partial_frame_at: Some(start),
-                    last_sequence: sequence,
-                });
-            }
+        if first < HEADER_BYTES && file.read_exact(&mut header[first..]).is_err() {
+            return Ok(ScanReport {
+                records, durable_bytes: good, trailing_partial_frame_at: Some(start),
+                last_sequence: sequence,
+            });
         }
         if header[0..4] != MAGIC {
             return Err(invalid("bad_wal_magic_or_midfile_corruption"));
