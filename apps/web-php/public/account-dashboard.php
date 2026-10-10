@@ -46,13 +46,13 @@ $chartJsVersion = (string) (@filemtime(__DIR__ . '/assets/account-chart.js') ?: 
       <div id="workspace" hidden>
         <div class="intro">
           <div>
-            <div class="eyebrow">ACCOUNT WORKSPACE · PHASE 1.4</div>
+            <div class="eyebrow">ACCOUNT WORKSPACE · PHASE 1.5</div>
             <h1>Connected mock accounts</h1>
             <p class="muted">Select a simulated broker identity to preview its own synthetic chart fixture. This is never real market data.</p>
           </div>
           <div class="intro-actions"><button id="refresh-button" type="button" class="button ghost">Refresh</button></div>
         </div>
-        <div class="workspace-grid">
+        <div id="workspace-grid" class="workspace-grid">
           <section class="panel accounts-panel" aria-labelledby="accounts-title">
             <div class="panel-top"><div><h2 id="accounts-title">Accounts</h2><span class="small-muted">Scoped to your QSYN test identity</span></div><span id="account-count" class="count">0</span></div>
             <ul id="account-list" class="account-list" aria-label="Mock broker accounts"></ul>
@@ -84,6 +84,15 @@ $chartJsVersion = (string) (@filemtime(__DIR__ . '/assets/account-chart.js') ?: 
               <span class="pill">NO ORDERS</span>
             </div>
             <div id="chart-source-label" class="source-label">No mock chart source selected</div>
+            <form id="workspace-form" class="workspace-preferences" hidden>
+              <div class="workspace-preferences-title">Saved chart workspace <span id="workspace-revision" class="small-muted"></span></div>
+              <div class="workspace-fields">
+                <div><label for="workspace-theme">Chart theme</label><select id="workspace-theme"><option value="dark">Dark</option><option value="light">Light</option></select></div>
+                <div><label for="workspace-visible">Visible bars</label><select id="workspace-visible"><option value="60">60 candles</option><option value="100">100 candles</option><option value="120">120 candles</option></select></div>
+                <div><label for="workspace-layout">Workspace layout</label><select id="workspace-layout"><option value="split">Split view</option><option value="focus">Chart focus</option></select></div>
+                <button id="workspace-save" type="submit" class="button primary">Save chart view</button>
+              </div>
+            </form>
             <div id="chart-empty" class="chart-empty"><div class="empty-icon">▥</div><strong>Select a mock account</strong><p>Only the selected account's server-authorized demonstration candles will load here.</p></div>
             <div id="account-chart" hidden aria-label="Account scoped mock candlestick chart"></div>
             <p class="small-muted chart-footnote">Synthetic OHLC values generated locally by QSYN for each mock identity. Not Upstox quotes, not exchange ticks, and not a trading interface. No real-time subscriptions.</p>
