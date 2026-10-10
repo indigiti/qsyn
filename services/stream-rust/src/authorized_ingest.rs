@@ -35,8 +35,12 @@ impl PrivatePersistentIngest {
             || approval.approved_instruments.len() > 8
             || approval.max_delay_ms > 5_000 || approval.expires_ms <= now_ms
         { return Err(refused("private_persistence_not_approved")); }
-        let wal=DurableMarketWal::open(root)?;
-        Ok(Self { approval, wal, last:HashMap::new(), stored:0 })
+        let mut wal=DurableMarketWal::open(root)?;
+        let last=wal.private_watermarks(
+            &approval.scope, &DataMode::AuthorizedLive,
+            &approval.approved_instruments,
+        )?;
+        Ok(Self { approval, wal, last, stored:0 })
     }
     /// Accepted normalized quotes remain PRIVATE; source "authorized_live"
     /// is a provenance label only, not permission to send to web clients.
@@ -112,6 +116,40 @@ mod tests {
         let q=crate::durable_market_wal::query(&root,&quote.scope,&DataMode::AuthorizedLive,
             "NFO|CE",0,u64::MAX,10).unwrap();
         assert_eq!(q.len(),2);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn restart_restores_watermarks_and_forbids_cross_account_archives() {
+        let root=std::env::temp_dir().join(format!("qsyn-ingest-restart-{}-{}",
+            std::process::id(),SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos()));
+        fs::create_dir(&root).unwrap();
+        #[cfg(unix)]fs::set_permissions(&root,fs::Permissions::from_mode(0o700)).unwrap();
+        let scope=Scope {tenant_id:"tenantA".into(),account_id:"upstoxA".into(),
+            source_id:"privateOpenAlgo".into(),entitlement_id:"licenseA".into()};
+        let approval=PrivateIngestApproval {
+            scope:scope.clone(),approved_instruments:vec!["NFO|CE".into()],
+            licensed_persistence:true,broker_session_verified:true,
+            expires_ms:300_000,max_delay_ms:2_000,
+        };
+        let quote=CandidateQuote {
+            scope, instrument_id:"NFO|CE".into(),exchange_timestamp_ms:100_000,
+            received_timestamp_ms:100_100,price:199.0,stale:false,
+            entitlement_verified:false,publishable_to_public_studio:false,
+        };
+        {
+            let mut first=PrivatePersistentIngest::open(&root,approval.clone(),100_000).unwrap();
+            assert_eq!(first.ingest(&quote,100_200).unwrap(),1);
+        }
+        {
+            let mut reopened=PrivatePersistentIngest::open(&root,approval.clone(),100_300).unwrap();
+            assert_eq!(reopened.ingest(&quote,100_300).unwrap(),1);
+            assert_eq!(reopened.stored,0);
+        }
+        assert_eq!(crate::durable_market_wal::audit(&root).unwrap().records,1);
+        let mut foreign=approval;
+        foreign.scope.account_id="upstoxB".into();
+        assert!(PrivatePersistentIngest::open(&root,foreign,100_300).is_err());
         fs::remove_dir_all(root).unwrap();
     }
 }
