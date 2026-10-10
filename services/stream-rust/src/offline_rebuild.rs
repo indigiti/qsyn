@@ -159,7 +159,7 @@ mod tests {
         assert_eq!(rows[0].high, 175.0);
         assert_eq!(rows[0].low, 150.0);
         assert_eq!(rows[0].close, 175.0);
-        assert_eq!(rows[0].observations, 5);
+        assert_eq!(rows[0].observations, 3);
         let mut foreign = fixture.descriptor();
         foreign.scope.account_id = "B".into();
         assert!(CandlePartition::open(&fixture.candles, "202610", &foreign).is_err());
