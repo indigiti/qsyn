@@ -231,6 +231,84 @@ mod tests {
     }
 
     #[test]
+    fn immutable_two_leg_archive_is_account_scoped_without_network() {
+        use crate::immutable_candles::CandlePartition;
+        use std::fs;
+        #[cfg(unix)]
+        use std::os::unix::fs::PermissionsExt;
+        use std::time::{SystemTime, UNIX_EPOCH};
+
+        let stamp = SystemTime::now().duration_since(UNIX_EPOCH)
+            .unwrap().as_nanos();
+        let root = std::env::temp_dir().join(format!(
+            "qsyn-v3-history-{}-{stamp}", std::process::id()
+        ));
+        let wal = root.join("wal");
+        let candles = root.join("candles");
+        fs::create_dir(&root).unwrap();
+        fs::create_dir(&wal).unwrap();
+        fs::create_dir(&candles).unwrap();
+        #[cfg(unix)]
+        for dir in [&root, &wal, &candles] {
+            fs::set_permissions(dir, fs::Permissions::from_mode(0o700)).unwrap();
+        }
+        let now = 1_800_000_000_000u64;
+        let rights_file = root.join("rights.json");
+        let oauth_file = root.join("oauth.json");
+        fs::write(&rights_file, serde_json::json!({
+            "schema":"QSYN-PRIVATE-CHART-ENTITLEMENT/1",
+            "tenant":"T","account":"A","owner":"U","broker":"upstox",
+            "license_id":"L","instruments":["NSE_FO|12345","NSE_FO|12346"],
+            "can_display_to_this_user":true,"broker_session_verified":true,
+            "valid_until_ms":now+900000
+        }).to_string()).unwrap();
+        fs::write(&oauth_file,serde_json::json!({
+            "schema":"QSYN-UPSTOX-AUTH-SESSION/1",
+            "broker":"upstox","user_id":"UPSTOX-USER",
+            "access_token":"test-secret-not-a-real-token-123456789",
+            "order_routing_enabled":false,
+            "display_entitlement_verified":false,
+            "retention_entitlement_verified":false
+        }).to_string()).unwrap();
+        #[cfg(unix)]
+        for file in [&rights_file, &oauth_file] {
+            fs::set_permissions(file, fs::Permissions::from_mode(0o600)).unwrap();
+        }
+        let plan = WorkerSettings {
+            schema:"QSYN-UPSTOX-V3-PRIVATE-WORKER/1".into(),
+            tenant:"T".into(), account:"A".into(), owner:"U".into(),
+            upstox_user_id:"UPSTOX-USER".into(), entitlement_id:"L".into(),
+            ce_key:"NSE_FO|12345".into(), pe_key:"NSE_FO|12346".into(),
+            contract_expiry_ms:now+900000,rights_expire_ms:now+900000,
+            wal_root:wal, private_chart_socket:root.join("chart.ipc"),
+            private_rights_file:rights_file,private_oauth_session_file:oauth_file,
+            operator_approved_display:true,operator_approved_retention:true,
+            current_bod_mapping_verified:true,max_attempts:2,
+        };
+        let day=NaiveDate::from_ymd_opt(2026,10,9).unwrap();
+        let data=br#"{"status":"success","data":{"candles":[
+          ["2026-10-09T09:15:00+05:30",100,104,99,102,123,55]
+        ]}}"#;
+        let bars=decode_upstox_v3_day(data, day, now).unwrap();
+        archive_leg(&candles, &plan, &plan.ce_key, day, &bars, now).unwrap();
+        archive_leg(&candles, &plan, &plan.pe_key, day, &bars, now).unwrap();
+        let mut expected=SeriesDescriptor {
+            scope:history_scope(&plan), mode:DataMode::Replay,
+            series_id:"NSE_FO_12345_20261009".into(), interval_ms:60_000,
+        };
+        let mut ce=CandlePartition::open(&candles,"202610",&expected).unwrap();
+        assert_eq!(ce.audit().unwrap(),1);
+        assert_eq!(ce.range(0,u64::MAX,1).unwrap()[0].close,102.0);
+        expected.scope.account_id="B".into();
+        assert!(CandlePartition::open(&candles,"202610",&expected).is_err());
+        let mut foreign=plan.clone();
+        foreign.account="B".into();
+        assert!(archive_leg(&candles,&foreign,&foreign.ce_key,day,&bars,now).is_err());
+        assert!(archive_leg(&candles,&plan,&plan.ce_key,day,&bars,now).is_err());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
     fn range_protection_prevents_public_arbitrary_dates() {
         let today=NaiveDate::from_ymd_opt(2026,10,11).unwrap();
         assert!(decode_day("2026-10-11",today).is_ok());
