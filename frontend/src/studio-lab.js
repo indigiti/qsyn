@@ -185,6 +185,8 @@ export function bindStudioLab({ data, config, onStatus, renderReplay }) {
     }
     if (!rows.length) panel.textContent = 'No simulated paper positions recorded.';
     $('paper-open-count').textContent = String(openCount);
+    const dockCount = $('dock-paper-count');
+    if (dockCount) dockCount.textContent = String(openCount);
     $('paper-open').disabled = openCount >= MAX_POSITIONS;
   }
   $('paper-open').addEventListener('click', () => {
