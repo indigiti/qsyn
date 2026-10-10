@@ -26,6 +26,7 @@ final class FileStore
         if ($real === false) {
             throw new RuntimeException('Cannot resolve storage root');
         }
+        clearstatcache(true, $real);
         $mode = fileperms($real);
         if ($mode === false || ($mode & 0007) !== 0 || ($mode & 0020) !== 0) {
             throw new RuntimeException('Unsafe private storage permissions');
@@ -51,6 +52,7 @@ final class FileStore
         if (is_link($dir)) {
             throw new RuntimeException('Collection symlink not allowed');
         }
+        clearstatcache(true, $dir);
         $mode = fileperms($dir);
         if ($mode === false || ($mode & 0007) !== 0 || ($mode & 0020) !== 0) {
             throw new RuntimeException('Unsafe collection permissions');
@@ -67,6 +69,7 @@ final class FileStore
         if (!is_file($path)) {
             return null;
         }
+        clearstatcache(true, $path);
         $mode = fileperms($path);
         if ($mode === false || ($mode & 0077) !== 0) {
             throw new RuntimeException('Unsafe private record permissions');
