@@ -18,8 +18,7 @@ fn php_chart_grant_is_accepted_by_rust_without_bypassing_current_rights() {
     let secret_path = directory.join("key.bin");
     fs::write(&secret_path, [42u8; 32]).unwrap();
 
-    let php = format!(
-        r#"require $argv[2];
+    let php = r#"require $argv[2];
         putenv('QSYN_PRIVATE_CHART_SIGNING_KEY_FILE='.$argv[1].'/key.bin');
         $rights=['tenant'=>'tenant-one', 'account'=>'upstox-A',
                  'owner'=>'u_aabbcc', 'broker'=>'upstox',
@@ -28,7 +27,7 @@ fn php_chart_grant_is_accepted_by_rust_without_bypassing_current_rights() {
         $value=$method->invoke(null,$rights,'NFO|CE',$argv[1],100000);
         if(!is_array($value)) exit(3);
         echo $value['ticket'];"#
-    );
+    ;
     let php_src = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../apps/web-php/src/PrivateChartGrantApi.php");
     let result = Command::new("php")
