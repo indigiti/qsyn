@@ -11,7 +11,7 @@ test('catalog only accepts approved simulated symbols, search never accepts arbi
   assert.equal(instrumentFor('NSE:RELIANCE'), null);
   assert.equal(searchInstruments('nifty').length, 3);
   assert.deepEqual(searchInstruments('reliance'), []);
-  assert.equal(searchInstruments(''), SYMBOLS);
+  assert.deepEqual(searchInstruments(''), SYMBOLS);
 });
 test('rejects malformed layout, mismatched chart state and duplicate panes', () => {
   assert.equal(validPanes([{ id: 'primary', symbol: 'QSYN-DEMO' }]), true);
