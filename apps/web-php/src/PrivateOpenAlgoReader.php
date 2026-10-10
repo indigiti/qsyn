@@ -167,7 +167,12 @@ final class PrivateOpenAlgoReader
         if (!is_array($decoded) || ($decoded['status'] ?? null) !== 'success') {
             throw new \RuntimeException('openalgo_broker_session_not_authorized');
         }
-        return self::sanitize($account, $operation, $decoded);
+        $safe = self::sanitize($account, $operation, $decoded);
+        if ($operation === 'order-status'
+            && ($safe['broker_order_id'] ?? null) !== $args['orderid']) {
+            throw new \RuntimeException('upstream_order_id_mismatch');
+        }
+        return $safe;
     }
 
     private static function keys(array $args, array $allowed): void
