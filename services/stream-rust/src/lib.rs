@@ -12,6 +12,7 @@ pub mod chart_entitlement;
 pub mod paper_oms;
 pub mod authorized_ingest;
 pub mod history_backfill;
+pub mod private_chart_hub;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Leg {
