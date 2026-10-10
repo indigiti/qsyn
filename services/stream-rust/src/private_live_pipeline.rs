@@ -164,6 +164,18 @@ pub struct FeedReport {
 /// Operator-only time-bounded reconnecting observer. Upstream OpenAlgo owns
 /// OAuth; this function does not authorize a QSYN public viewer or trade.
 pub async fn observe(plan: &PrivateFeedPlan, key: &str) -> io::Result<FeedReport> {
+    observe_with_sink(plan, key, |_| Ok(())).await
+}
+
+/// Private sink is called on validated provider quotes. The sink itself must
+/// independently verify licensing, timestamps and durable write permissions.
+pub async fn observe_with_sink<F>(
+    plan: &PrivateFeedPlan,
+    key: &str,
+    mut sink: F,
+) -> io::Result<FeedReport>
+where F: FnMut(&CandidateQuote) -> io::Result<()>,
+{
     plan.validate()?;
     if !(16..=256).contains(&key.len()) || !key.bytes().all(|b|
         b.is_ascii_alphanumeric() || b == b'_' || b == b'-') {
@@ -243,6 +255,9 @@ pub async fn observe(plan: &PrivateFeedPlan, key: &str) -> io::Result<FeedReport
             }
             if let Some(quote) = normalize(&text, &plan.scope, &plan.broker,
                 &plan.subscriptions, utc_ms()?)? {
+                // Observe-only callbacks may persist approved records.
+                // Never turn a sink failure into silent data loss.
+                if !quote.stale { sink(&quote)?; }
                 if let Some(update) = basket.on_candidate(&quote) {
                     report.synchronized_updates += 1;
                     if update.finalized.is_some() { report.finalized_candles += 1; }

@@ -8,6 +8,11 @@ pub mod immutable_candles;
 pub mod offline_rebuild;
 pub mod openalgo_stream;
 pub mod private_live_pipeline;
+pub mod chart_entitlement;
+pub mod paper_oms;
+pub mod authorized_ingest;
+pub mod history_backfill;
+pub mod private_chart_hub;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Leg {
