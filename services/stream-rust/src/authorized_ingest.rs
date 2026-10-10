@@ -49,8 +49,12 @@ impl PrivatePersistentIngest {
             || q.exchange_timestamp_ms == 0 || q.exchange_timestamp_ms > now_ms
             || now_ms.saturating_sub(q.exchange_timestamp_ms) > self.approval.max_delay_ms
             || !q.price.is_finite() || q.price <= 0.0
-            || self.last.get(&q.instrument_id).is_some_and(|t| q.exchange_timestamp_ms <= *t)
-        { return Err(refused("unapproved_stale_or_duplicate_private_quote")); }
+        { return Err(refused("unapproved_stale_or_invalid_private_quote")); }
+        // The upstream snapshot is replayed on every reconnection. Repeated
+        // timestamps are safe no-op acknowledgments, not another WAL record.
+        if self.last.get(&q.instrument_id).is_some_and(|t| q.exchange_timestamp_ms <= *t) {
+            return Ok(self.wal.last_sequence());
+        }
         let wal_quote=NormalizedQuote {
             scope:self.approval.scope.clone(),
             instrument_id:q.instrument_id.clone(),
@@ -95,7 +99,8 @@ mod tests {
             entitlement_verified:false,publishable_to_public_studio:false,
         };
         assert_eq!(w.ingest(&quote,100_500).unwrap(),1);
-        assert!(w.ingest(&quote,100_500).is_err());
+        assert_eq!(w.ingest(&quote,100_500).unwrap(),1);
+        assert_eq!(w.stored,1);
         quote.exchange_timestamp_ms=101_000;
         quote.scope.account_id="upstoxB".into();
         assert!(w.ingest(&quote,101_500).is_err());
