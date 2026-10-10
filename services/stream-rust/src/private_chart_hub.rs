@@ -42,8 +42,9 @@ impl PrivateChartHub {
         rights:&EntitlementAttestation)->io::Result<usize>{
         if rights.tenant != quote.scope.tenant_id
             || rights.account != quote.scope.account_id
-            || rights.broker_session_verified != true
+            || !rights.broker_session_verified
             || !rights.can_display_to_this_user
+            || rights.license_id != quote.scope.entitlement_id
             || rights.valid_until_ms<=now_ms
             || !rights.instruments.contains(&quote.instrument_id)
             || quote.stale || quote.publishable_to_public_studio
