@@ -88,6 +88,13 @@ impl WorkerSettings {
         }
         Ok(())
     }
+    /// Retention/display rights are independently checked at each history call.
+    /// OAuth token remains only in this Rust process, never in the chart UI.
+    pub(crate) fn private_history_token(&self, now_ms: u64) -> io::Result<String> {
+        self.validate(now_ms)?;
+        Ok(self.session()?.access_token)
+    }
+
     fn session(&self) -> io::Result<OAuthSession> {
         let bytes = private_bytes(&self.private_oauth_session_file, 16384)?;
         let value: OAuthSession = serde_json::from_slice(&bytes).map_err(|_|denied())?;
@@ -122,14 +129,25 @@ impl WorkerSettings {
     }
 }
 
+/// Finite exponential recovery: 2s, 4s, 8s, 16s, <=30s.
+fn retry_delay(attempt: u32) -> Duration {
+    Duration::from_secs((1u64 << attempt.min(5)).min(30))
+}
+
 /// Authorize using the current account bearer token. The returned one-time
 /// URL is used only in process memory and never logged or persisted.
+fn transient_authorize() -> io::Error {
+    io::Error::new(io::ErrorKind::TimedOut, "v3_authorize_temporarily_unavailable")
+}
 async fn authorize_next(client: &reqwest::Client, access_token: &str) -> io::Result<String> {
     let response = client.get("https://api.upstox.com/v3/feed/market-data-feed/authorize")
         .bearer_auth(access_token).header("Accept", "application/json")
-        .send().await.map_err(|_|denied())?;
-    if response.status() != reqwest::StatusCode::OK { return Err(denied()); }
-    let body = response.bytes().await.map_err(|_|denied())?;
+        .send().await.map_err(|_|transient_authorize())?;
+    if matches!(response.status().as_u16(), 401 | 403) { return Err(denied()); }
+    if response.status() != reqwest::StatusCode::OK {
+        return Err(io::Error::new(io::ErrorKind::TimedOut, "v3_authorization_unavailable"));
+    }
+    let body = response.bytes().await.map_err(|_|transient_authorize())?;
     if body.len() > 4096 { return Err(denied()); }
     let value: serde_json::Value = serde_json::from_slice(&body).map_err(|_|denied())?;
     if value["status"] != "success" {return Err(denied());}
@@ -148,28 +166,40 @@ pub async fn run(settings: &WorkerSettings) -> io::Result<()> {
     let mut attempts = 0u32;
     while attempts < settings.max_attempts {
         let now = epoch_ms()?;
+        // Failure of rights, keys, scope, local WAL readiness or expiry is a
+        // hard stop. An operator must intervene; never spin on revoked rights.
         settings.validate(now)?;
         let session = settings.session()?;
-        let url = authorize_next(&client, &session.access_token).await?;
-        let mut ingest = PrivatePersistentIngest::open(
-            &settings.wal_root, settings.ingestion_approval(), now,
-        )?;
-        let mut decoder = UpstoxV3Decoder::new(settings.plan(), now)?;
-        let guid = format!("qsyn-{}-{}", std::process::id(), attempts + 1);
-        // New one-use URL on every iteration. Never reconnect with the old URL.
-        let result = observe_one_use_session_with_sink(
-            &url, &mut decoder, &mut ingest, &guid, 120,
-            Some((&settings.private_rights_file, &settings.private_chart_socket)),
-        ).await;
         attempts += 1;
-        // A failure to ingest or publish must never turn into fabricated data.
-        // Retry boundedly, revalidating all current account and display rights.
-        if let Err(_error) = result {
-            // No sensitive provider URLs, tokens, tick payloads or account IDs in logs.
+        // A one-use URL can be temporarily unavailable (timeout, rate limit,
+        // upstream 5xx). Obtain a fresh URL on EACH reconnect/retry.
+        // Broker 401/403 is terminal and requires a NEW operator OAuth login.
+        match authorize_next(&client, &session.access_token).await {
+            Ok(url) => {
+                let mut ingest = PrivatePersistentIngest::open(
+                    &settings.wal_root, settings.ingestion_approval(), now,
+                )?;
+                let mut decoder = UpstoxV3Decoder::new(settings.plan(), now)?;
+                let guid = format!("qsyn-{}-{}", std::process::id(), attempts);
+                let result = observe_one_use_session_with_sink(
+                    &url, &mut decoder, &mut ingest, &guid, 120,
+                    Some((&settings.private_rights_file, &settings.private_chart_socket)),
+                ).await;
+                if let Err(error) = result {
+                    // Privileged worker logs omit all URLs, keys, tokens and
+                    // quote payloads. Entitlement revoked => hard stop.
+                    if error.kind() == io::ErrorKind::PermissionDenied {
+                        return Err(denied());
+                    }
+                }
+            }
+            Err(error) if error.kind() == io::ErrorKind::PermissionDenied => {
+                return Err(denied());
+            }
+            Err(_) => {} // transient issue, bounded retry after backoff
         }
         if attempts < settings.max_attempts {
-            let backoff = (1u64 << attempts.min(5)).min(30);
-            sleep(Duration::from_secs(backoff)).await;
+            sleep(retry_delay(attempts)).await;
         }
     }
     Err(denied())
@@ -178,6 +208,12 @@ pub async fn run(settings: &WorkerSettings) -> io::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn retry_delays_are_bounded_and_authorization_fail_closed() {
+        assert_eq!(retry_delay(1), Duration::from_secs(2));
+        assert_eq!(retry_delay(4), Duration::from_secs(16));
+        assert_eq!(retry_delay(100), Duration::from_secs(30));
+    }
     #[test]
     fn absent_broker_approval_never_activates() {
         let s = WorkerSettings {

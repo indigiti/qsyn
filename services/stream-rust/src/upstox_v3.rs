@@ -330,6 +330,8 @@ pub async fn observe_one_use_session_with_sink(
                 let quotes = decoder.decode(&bytes, now)?;
                 report.frames += 1;
                 for quote in quotes {
+                    report.quote_candidates += 1;
+                    let prior_stored = ingest.stored;
                     // Durable WAL checks persistence rights AGAIN; then fsyncs.
                     // Fail closed when rights expire, owner/account mismatch,
                     // or legal display permission is revoked mid-session.
@@ -346,6 +348,9 @@ pub async fn observe_one_use_session_with_sink(
                             return Err(denied("v3_current_chart_rights_revoked"));
                         }
                         ingest.ingest(&quote, now)?;
+                        // Restarted streams replay snapshots. WAL de-dupes,
+                        // and old quotes must NOT be sent to client charts.
+                        if ingest.stored == prior_stored { continue; }
                         let packet = serde_json::to_vec(&quote)?;
                         if packet.len() > 4095 { return Err(denied("v3_private_packet_oversize")); }
                         let unix = tokio::net::UnixDatagram::unbound()?;
@@ -353,9 +358,9 @@ pub async fn observe_one_use_session_with_sink(
                             .map_err(|_| denied("v3_private_chart_sink_unavailable"))?;
                     } else {
                         ingest.ingest(&quote, now)?;
+                        if ingest.stored == prior_stored { continue; }
                     }
                     report.persisted_quotes += 1;
-                    report.quote_candidates += 1;
                 }
             }
             Message::Ping(data) => socket.send(Message::Pong(data)).await
