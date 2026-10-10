@@ -13,7 +13,8 @@ real Upstox session, market-feed entitlement or trading permission.
    The fixture API and chart dashboard default to **off**.
 2. Test HTTP is allowed only when \`QSYN_ENV=test\`,
    \`QSYN_ALLOW_HTTP_TEST=1\` **and** both the PHP listener
-   \`SERVER_ADDR\` and client \`REMOTE_ADDR\` are \`127.0.0.1\`,
+   \`SERVER_ADDR\` (or the bound \`SERVER_NAME\` for PHP's built-in
+   local test server) and client \`REMOTE_ADDR\` are \`127.0.0.1\`,
    with a loopback Host header. A public connection with a spoofed
    localhost Host header cannot use the test-only insecure cookie path.
 3. For an independently isolated development host, require **all**
