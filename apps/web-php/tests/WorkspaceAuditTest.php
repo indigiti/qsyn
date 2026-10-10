@@ -115,7 +115,8 @@ try {
     putenv('QSYN_ALLOW_HTTP_TEST=1');
     mkdir($root . '/php-sessions', 0700);
     session_save_path($root . '/php-sessions');
-    checkWorkspace(UserSession::boot(['HTTP_HOST' => '127.0.0.1:18000']),
+    checkWorkspace(UserSession::boot(['HTTP_HOST' => '127.0.0.1:18000',
+        'REMOTE_ADDR' => '127.0.0.1', 'SERVER_ADDR' => '127.0.0.1']),
         'Unable to create independent user session');
     UserSession::login($b);
     checkWorkspace(UserSession::principal($users)['username'] === 'bob',
