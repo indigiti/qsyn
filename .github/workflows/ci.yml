@@ -50,6 +50,8 @@ jobs:
           php -l apps/web-php/src/FileTerminalWorkspaceRepository.php
           php -l apps/web-php/src/TerminalWorkspaceApi.php
           python3 apps/web-php/tests/TerminalWorkspaceHttpSmoke.py
+          php -l apps/web-php/src/PrivateChartGrantApi.php
+          python3 apps/web-php/tests/PrivateChartGrantHttpSmoke.py
           php -l apps/web-php/src/FileMockAccountSelection.php
           php -l apps/web-php/src/AccountApi.php
           php -l apps/web-php/src/SimulatedAccountBars.php
