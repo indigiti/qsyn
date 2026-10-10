@@ -79,6 +79,8 @@ jobs:
           php -l apps/web-php/src/PrivateOpenAlgoReader.php
           php -l apps/web-php/tools/private-broker-gateway.php
           python3 apps/web-php/tests/PrivateBrokerGatewayTest.py
+          php -l apps/web-php/tools/private-history-export.php
+          python3 apps/web-php/tests/PrivateHistoryExportTest.py
           php -l apps/web-php/tools/private-demo-fixtures.php
           python3 apps/web-php/tests/PrivateDemoFixtureTest.py
           php -l apps/web-php/tools/private-deployment-preflight.php
