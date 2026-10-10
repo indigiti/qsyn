@@ -130,7 +130,7 @@ try {
   });
   await privatePage.goto(origin+'/qsyn/terminal',{waitUntil:'networkidle'});
   await privatePage.getByRole('button',{name:'Load private file'}).click();
-  await privatePage.getByText('Private unique',{exact:true}).waitFor();
+  await privatePage.locator('select[aria-label="Saved layouts"] option[value="Private unique"]').waitFor({state:'attached'});
   if(await privatePage.locator('.terminal-watch-row').count()!==1)
     throw new Error('Private layout was not imported to memory');
   const leak=await privatePage.evaluate(()=>localStorage.getItem('qsyn-terminal-browser-workspaces-v2'));
@@ -141,7 +141,7 @@ try {
   if(requests.length!==1 || Object.keys(requests[0]).sort().join(',')!=='expected_revision,workspace')
     throw new Error('Private file sync made an unsafe or incorrect write request');
   await privatePage.getByRole('button',{name:'Return to browser'}).click();
-  if(await privatePage.getByText('Private unique',{exact:true}).count()!==0)
+  if(await privatePage.locator('select[aria-label="Saved layouts"] option[value="Private unique"]').count()!==0)
     throw new Error('Private owner workspace remained visible after returning to browser');
   await privatePage.close();
   const mobile=await browser.newPage({viewport:{width:390,height:844}});
