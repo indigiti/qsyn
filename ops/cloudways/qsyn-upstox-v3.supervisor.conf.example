@@ -1,0 +1,45 @@
+; QSYN Upstox V3 private source — operator approval required.
+; Do NOT deploy as-is. This file does not provision Cloudways Supervisor.
+; One isolated Unix user, 0700 storage root, 0600 files per account/tenant.
+; Verify real app OAuth consent, licensed CE+PE retention/display rights,
+; current listed BOD strike+expiry, TLS access and WSS reverse proxy.
+[program:qsyn-upstox-v3-ACCOUNT_A]
+command=/ABSOLUTE/PRIVATE/app/bin/qsyn-upstox-worker run /ABSOLUTE/PRIVATE/config/worker-plan.json
+directory=/ABSOLUTE/PRIVATE/app
+user=ACCOUNT_UNIX_OWNER
+autostart=false
+autorestart=unexpected
+exitcodes=0
+startsecs=5
+startretries=3
+stopsignal=TERM
+stopwaitsecs=35
+stopasgroup=true
+killasgroup=true
+redirect_stderr=true
+stdout_logfile=/ABSOLUTE/PRIVATE/logs/v3-worker-A.log
+stdout_logfile_maxbytes=10MB
+stdout_logfile_backups=5
+environment=QSYN_UPSTOX_WORKER_ENABLE="1",QSYN_TRADING_ENABLED="0",QSYN_ENABLE_LIVE_TRADING="0"
+
+; Independent viewer-specific chart service; must be loopback only.
+; Requires a separately verified authenticated TLS WSS ingress.
+[program:qsyn-upstox-v3-chart-ACCOUNT_A]
+command=/ABSOLUTE/PRIVATE/app/bin/qsyn-private-chart serve 10445 /ABSOLUTE/PRIVATE/charts/upstox-A.ipc
+directory=/ABSOLUTE/PRIVATE/app
+user=ACCOUNT_UNIX_OWNER
+autostart=false
+autorestart=unexpected
+exitcodes=0
+startsecs=5
+startretries=3
+stopsignal=TERM
+stopwaitsecs=15
+redirect_stderr=true
+stdout_logfile=/ABSOLUTE/PRIVATE/logs/v3-chart-A.log
+stdout_logfile_maxbytes=10MB
+stdout_logfile_backups=5
+environment=QSYN_PRIVATE_CHART_GATEWAY_ENABLED="1",QSYN_PRIVATE_CHART_RIGHTS_FILE="/ABSOLUTE/PRIVATE/config/chart-rights.json",QSYN_PRIVATE_CHART_SIGNING_KEY_FILE="/ABSOLUTE/PRIVATE/config/chart-signing.key",QSYN_TRADING_ENABLED="0",QSYN_ENABLE_LIVE_TRADING="0"
+
+; qsny-upstox-history intentionally omitted: it is a one-shot
+; operator-only CLI import, NEVER a continuously running worker.
