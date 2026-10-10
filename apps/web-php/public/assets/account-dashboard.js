@@ -9,6 +9,7 @@
   let principal = null;
   let model = { accounts: [], selection: { account_id: null, revision: 0 } };
   let busy = false;
+  let savedWorkspace = null;
 
   function status(message = '', error = false) {
     const box = $('page-message');
@@ -66,6 +67,9 @@
     $('sign-in').hidden = false;
     $('password-input').value = '';
     $('account-chart').hidden = true;
+    $('workspace-form').hidden = true;
+    $('workspace-grid').classList.remove('focus');
+    savedWorkspace = null;
   }
   function showWorkspace() {
     $('sign-in').hidden = true;
@@ -185,13 +189,39 @@
       : 'No mock chart source selected';
     $('chart-empty').hidden = Boolean(account);
     $('account-chart').hidden = !account;
-    if (!account) return;
+    $('workspace-form').hidden = !account;
+    if (!account) {
+      savedWorkspace = null;
+      $('workspace-grid').classList.remove('focus');
+      return;
+    }
+    const response = await call(accountApi + 'workspace');
+    if (response.mode !== 'simulated' ||
+        response.workspace?.account_id !== account.account_id) {
+      throw new Error('Server returned an untrusted chart workspace');
+    }
+    savedWorkspace = response.workspace;
+    const prefs = savedWorkspace.settings;
+    if (!['dark', 'light'].includes(prefs.theme) ||
+        ![60, 100, 120].includes(prefs.visible_bars) ||
+        !['split', 'focus'].includes(prefs.layout)) {
+      throw new Error('Unknown saved mock workspace settings');
+    }
+    $('workspace-theme').value = prefs.theme;
+    $('workspace-visible').value = String(prefs.visible_bars);
+    $('workspace-layout').value = prefs.layout;
+    $('workspace-revision').textContent = '· revision ' + savedWorkspace.revision;
+    const writable = ['member', 'tenant_admin'].includes(principal.role);
+    $('workspace-save').hidden = !writable;
+    for (const select of $('workspace-form').querySelectorAll('select')) select.disabled = !writable;
+    $('workspace-form').classList.toggle('read-only', !writable);
+    $('workspace-grid').classList.toggle('focus', prefs.layout === 'focus');
     if (!window.QsynAccountChart?.mount) {
       status('The account-scoped chart bundle is unavailable.', true);
       return;
     }
     try {
-      await window.QsynAccountChart.mount($('account-chart'), account.account_id);
+      await window.QsynAccountChart.mount($('account-chart'), account.account_id, prefs);
     } catch {
       $('account-chart').hidden = true;
       $('chart-empty').hidden = false;
@@ -208,6 +238,29 @@
     if (drawChart) await renderChart();
   }
 
+  $('workspace-form').addEventListener('submit', event => {
+    event.preventDefault();
+    execute(async () => {
+      if (!savedWorkspace || !['member', 'tenant_admin'].includes(principal?.role)) {
+        throw new Error('Chart workspace is read-only');
+      }
+      const saved = await call(accountApi + 'save-workspace', {
+        account_id: savedWorkspace.account_id,
+        expected_revision: savedWorkspace.revision,
+        settings: {
+          theme: $('workspace-theme').value,
+          visible_bars: Number($('workspace-visible').value),
+          layout: $('workspace-layout').value,
+        },
+      });
+      if (!saved.workspace || saved.workspace.revision <= savedWorkspace.revision) {
+        throw new Error('Chart workspace was not saved');
+      }
+      // A full reload reinitializes the chart widget with *only* this
+      // owner/account's server-persisted preferences and resets old canvases.
+      window.location.reload();
+    });
+  });
   $('login-form').addEventListener('submit', event => {
     event.preventDefault();
     execute(async () => {
