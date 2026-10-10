@@ -1,8 +1,8 @@
-pub mod market_pipeline;
-
 //! QSYN synthetic-candle core. No broker credentials or network calls.
 //! OHLC is derived from simultaneously valued synthetic observations,
 //! never from independently aggregated constituent highs and lows.
+
+pub mod market_pipeline;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Leg {
