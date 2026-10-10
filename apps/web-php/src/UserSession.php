@@ -14,6 +14,9 @@ final class UserSession
         $host = (string) ($server['HTTP_HOST'] ?? '');
         return getenv('QSYN_ENV') === 'test'
             && getenv('QSYN_ALLOW_HTTP_TEST') === '1'
+            // Both endpoints must be local; a spoofed Host header is insufficient.
+            && (string) ($server['REMOTE_ADDR'] ?? '') === '127.0.0.1'
+            && (string) ($server['SERVER_ADDR'] ?? '') === '127.0.0.1'
             && preg_match('/^(?:127\.0\.0\.1|localhost)(?::[0-9]{1,5})?$/D', $host) === 1;
     }
 
