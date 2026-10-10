@@ -58,6 +58,53 @@ try {
   if (await page.locator('#entry').innerText() === '—') throw new Error('Payoff/cashflow not calculated');
   await page.screenshot({ path: resolve(images, 'studio-straddle.png'), fullPage: true });
 
+  // Combined release acceptance: fixed-model analytics, replay, paper journal,
+  // and foreground alerts must all work without enabling broker services.
+  if (!(await page.locator('#risk-breakeven').innerText()).includes('/')) {
+    throw new Error('Scenario breakevens missing from integrated risk report');
+  }
+  if (await page.locator('#greek-gamma').innerText() === '—') {
+    throw new Error('Educational option Greeks were not rendered');
+  }
+  if (!(await page.locator('#risk-warning').innerText()).includes('fixed 20% volatility')) {
+    throw new Error('Simulated-model assumptions not disclosed');
+  }
+  await page.locator('#paper-open').click();
+  if ((await page.locator('#paper-open-count').innerText()) !== '1') {
+    throw new Error('Simulated paper position was not recorded');
+  }
+  if (!(await page.evaluate(() => localStorage.getItem('qsyn-paper-ledger-v1') || '')).includes('simulated-browser-only')) {
+    throw new Error('Paper journal omitted explicit simulation provenance');
+  }
+  await page.locator('#paper-positions').getByRole('button', { name: 'Close paper position' }).click();
+  if ((await page.locator('#paper-open-count').innerText()) !== '0') {
+    throw new Error('Paper close failed');
+  }
+  await page.locator('#alert-threshold').fill('100000');
+  await page.locator('#alert-add').click();
+  if (await page.locator('#alert-records .lab-alert').count() !== 1) {
+    throw new Error('Browser-only option alert missing');
+  }
+  await page.evaluate(() => {
+    const range = document.getElementById('replay-position');
+    range.value = '60';
+    range.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  await page.waitForFunction(() => document.querySelector('#replay-marker')?.textContent?.includes('61 / 120'));
+  if (await page.locator('#paper-open').isDisabled()) {
+    // Paper open is intentionally blocked in replay through a validation error,
+    // not disabled, to preserve an explicit denial message.
+    throw new Error('Replay paper guard button unexpectedly disabled');
+  }
+  await page.locator('#paper-open').click();
+  if (!(await page.locator('#status').innerText()).includes('Return replay to latest')) {
+    throw new Error('Replay position incorrectly permitted paper entry');
+  }
+  await page.locator('#replay-end').click();
+  await page.waitForFunction(() => document.querySelector('#replay-marker')?.textContent?.includes('120 / 120'));
+  await page.screenshot({ path: resolve(images, 'studio-integrated-risk-paper-replay.png'), fullPage: true });
+
+
   await page.locator('#strangle').click();
   await page.locator('#render').click();
   await page.waitForLoadState('domcontentloaded');
