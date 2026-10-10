@@ -109,3 +109,51 @@ trading, live market feed or Rust operations-control capability** in this API.
 The auth HTTP and repository contract tests run in GitHub Actions with
 fake seeded users and temporary private storage, without MariaDB, Redis,
 real credentials or live trading.
+
+## Phase 1.3 — Authenticated simulated broker account API (development-only)
+
+An additional **independent** gate \`QSYN_MOCK_ACCOUNTS_ENABLED=1\`
+must be set in addition to all Phase 1.2 mock identity prerequisites.
+Both switches default to off. This is not approved for public
+Cloudways staging, live credentials, market-data entitlements or orders.
+
+These internal endpoints require an authenticated \`QSYN_USER_SESSION\`:
+- \`GET /qsyn/api/v1/accounts/list\` — account records owned by the
+  current session user, plus effective selected account and revision
+- \`GET /qsyn/api/v1/accounts/get?id=<mock-uuid>\` — owner-only lookup;
+  foreign or missing records both produce \`404\`
+- \`POST /qsyn/api/v1/accounts/link\` — mock broker code,
+  \`mock-\` account reference and display label, returning \`201\`
+- \`POST /qsyn/api/v1/accounts/rename\` — account ID, label, and
+  \`expected_revision\`; CAS reject stale edits with \`409\`
+- \`POST /qsyn/api/v1/accounts/select\` — account ID and
+  \`expected_revision\`; one file-backed per-user selection, CAS updated
+- \`POST /qsyn/api/v1/accounts/disconnect\` — account ID and record
+  \`expected_revision\`; disabled chart source immediately becomes
+  ineffective, but historical mock account metadata remains for auditing
+
+Read-only \`viewer\` may list or inspect **only their own** mock
+accounts. \`member\` and \`tenant_admin\` can write **only their own**
+accounts, never arbitrary accounts in their tenant. Every mutation
+requires an exact same-origin HTTPS request, same-site Fetch Metadata,
+JSON body and the logged-in session CSRF token.
+
+Tenant and owner IDs are **exclusively** derived from the verified
+server-side session. Client attempts to submit \`tenant_id\`,
+\`owner_user_id\` or execution/credential/role fields are rejected.
+The broker codes are mock-only and every linked account has
+\`execution_allowed=false\` and \`feed_entitlements=["simulated"]\`.
+There is no link to a real OpenAlgo/Upstox process or any trading API.
+
+Selection is stored in a single separate revisioned document rather than
+changing "default" flags across multiple account documents. The account
+must be mock-connected at selection, and the effective selection is
+checked again on reads. This handles a concurrently disconnected account
+without asserting multi-file transactions. An end-to-end authorized
+chart feed and audit writer are **not** implemented in this slice.
+
+GitHub CI executes the browser-equivalent HTTP regression with local
+mock users, two Upstox references, mock Dhan, another QSYN user, another
+tenant, a read-only viewer, malformed input, cross-owner requests,
+wrong-origin or missing-CSRF denials and stale revisions. No public
+enabling, dashboard, or staging deployment is part of this PR.
