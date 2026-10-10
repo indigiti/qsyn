@@ -99,8 +99,8 @@ own release/activation verification and recoverable rollback plan.
 ## Phase 1.9 — One-time public release verification
 
 The GitHub workflow `.github/workflows/public-stage-acceptance.yml`
-triggers a **read-only external public acceptance run** once when its
-workflow change is merged to `main`. The automatic run expects the
+triggers a **read-only external public acceptance run** when its
+workflow or public-probe logic changes on `main`. The automatic run expects the
 last operator-reported deployed #78 Rust commit,
 `ccc92c161f5c5d6d45e02808cffabb40b7181bc4`.
 
@@ -118,3 +118,9 @@ performed from that runner, not VPN or private-ingress attestation.
 If a later release is deployed, operators must use the workflow's
 manual `workflow_dispatch` input with the **new exact deployed SHA**;
 they must not reuse #78 when its binary is no longer running.
+
+For failed public checks the probe prints only HTTP status and response
+media class (`json`, `html`, `other`), never response bodies, cookies,
+CSRF tokens or request secrets. Access-control errors, app route mismatches,
+and health failures remain distinct diagnostics, not automatic proof of
+an exploited vulnerability.
