@@ -69,6 +69,8 @@ jobs:
           python3 apps/web-php/tests/PublicStageProbeTest.py
           python3 -m py_compile apps/web-php/tests/PrivateIngressProbe.py apps/web-php/tests/VerifyPrivateIngressEvidence.py apps/web-php/tests/PrivateIngressProbeTest.py
           python3 apps/web-php/tests/PrivateIngressProbeTest.py
+          python3 -m py_compile apps/web-php/tests/PrivateBaselineProbe.py apps/web-php/tests/PrivateBaselineProbeTest.py
+          python3 apps/web-php/tests/PrivateBaselineProbeTest.py
           php -l apps/web-php/tools/private-demo-fixtures.php
           python3 apps/web-php/tests/PrivateDemoFixtureTest.py
           php -l apps/web-php/tools/private-deployment-preflight.php
