@@ -6,7 +6,7 @@ $path = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/';
 if (str_starts_with($path, '/qsyn/assets/')) {
     $asset = __DIR__ . '/public/assets/' . basename($path);
     if (is_file($asset)) {
-        header('Content-Type: application/javascript; charset=utf-8');
+        header('Content-Type: ' . (str_ends_with($asset, '.css') ? 'text/css' : 'application/javascript') . '; charset=utf-8');
         readfile($asset);
         return true;
     }
