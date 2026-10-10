@@ -2,6 +2,7 @@
 //! This is a *private diagnostic*, not public live charting or trade routing.
 use qsyn_stream::market_pipeline::Scope;
 use qsyn_stream::openalgo_stream::{probe, Subscription};
+use qsyn_stream::private_live_pipeline::{observe, PrivateFeedPlan};
 use serde_json::{json, Value};
 use std::fs;
 use std::io;
@@ -107,7 +108,7 @@ async fn main() {
         let [cmd, tenant, owner, account, instruments] = args.as_slice() else {
             return Err(rejected());
         };
-        if cmd != "inspect" || ![tenant, owner, account].iter().all(|x| safe_id(x)) {
+        if !["inspect", "observe"].contains(&cmd.as_str()) || ![tenant, owner, account].iter().all(|x| safe_id(x)) {
             return Err(rejected());
         }
         let (port, broker, api_key) = config(tenant, owner, account)?;
@@ -117,8 +118,25 @@ async fn main() {
             source_id: "openalgo_private".to_owned(),
             entitlement_id: "not_attested".to_owned(),
         };
-        let result = probe(port, &api_key, &broker, &scope, &subs, 100, 8).await?;
-        Ok(json!(result))
+        if cmd == "inspect" {
+            let result = probe(port, &api_key, &broker, &scope, &subs, 100, 8).await?;
+            return Ok(json!(result));
+        }
+        // Observe only from an explicitly opted-in private operator shell.
+        // No public WS, broker order route or licensed persistence is activated.
+        if std::env::var("QSYN_PRIVATE_FEED_RUNTIME_ENABLED").as_deref() != Ok("1") {
+            return Err(rejected());
+        }
+        let legs = subs.iter().map(|s| qsyn_stream::market_pipeline::WeightedLeg {
+            instrument_id: format!("{}|{}", s.exchange, s.symbol),
+            quantity: 1.0,
+        }).collect();
+        let plan = PrivateFeedPlan {
+            ws_port: port, broker, scope, subscriptions: subs, legs,
+            max_skew_ms: 500, observe_seconds: 120, max_reconnects: 4,
+        };
+        let report = observe(&plan, &api_key).await?;
+        Ok(json!(report))
     }.await;
     match result {
         Ok(data) => println!("{data}"),
