@@ -60,8 +60,10 @@ try {
   // Chart compare and AT-MONEY synthetic demos use only whitelisted public simulations.
   await page.getByRole('button',{name:'Compare two charts'}).click();
   await page.waitForFunction(()=>document.querySelectorAll('#qsyn-secondary-chart canvas').length>0);
-  await page.getByRole('combobox',{name:'Comparison instrument'}).selectOption('QSYN-NIFTY-STRADDLE');
-  await page.waitForResponse(r=>r.url().includes('/qsyn/api/v1/studio/bars?') && r.status()===200,{timeout:12000});
+  await Promise.all([
+    page.waitForResponse(r=>r.url().includes('/qsyn/api/v1/studio/bars?') && r.url().includes('BANKNIFTY') && r.status()===200,{timeout:12000}),
+    page.getByRole('combobox',{name:'Comparison instrument'}).selectOption('QSYN-BANKNIFTY-STRADDLE'),
+  ]);
   await page.getByRole('textbox',{name:'Layout name'}).fill('Simulated pair');
   await page.getByRole('button',{name:'Save layout'}).click();
   await page.getByRole('textbox',{name:'Find simulated instruments'}).fill('FINNIFTY');
@@ -75,7 +77,7 @@ try {
   await page.waitForFunction(()=>document.querySelectorAll('#qsyn-secondary-chart canvas').length>0);
   if(await page.locator('.terminal-watch-row').count()!==3)
     throw new Error('Browser-local watchlist did not survive reload');
-  if(await page.getByRole('combobox',{name:'Comparison instrument'}).inputValue()!=='QSYN-NIFTY-STRADDLE')
+  if(await page.getByRole('combobox',{name:'Comparison instrument'}).inputValue()!=='QSYN-BANKNIFTY-STRADDLE')
     throw new Error('Named layout did not restore synthetic comparison');
   await page.getByRole('button',{name:'Single chart'}).click();
   if(await page.locator('#qsyn-secondary-chart').count()!==0)
