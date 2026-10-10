@@ -123,7 +123,10 @@ pub fn archive_leg(
     }
     let descriptor = SeriesDescriptor {
         scope: history_scope(settings), mode: DataMode::Replay,
-        series_id: series_for(key)?, interval_ms: 60_000,
+        // QCB partitions are immutable. One physical series per trading day
+        // avoids collision with subsequent days in the SAME YYYYMM month.
+        series_id: format!("{}_{}", series_for(key)?, date.format("%Y%m%d")),
+        interval_ms: 60_000,
     };
     let partition = date.format("%Y%m").to_string();
     immutable_candles::publish(root, &partition, &descriptor, candles)
