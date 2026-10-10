@@ -17,6 +17,9 @@ fn php_chart_grant_is_accepted_by_rust_without_bypassing_current_rights() {
     fs::create_dir(&directory).unwrap();
     let secret_path = directory.join("key.bin");
     fs::write(&secret_path, [42u8; 32]).unwrap();
+    #[cfg(unix)]
+    { use std::os::unix::fs::PermissionsExt;
+      fs::set_permissions(&secret_path, fs::Permissions::from_mode(0o600)).unwrap(); }
 
     let php = r#"require $argv[2];
         putenv('QSYN_PRIVATE_CHART_SIGNING_KEY_FILE='.$argv[1].'/key.bin');
