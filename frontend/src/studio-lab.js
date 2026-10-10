@@ -57,7 +57,12 @@ function risk(data) {
   $('risk-breakeven').textContent = r.breakevens_within_sample.length
     ? r.breakevens_within_sample.map(format).join(' / ') : 'None inside sampled range';
   for (const field of ['delta', 'gamma', 'vega_per_pct', 'theta_per_day']) {
-    $('greek-' + field).textContent = signed(g[field]);
+    const precision = field === 'gamma' ? 6 : field === 'delta' ? 3 : 2;
+    const value = Number(g[field]);
+    $('greek-' + field).textContent = (value >= 0 ? '+' : '') +
+      value.toLocaleString('en-IN', {
+        minimumFractionDigits: precision, maximumFractionDigits: precision,
+      });
   }
   $('risk-warning').textContent = 'Model assumptions: fixed ' +
     (a.assumptions.volatility * 100).toFixed(0) + '% volatility, ' +

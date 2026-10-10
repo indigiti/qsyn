@@ -63,9 +63,11 @@ $cssVersion = (string) (@filemtime(__DIR__ . '/assets/studio.css') ?: '0');
   <div class="panel-heading"><div><p class="eyebrow">SYNTHETIC PREMIUM</p><h2 id="basket-title">Combined options basket</h2><p class="fine">Time-aligned leg samples; synthetic highs/lows are not sums of leg candle extrema.</p></div><span class="pill accent">120 BARS</span></div>
   <div id="basket-chart" class="chart main-chart" aria-label="Combined premium candlestick chart"></div>
  </section>
- <div class="two-col">
-  <section class="panel chart-card"><div class="panel-heading"><h2 id="leg-title-0">Leg 1</h2><span class="pill">SIM</span></div><div id="leg-chart-0" class="chart leg-chart"></div></section>
-  <section class="panel chart-card"><div class="panel-heading"><h2 id="leg-title-1">Leg 2</h2><span class="pill">SIM</span></div><div id="leg-chart-1" class="chart leg-chart"></div></section>
+ <div class="two-col" id="leg-chart-grid" aria-label="All strategy leg charts">
+  <section class="panel chart-card" id="leg-panel-0"><div class="panel-heading"><h2 id="leg-title-0">Leg 1</h2><span class="pill">SIM</span></div><div id="leg-chart-0" class="chart leg-chart" aria-label="Simulated leg 1 candlestick chart"></div></section>
+  <section class="panel chart-card" id="leg-panel-1"><div class="panel-heading"><h2 id="leg-title-1">Leg 2</h2><span class="pill">SIM</span></div><div id="leg-chart-1" class="chart leg-chart" aria-label="Simulated leg 2 candlestick chart"></div></section>
+  <section class="panel chart-card" id="leg-panel-2" hidden><div class="panel-heading"><h2 id="leg-title-2">Leg 3</h2><span class="pill">SIM</span></div><div id="leg-chart-2" class="chart leg-chart" aria-label="Simulated leg 3 candlestick chart"></div></section>
+  <section class="panel chart-card" id="leg-panel-3" hidden><div class="panel-heading"><h2 id="leg-title-3">Leg 4</h2><span class="pill">SIM</span></div><div id="leg-chart-3" class="chart leg-chart" aria-label="Simulated leg 4 candlestick chart"></div></section>
  </div>
  <div class="two-col lower">
   <section class="panel"><div class="panel-heading"><div><p class="eyebrow">SCENARIO ANALYSIS</p><h2>Hypothetical expiry payoff</h2></div><span class="pill">NO ORDERS</span></div>

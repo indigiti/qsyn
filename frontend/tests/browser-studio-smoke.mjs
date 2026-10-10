@@ -58,6 +58,33 @@ try {
   if (await page.locator('#entry').innerText() === '—') throw new Error('Payoff/cashflow not calculated');
   await page.screenshot({ path: resolve(images, 'studio-straddle.png'), fullPage: true });
 
+  // Four independent leg charts, not only two, and exact model gamma precision.
+  await page.locator('#add-leg').click();
+  await page.locator('#add-leg').click();
+  if (await page.locator('#legs .leg-row').count() !== 4) {
+    throw new Error('Four-leg strategy editor stopped at two');
+  }
+  await page.locator('#render').click();
+  await page.waitForFunction(() =>
+    document.querySelector('#status')?.textContent?.includes('Loaded 120 synchronized') &&
+    !document.querySelector('#leg-panel-3')?.hidden &&
+    document.querySelector('#leg-chart-3 canvas'),
+    null, { timeout: 25000 });
+  if (await page.locator('#leg-panel-2').isHidden() || await page.locator('#leg-panel-3').isHidden()) {
+    throw new Error('Four-leg option charts are hidden');
+  }
+  if (!/^[+-]?[0-9,.]+\.[0-9]{6}$/.test(await page.locator('#greek-gamma').innerText())) {
+    throw new Error('Gamma does not display the required 6 decimal places');
+  }
+  await page.screenshot({ path: resolve(images, 'studio-four-leg-chart.png'), fullPage: true });
+  await page.locator('#straddle').click();
+  await page.locator('#render').click();
+  await page.waitForFunction(() =>
+    document.querySelector('#status')?.textContent?.includes('Loaded 120 synchronized') &&
+    document.querySelector('#leg-panel-3')?.hidden,
+    null, { timeout: 25000 });
+
+
   // Combined release acceptance: fixed-model analytics, replay, paper journal,
   // and foreground alerts must all work without enabling broker services.
   if (!(await page.locator('#risk-breakeven').innerText()).includes('/')) {
@@ -102,6 +129,12 @@ try {
   }
   await page.locator('#replay-end').click();
   await page.waitForFunction(() => document.querySelector('#replay-marker')?.textContent?.includes('120 / 120'));
+
+  // Replaying does not pile up previous OpenAlgo widget chrome/canvases.
+  if (await page.locator('#basket-chart .oac-widget').count() !== 1) {
+    throw new Error('Replay leaked duplicate OpenAlgo chart instances');
+  }
+
   await page.screenshot({ path: resolve(images, 'studio-integrated-risk-paper-replay.png'), fullPage: true });
 
 

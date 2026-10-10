@@ -71,6 +71,10 @@ jobs:
           php -l apps/web-php/src/StudioAnalytics.php
           php apps/web-php/tests/StudioAnalyticsTest.php
           python3 apps/web-php/tests/StudioIntegratedHttpTest.py
+          php -l apps/web-php/src/OpenAlgoLocalProbe.php
+          php -l apps/web-php/tools/openalgo-local-probe.php
+          python3 apps/web-php/tests/OpenAlgoLocalProbeTest.py
+          python3 apps/web-php/tests/UpstoxInstrumentInspectTest.py
           php -l apps/web-php/tools/private-demo-fixtures.php
           python3 apps/web-php/tests/PrivateDemoFixtureTest.py
           php -l apps/web-php/tools/private-deployment-preflight.php
