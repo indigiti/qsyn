@@ -62,6 +62,15 @@ jobs:
           php -l apps/web-php/src/FileMockAuditLog.php
           php -l apps/web-php/tests/WorkspaceAuditTest.php
           php apps/web-php/tests/WorkspaceAuditTest.php
+          php -l apps/web-php/tools/verify-mock-audit.php
+          php -l apps/web-php/tools/phase1-stage-preflight.php
+          php -l apps/web-php/tests/PrivateStageGateTest.php
+          php apps/web-php/tests/PrivateStageGateTest.php
+          php apps/web-php/tools/phase1-stage-preflight.php
+          if QSYN_IDENTITY_ENABLED=1 php apps/web-php/tools/phase1-stage-preflight.php; then
+            echo 'ERROR: enabled test identity escaped staging preflight' >&2
+            exit 1
+          fi
           php apps/web-php/tests/RustAdminTest.php
           php apps/web-php/tests/RustAdminBootstrapTest.php
           php apps/web-php/tests/RustDemoConfigTest.php
