@@ -132,10 +132,13 @@ pub fn publish(
     if metadata.len() > 4096 {
         return Err(io::Error::new(io::ErrorKind::InvalidInput, "oversized_candle_metadata"));
     }
+    let nonce = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|_| bad("archive_clock_unavailable"))?
+        .as_nanos();
     let temporary = root.join(format!(
         ".{}-{}.qcb-{}-{}.tmp",
-        descriptor.series_id, partition, std::process::id(),
-        std::thread::current().name().unwrap_or("writer")
+        descriptor.series_id, partition, std::process::id(), nonce
     ));
     let mut opts = OpenOptions::new();
     opts.write(true).create_new(true);
