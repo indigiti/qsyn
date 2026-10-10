@@ -182,6 +182,10 @@ def main():
             assert record["filled_quantity_verified"] is False
             assert record["reconciliation_verified"] is False
             assert KEY_A not in status.stdout
+            mismatch = invoke(reg, "read", "tenant1", "alice", "upstox-a",
+                              "order-status", json.dumps({"strategy":"QSYN Paper",
+                                                          "orderid":"DIFFERENT123"}))
+            assert mismatch.returncode != 0 and not mismatch.stdout
             cross = invoke(reg, "read", "tenant2", "bob", "upstox-a",
                            "order-status", json.dumps({"strategy":"QSYN Paper",
                                                         "orderid":"B123"}))
