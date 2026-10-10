@@ -174,6 +174,41 @@ try {
   }
   await page.screenshot({ path: resolve(images, 'account-dashboard-mock-upstox.png'), fullPage: true });
 
+  // Server-side workspace persistence: the setting belongs to mock Upstox A
+  // and survives page reloads, unlike per-browser unscoped localStorage.
+  await page.locator('#workspace-theme').selectOption('light');
+  await page.locator('#workspace-visible').selectOption('60');
+  await page.locator('#workspace-layout').selectOption('focus');
+  await page.locator('#workspace-save').click();
+  await page.waitForFunction(() =>
+    document.querySelector('#workspace-grid')?.classList.contains('focus') &&
+    document.querySelector('#workspace-visible')?.value === '60', null, { timeout: 16000 });
+  if (await page.locator('.accounts-panel').isVisible()) {
+    throw new Error('Focused workspace still shows broker management panel');
+  }
+  await page.reload({ waitUntil: 'networkidle' });
+  await page.waitForFunction(() =>
+    document.querySelector('#workspace-grid')?.classList.contains('focus') &&
+    document.querySelector('#workspace-theme')?.value === 'light' &&
+    document.querySelector('#workspace-visible')?.value === '60' &&
+    document.querySelector('#chart-source-label')?.textContent.includes('Upstox A'),
+    null, { timeout: 16000 });
+  const savedA = await page.evaluate(async () =>
+    (await fetch('/qsyn/api/v1/accounts/workspace', { credentials: 'same-origin' })).json());
+  if (savedA.workspace.revision !== 1 ||
+      savedA.workspace.account_id !== aId ||
+      savedA.workspace.settings.layout !== 'focus' ||
+      savedA.workspace.settings.theme !== 'light' ||
+      savedA.workspace.settings.visible_bars !== 60) {
+    throw new Error('Reload did not restore saved server-owned mock workspace');
+  }
+  await page.screenshot({ path: resolve(images, 'account-dashboard-saved-focus.png'), fullPage: true });
+  await page.locator('#show-accounts-button').click();
+  if (!(await page.locator('.accounts-panel').isVisible())) {
+    throw new Error('Focused layout trapped account navigation');
+  }
+
+
   const bCard = page.locator('.account-item', { hasText: 'Upstox B' });
   const bId = await bCard.getAttribute('data-account-id');
   await bCard.getByRole('button', { name: 'Select chart' }).click();
@@ -181,6 +216,11 @@ try {
     document.querySelector('#chart-source-label')?.textContent.includes('Upstox B') &&
     !!document.querySelector('.account-item.selected[data-account-id="' + expectedId + '"]'),
     bId, { timeout: 16000 });
+  await page.waitForFunction(() =>
+    document.querySelector('#workspace-theme')?.value === 'dark' &&
+    document.querySelector('#workspace-visible')?.value === '100' &&
+    !document.querySelector('#workspace-grid')?.classList.contains('focus'),
+    null, { timeout: 16000 });
   const secondBars = await page.evaluate(async () =>
     (await fetch('/qsyn/api/v1/accounts/bars', { credentials: 'same-origin' })).json());
   if (secondBars.account_id !== bId || JSON.stringify(firstBars.bars) === JSON.stringify(secondBars.bars)) {
@@ -225,6 +265,24 @@ try {
     await isolated.close();
   }
 
+  // The original user's saved Upstox A workspace remains independent of
+  // Upstox B and other user logins even after the B account was disconnected.
+  await page.locator('.account-item', { hasText: 'Upstox A' })
+    .getByRole('button', { name: 'Select chart' }).click();
+  await page.waitForFunction(() =>
+    document.querySelector('#chart-source-label')?.textContent.includes('Upstox A') &&
+    document.querySelector('#workspace-grid')?.classList.contains('focus') &&
+    document.querySelector('#workspace-visible')?.value === '60',
+    null, { timeout: 16000 });
+
+  await page.locator('#signout-button').click();
+  await page.locator('#sign-in').waitFor({ state: 'visible' });
+  await signIn(page, origin, 'tenant-one', 'alice');
+  await page.waitForFunction(() =>
+    document.querySelector('#chart-source-label')?.textContent.includes('Upstox A') &&
+    document.querySelector('#workspace-theme')?.value === 'light' &&
+    document.querySelector('#workspace-visible')?.value === '60',
+    null, { timeout: 16000 });
   await page.locator('#signout-button').click();
   await page.locator('#sign-in').waitFor({ state: 'visible' });
   if (!(await page.locator('#workspace').isHidden())) throw new Error('Logout left workspace visible');
@@ -232,7 +290,7 @@ try {
     (await fetch('/qsyn/api/v1/accounts/list', { credentials: 'same-origin' })).status);
   if (result !== 401) throw new Error('Logged-out user retained account access');
   if (failures.length) throw new Error('Browser JS errors: ' + failures.join('; '));
-  console.log('PASS: dashboard login, three mock accounts, candlestick rendering, switching, isolation, disconnect, logout');
+  console.log('PASS: dashboard login, workspace save/restore, chart painting, switching, isolation, disconnect, logout');
 } finally {
   await browser?.close();
   server?.kill('SIGTERM');
