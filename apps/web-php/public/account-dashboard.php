@@ -50,7 +50,7 @@ $chartJsVersion = (string) (@filemtime(__DIR__ . '/assets/account-chart.js') ?: 
             <h1>Connected mock accounts</h1>
             <p class="muted">Select a simulated broker identity to preview its own synthetic chart fixture. This is never real market data.</p>
           </div>
-          <div class="intro-actions"><button id="refresh-button" type="button" class="button ghost">Refresh</button></div>
+          <div class="intro-actions"><button id="show-accounts-button" type="button" class="button ghost">Show accounts</button> <button id="refresh-button" type="button" class="button ghost">Refresh</button></div>
         </div>
         <div id="workspace-grid" class="workspace-grid">
           <section class="panel accounts-panel" aria-labelledby="accounts-title">
