@@ -43,3 +43,28 @@ environment=QSYN_PRIVATE_CHART_GATEWAY_ENABLED="1",QSYN_PRIVATE_CHART_RIGHTS_FIL
 
 ; qsny-upstox-history intentionally omitted: it is a one-shot
 ; operator-only CLI import, NEVER a continuously running worker.
+
+
+; Independently permissioned, READ ONLY historical candle reader.
+; Reverse proxy ONLY /qsyn/private-chart/history to loopback 127.0.0.1:10446.
+; Preserve Authorization header and reject cross-origin requests at ingress.
+; Never make the raw port public; route disabled until private user auth
+; and live account entitlements are independently audited.
+[program:qsyn-upstox-v3-history-ACCOUNT_A]
+command=/ABSOLUTE/PRIVATE/app/bin/qsyn-private-history serve /ABSOLUTE/PRIVATE/config/worker-plan.json /ABSOLUTE/PRIVATE/config/chart-signing.key /ABSOLUTE/PRIVATE/history 10446
+directory=/ABSOLUTE/PRIVATE/app
+user=ACCOUNT_UNIX_OWNER
+autostart=false
+autorestart=unexpected
+exitcodes=0
+startsecs=5
+startretries=3
+stopsignal=TERM
+stopwaitsecs=15
+stopasgroup=true
+killasgroup=true
+redirect_stderr=true
+stdout_logfile=/ABSOLUTE/PRIVATE/logs/v3-history-A.log
+stdout_logfile_maxbytes=10MB
+stdout_logfile_backups=5
+environment=QSYN_PRIVATE_HISTORY_HTTP_ENABLED="1",QSYN_TRADING_ENABLED="0",QSYN_ENABLE_LIVE_TRADING="0"

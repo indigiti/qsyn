@@ -9,14 +9,14 @@ use crate::upstox_v3::{
     observe_one_use_session_with_sink, validate_one_use_redirect, UpstoxV3Decoder, UpstoxV3Plan,
 };
 use reqwest::redirect::Policy;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::io;
 use std::path::{Path, PathBuf};
 use tokio::time::{sleep, Duration};
 
 fn denied() -> io::Error { io::Error::new(io::ErrorKind::PermissionDenied, "upstox_private_worker_denied") }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct WorkerSettings {
     pub schema: String,
