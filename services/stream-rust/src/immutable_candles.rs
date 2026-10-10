@@ -45,10 +45,9 @@ fn archive_path(root: &Path, series_id: &str, partition: &str) -> io::Result<Pat
 }
 
 fn valid_candle(c: &Candle, interval: u64) -> bool {
-    interval >= 1_000
-        && interval <= 86_400_000
+    (1_000..=86_400_000).contains(&interval)
         && c.open_time_ms > 0
-        && c.open_time_ms % interval == 0
+        && c.open_time_ms.is_multiple_of(interval)
         && c.open.is_finite()
         && c.high.is_finite()
         && c.low.is_finite()
@@ -316,7 +315,8 @@ mod tests {
         publish(&f.dir, "202610", &f.spec("A"), &f.bars()).unwrap();
         let file = f.dir.join("straddle-001-202610.qcb");
         let mut bytes = fs::read(&file).unwrap();
-        bytes[bytes.len() - 10] ^= 0xff;
+        let corrupt_at = bytes.len() - 10;
+        bytes[corrupt_at] ^= 0xff;
         fs::write(file, bytes).unwrap();
         let mut series = CandlePartition::open(&f.dir, "202610", &f.spec("A")).unwrap();
         assert!(series.audit().is_err());
