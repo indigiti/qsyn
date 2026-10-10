@@ -29,6 +29,14 @@ interface BrokerConnectionRepository
         string $accountId
     ): ?array;
 
+    public function renameMock(
+        string $tenantId,
+        string $ownerUserId,
+        string $accountId,
+        string $displayLabel,
+        int $expectedRevision
+    ): array;
+
     public function disconnectMock(
         string $tenantId,
         string $ownerUserId,
