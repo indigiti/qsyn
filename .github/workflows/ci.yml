@@ -47,6 +47,9 @@ jobs:
           php -l apps/web-php/tests/IdentityContractsTest.php
           php apps/web-php/tests/IdentityContractsTest.php
           python3 apps/web-php/tests/IdentityHttpSmoke.py
+          php -l apps/web-php/src/FileTerminalWorkspaceRepository.php
+          php -l apps/web-php/src/TerminalWorkspaceApi.php
+          python3 apps/web-php/tests/TerminalWorkspaceHttpSmoke.py
           php -l apps/web-php/src/FileMockAccountSelection.php
           php -l apps/web-php/src/AccountApi.php
           php -l apps/web-php/src/SimulatedAccountBars.php
@@ -180,7 +183,7 @@ jobs:
         run: node tests/browser-studio-smoke.mjs
         working-directory: frontend
       - name: Validate strict browser workspace state and simulated instrument whitelist
-        run: node --test tests/terminal-workspace.test.mjs
+        run: node --test tests/terminal-workspace.test.mjs tests/terminal-file-sync.test.mjs
         working-directory: frontend
       - name: Validate database-free OpenAlgo-style terminal in desktop/mobile Chromium
         run: node tests/browser-terminal-smoke.mjs
