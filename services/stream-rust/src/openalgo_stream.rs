@@ -32,7 +32,7 @@ impl Subscription {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CandidateQuote {
     pub scope: Scope,
     pub instrument_id: String,
