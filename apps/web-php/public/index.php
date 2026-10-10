@@ -56,10 +56,21 @@ if ($route === '/qsyn/api/v1/diagnostics/rust' || $route === '/api/v1/diagnostic
 
 // Integrated Options Studio is a public, read-only simulation, NOT a broker API.
 // It is independent of disabled-by-default user/account/fixture features.
-if ($route === '/qsyn/api/v1/studio/market' || $route === '/qsyn/api/v1/studio/bars') {
+if ($route === '/qsyn/api/v1/studio/market' || $route === '/qsyn/api/v1/studio/bars'
+    || $route === '/qsyn/api/v1/studio/capabilities') {
     if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'GET') {
         header('Allow: GET');
         respond(['error' => 'method_not_allowed'], 405);
+    }
+    if ($route === '/qsyn/api/v1/studio/capabilities') {
+        respond([
+            'schema' => 'QSYN-STUDIO-CAPABILITIES/1', 'market_data' => 'simulated',
+            'broker_integration' => 'not_connected', 'execution_enabled' => false,
+            'live_trading_enabled' => false, 'live_telemetry_approved' => false,
+            'market_data_feed' => 'deterministic-options-laboratory',
+            'paper_trades' => 'browser_local_only', 'paper_orders_sent_to_broker' => false,
+            'alerts' => 'browser_foreground_only', 'history' => 'deterministic_120_bars',
+        ]);
     }
     $source = dirname(__DIR__) . '/src/SimulatedOptionsStudio.php';
     if (!is_file($source)) {
@@ -84,7 +95,14 @@ if ($route === '/qsyn/api/v1/studio/market' || $route === '/qsyn/api/v1/studio/b
             || strlen($legs) > 1400) {
             respond(['error' => 'invalid_studio_parameters'], 422);
         }
-        respond(\QSYN\Studio\SimulatedOptionsStudio::bars($underlying, $expiry, $interval, $legs));
+        $series = \QSYN\Studio\SimulatedOptionsStudio::bars($underlying, $expiry, $interval, $legs);
+        $analytics = dirname($source) . '/StudioAnalytics.php';
+        if (!is_file($analytics)) {
+            respond(['error' => 'studio_analytics_unavailable'], 503);
+        }
+        require_once $analytics;
+        $series['analytics'] = \QSYN\Studio\StudioAnalytics::summarize($series);
+        respond($series);
     } catch (\InvalidArgumentException $error) {
         // Stable non-sensitive validation codes only; never echo arbitrary request data.
         respond(['error' => $error->getMessage()], 422);
