@@ -25,6 +25,7 @@ jobs:
         run: |
           php -l apps/web-php/src/FileStore.php
           php -l apps/web-php/public/index.php
+          php -l apps/web-php/public/terminal.php
           php -l apps/web-php/src/RustProbe.php
           php -l apps/web-php/src/RustStreamProbe.php
           php -l apps/web-php/src/RustAdmin.php
@@ -160,7 +161,10 @@ jobs:
         working-directory: frontend
       - run: npm run build
         working-directory: frontend
-      - run: test -s frontend/dist/chart.js
+      - run: |
+          test -s frontend/dist/chart.js
+          test -s frontend/dist/terminal.js
+          test -s frontend/dist/terminal.css
       - name: Install test-only Playwright Chromium
         run: |
           npm install --no-save --no-audit --no-fund playwright@1.55.0
@@ -174,6 +178,9 @@ jobs:
         working-directory: frontend
       - name: Check synthetic Options Studio, multi-chart rendering and saved layouts
         run: node tests/browser-studio-smoke.mjs
+        working-directory: frontend
+      - name: Validate database-free OpenAlgo-style terminal in desktop/mobile Chromium
+        run: node tests/browser-terminal-smoke.mjs
         working-directory: frontend
       - uses: actions/upload-artifact@v4
         if: always()
