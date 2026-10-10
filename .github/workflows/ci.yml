@@ -75,6 +75,10 @@ jobs:
           php -l apps/web-php/tools/openalgo-local-probe.php
           python3 apps/web-php/tests/OpenAlgoLocalProbeTest.py
           python3 apps/web-php/tests/UpstoxInstrumentInspectTest.py
+          php -l apps/web-php/src/PrivateBrokerRegistry.php
+          php -l apps/web-php/src/PrivateOpenAlgoReader.php
+          php -l apps/web-php/tools/private-broker-gateway.php
+          python3 apps/web-php/tests/PrivateBrokerGatewayTest.py
           php -l apps/web-php/tools/private-demo-fixtures.php
           python3 apps/web-php/tests/PrivateDemoFixtureTest.py
           php -l apps/web-php/tools/private-deployment-preflight.php

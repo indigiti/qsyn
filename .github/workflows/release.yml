@@ -81,6 +81,10 @@ jobs:
           php -l apps/web-php/tools/openalgo-local-probe.php
           python3 apps/web-php/tests/OpenAlgoLocalProbeTest.py
           python3 apps/web-php/tests/UpstoxInstrumentInspectTest.py
+          php -l apps/web-php/src/PrivateBrokerRegistry.php
+          php -l apps/web-php/src/PrivateOpenAlgoReader.php
+          php -l apps/web-php/tools/private-broker-gateway.php
+          python3 apps/web-php/tests/PrivateBrokerGatewayTest.py
           php -l apps/web-php/tools/private-demo-fixtures.php
           python3 apps/web-php/tests/PrivateDemoFixtureTest.py
           php -l apps/web-php/tools/private-deployment-preflight.php
@@ -136,6 +140,9 @@ jobs:
           cp apps/web-php/src/SimulatedOptionsStudio.php staging/private/app/src/SimulatedOptionsStudio.php
           cp apps/web-php/src/StudioAnalytics.php staging/private/app/src/StudioAnalytics.php
           cp apps/web-php/src/OpenAlgoLocalProbe.php staging/private/app/src/OpenAlgoLocalProbe.php
+          cp apps/web-php/src/PrivateBrokerRegistry.php staging/private/app/src/PrivateBrokerRegistry.php
+          cp apps/web-php/src/PrivateOpenAlgoReader.php staging/private/app/src/PrivateOpenAlgoReader.php
+          cp apps/web-php/tools/private-broker-gateway.php staging/private/app/tools/private-broker-gateway.php
           cp apps/web-php/tools/openalgo-local-probe.php staging/private/app/tools/openalgo-local-probe.php
           cp apps/web-php/tools/upstox-instrument-inspect.py staging/private/app/tools/upstox-instrument-inspect.py
           cp frontend/dist/account-chart.js staging/public/assets/account-chart.js
@@ -174,6 +181,7 @@ jobs:
           cp apps/web-php/src/RustSupervisor.php staging/private/app/src/RustSupervisor.php
           cp services/stream-rust/target/release/qsyn-stream staging/private/app/bin/qsyn-stream
           cp services/stream-rust/target/release/qsyn-market-archive staging/private/app/bin/qsyn-market-archive
+          cp services/stream-rust/target/release/qsyn-openalgo-feed staging/private/app/bin/qsyn-openalgo-feed
           cat > staging/RELEASE.json <<EOF
           {
             "schema": "DIGIOPS-BUILD/1",
@@ -198,6 +206,10 @@ jobs:
           test -s staging/private/app/src/SimulatedOptionsStudio.php
           test -s staging/private/app/src/StudioAnalytics.php
           test -s staging/private/app/src/OpenAlgoLocalProbe.php
+          test -s staging/private/app/src/PrivateBrokerRegistry.php
+          test -s staging/private/app/src/PrivateOpenAlgoReader.php
+          test -s staging/private/app/tools/private-broker-gateway.php
+          test ! -e staging/private/runtime/openalgo-registry.json
           test -s staging/private/app/tools/openalgo-local-probe.php
           test -s staging/private/app/tools/upstox-instrument-inspect.py
           test ! -e staging/private/runtime/openalgo-key.txt
@@ -236,6 +248,7 @@ jobs:
           test -s staging/private/app/src/RustProbe.php
           test -x staging/private/app/bin/qsyn-stream
           test -x staging/private/app/bin/qsyn-market-archive
+          test -x staging/private/app/bin/qsyn-openalgo-feed
           test -s staging/RELEASE.json
           test -s staging/private/build/release.json
       - name: Publish DigiOps artifact
@@ -269,6 +282,10 @@ jobs:
           test -s verified-release/private/app/src/SimulatedOptionsStudio.php
           test -s verified-release/private/app/src/StudioAnalytics.php
           test -s verified-release/private/app/src/OpenAlgoLocalProbe.php
+          test -s verified-release/private/app/src/PrivateBrokerRegistry.php
+          test -s verified-release/private/app/src/PrivateOpenAlgoReader.php
+          test -s verified-release/private/app/tools/private-broker-gateway.php
+          test ! -e verified-release/private/runtime/openalgo-registry.json
           test -s verified-release/private/app/tools/openalgo-local-probe.php
           test -s verified-release/private/app/tools/upstox-instrument-inspect.py
           test ! -e verified-release/private/runtime/openalgo-key.txt
@@ -308,6 +325,7 @@ jobs:
           test -s verified-release/public/assets/account-chart.js
           test -s verified-release/private/app/bin/qsyn-stream
           test -s verified-release/private/app/bin/qsyn-market-archive
+          test -s verified-release/private/app/bin/qsyn-openalgo-feed
           test -s verified-release/RELEASE.json
           test -s verified-release/private/build/release.json
           grep -F 'RewriteBase /qsyn/' verified-release/public/.htaccess
