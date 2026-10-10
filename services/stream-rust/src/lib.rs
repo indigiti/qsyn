@@ -4,6 +4,7 @@
 
 pub mod market_pipeline;
 pub mod durable_market_wal;
+pub mod immutable_candles;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Leg {
