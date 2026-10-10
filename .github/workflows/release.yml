@@ -178,6 +178,7 @@ jobs:
           cp apps/web-php/src/FileTerminalWorkspaceRepository.php staging/private/app/src/FileTerminalWorkspaceRepository.php
           cp apps/web-php/src/TerminalWorkspaceApi.php staging/private/app/src/TerminalWorkspaceApi.php
           cp apps/web-php/src/PrivateChartGrantApi.php staging/private/app/src/PrivateChartGrantApi.php
+          cp apps/web-php/src/UpstoxOperatorOAuth.php staging/private/app/src/UpstoxOperatorOAuth.php
           cp apps/web-php/src/FileMockAccountSelection.php staging/private/app/src/FileMockAccountSelection.php
           cp apps/web-php/src/AccountApi.php staging/private/app/src/AccountApi.php
           cp apps/web-php/src/SimulatedAccountBars.php staging/private/app/src/SimulatedAccountBars.php
