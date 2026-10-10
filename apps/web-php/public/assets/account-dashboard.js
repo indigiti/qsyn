@@ -284,6 +284,10 @@
     showLogin();
     status('Signed out of the mock workspace.');
   }));
+  $('show-accounts-button').addEventListener('click', () => {
+    // Temporary navigation reveal; persisted layout remains unchanged.
+    $('workspace-grid').classList.remove('focus');
+  });
   $('refresh-button').addEventListener('click', () => execute(async () => {
     await refresh();
     status('Account list refreshed.');
