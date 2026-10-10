@@ -136,15 +136,18 @@ fn retry_delay(attempt: u32) -> Duration {
 
 /// Authorize using the current account bearer token. The returned one-time
 /// URL is used only in process memory and never logged or persisted.
+fn transient_authorize() -> io::Error {
+    io::Error::new(io::ErrorKind::TimedOut, "v3_authorize_temporarily_unavailable")
+}
 async fn authorize_next(client: &reqwest::Client, access_token: &str) -> io::Result<String> {
     let response = client.get("https://api.upstox.com/v3/feed/market-data-feed/authorize")
         .bearer_auth(access_token).header("Accept", "application/json")
-        .send().await.map_err(|_|denied())?;
+        .send().await.map_err(|_|transient_authorize())?;
     if matches!(response.status().as_u16(), 401 | 403) { return Err(denied()); }
     if response.status() != reqwest::StatusCode::OK {
         return Err(io::Error::new(io::ErrorKind::TimedOut, "v3_authorization_unavailable"));
     }
-    let body = response.bytes().await.map_err(|_|denied())?;
+    let body = response.bytes().await.map_err(|_|transient_authorize())?;
     if body.len() > 4096 { return Err(denied()); }
     let value: serde_json::Value = serde_json::from_slice(&body).map_err(|_|denied())?;
     if value["status"] != "success" {return Err(denied());}
