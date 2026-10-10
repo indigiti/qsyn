@@ -46,6 +46,9 @@ jobs:
           php -l apps/web-php/tests/IdentityContractsTest.php
           php apps/web-php/tests/IdentityContractsTest.php
           python3 apps/web-php/tests/IdentityHttpSmoke.py
+          php -l apps/web-php/src/FileMockAccountSelection.php
+          php -l apps/web-php/src/AccountApi.php
+          python3 apps/web-php/tests/AccountHttpSmoke.py
           php apps/web-php/tests/RustAdminTest.php
           php apps/web-php/tests/RustAdminBootstrapTest.php
           php apps/web-php/tests/RustDemoConfigTest.php
