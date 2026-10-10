@@ -56,9 +56,51 @@ try {
   const canvases = await page.locator('.chart canvas').count();
   if (canvases < 3) throw new Error('OpenAlgo Charts did not mount real canvas renderers');
   if (await page.locator('#entry').innerText() === '—') throw new Error('Payoff/cashflow not calculated');
+
+  // Reference-inspired chart-first terminal: one functional, dominant chart,
+  // native QSYN identity, toolbar controls and accessible offcanvas strategy.
+  if (await page.locator('#strategy-drawer').isVisible()) {
+    throw new Error('Chart-first terminal must keep the builder collapsed by default');
+  }
+  const chartRect = await page.locator('#basket-chart').boundingBox();
+  if (!chartRect || chartRect.width < 1100 || chartRect.height < 420) {
+    throw new Error('Primary chart no longer dominates a 1512px-wide terminal');
+  }
+  if ((await page.locator('#toolbar-underlying').inputValue()) !== 'NIFTY'
+      || (await page.locator('#toolbar-interval').inputValue()) !== '1m') {
+    throw new Error('Chart toolbar is not synchronized with strategy controls');
+  }
+  if ((await page.locator('.environment').innerText()).includes('LIVE')) {
+    throw new Error('Simulator mislabeled as live on QSYN terminal');
+  }
+  await page.screenshot({ path: resolve(images, 'studio-chart-first-light.png'), fullPage: true });
+  await page.locator('#toolbar-builder').click();
+  if (!(await page.locator('#strategy-drawer').isVisible())) {
+    throw new Error('Strategy builder drawer failed to open');
+  }
+  if ((await page.locator('#toolbar-builder').getAttribute('aria-expanded')) !== 'true') {
+    throw new Error('Strategy builder accessibility state was not updated');
+  }
+  await page.keyboard.press('Escape');
+  if (await page.locator('#strategy-drawer').isVisible()) {
+    throw new Error('Escape failed to close options builder');
+  }
+  await page.locator('#toolbar-theme').click();
+  await page.waitForFunction(() =>
+    document.documentElement.dataset.theme === 'dark'
+    && document.querySelector('#status')?.textContent?.includes('Loaded 120 synchronized'),
+    null, { timeout: 25000 });
+  await page.screenshot({ path: resolve(images, 'studio-chart-first-dark.png'), fullPage: true });
+  await page.locator('#toolbar-theme').click();
+  await page.waitForFunction(() =>
+    document.documentElement.dataset.theme === 'light'
+    && document.querySelector('#status')?.textContent?.includes('Loaded 120 synchronized'),
+    null, { timeout: 25000 });
+
   await page.screenshot({ path: resolve(images, 'studio-straddle.png'), fullPage: true });
 
   // Four independent leg charts, not only two, and exact model gamma precision.
+  await page.locator('#toolbar-builder').click();
   await page.locator('#add-leg').click();
   await page.locator('#add-leg').click();
   if (await page.locator('#legs .leg-row').count() !== 4) {
@@ -77,6 +119,7 @@ try {
     throw new Error('Gamma does not display the required 6 decimal places');
   }
   await page.screenshot({ path: resolve(images, 'studio-four-leg-chart.png'), fullPage: true });
+  await page.locator('#toolbar-builder').click();
   await page.locator('#straddle').click();
   await page.locator('#render').click();
   await page.waitForFunction(() =>
@@ -138,6 +181,7 @@ try {
   await page.screenshot({ path: resolve(images, 'studio-integrated-risk-paper-replay.png'), fullPage: true });
 
 
+  await page.locator('#toolbar-builder').click();
   await page.locator('#strangle').click();
   await page.locator('#render').click();
   await page.waitForLoadState('domcontentloaded');
@@ -148,6 +192,7 @@ try {
   if (!legStrikes.includes('CE') || !legStrikes.includes('PE')) {
     throw new Error('Preset did not refresh simulated option legs');
   }
+  await page.locator('#toolbar-workspaces').click();
   await page.locator('#workspace-name').fill('Synthetic Test Workspace');
   await page.locator('#save').click();
   if (!await page.locator('#saved-list').innerText().then(s => s.includes('Synthetic Test Workspace'))) {
@@ -159,9 +204,9 @@ try {
   if (!(await page.locator('#saved-list').innerText()).includes('Synthetic Test Workspace')) {
     throw new Error('Local browser workspace did not survive reload');
   }
-  await page.locator('#underlying').selectOption('BANKNIFTY');
+  await page.locator('#toolbar-underlying').selectOption('BANKNIFTY');
   await page.waitForFunction(() => document.querySelector('#atm')?.textContent?.includes('strike step 100'));
-  await page.locator('#render').click();
+  await page.locator('#toolbar-render').click();
   await page.waitForFunction(() =>
     document.querySelector('#status')?.textContent?.includes('Loaded 120 synchronized') &&
     document.querySelector('#basket-title')?.textContent?.includes('BANKNIFTY'),
