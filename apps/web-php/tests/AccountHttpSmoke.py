@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Phase 1.3 session-isolated mock broker HTTP API acceptance (localhost only)."""
 import os
+import json
 from pathlib import Path
 import tempfile
 
@@ -127,6 +128,30 @@ def run():
                 "account_id": a["account_id"], "expected_revision": 0
             }, csrf)
             assert status == 200 and chosen["selection"]["revision"] == 1
+            assert request(guest, origin, ACCOUNTS + "workspace")[0] == 401
+            assert request(bob, origin, ACCOUNTS + "workspace")[0] == 409
+            status, blank_workspace, _ = request(alice, origin, ACCOUNTS + "workspace")
+            assert status == 200 and blank_workspace["workspace"] == {
+                "account_id": a["account_id"], "revision": 0,
+                "settings": {"theme": "dark", "visible_bars": 100, "layout": "split"},
+            }
+            desired = {"theme": "light", "visible_bars": 60, "layout": "focus"}
+            payload = {"account_id": a["account_id"],
+                       "expected_revision": 0, "settings": desired}
+            assert post(alice, origin, "save-workspace", payload, None)[0] == 403
+            assert post(alice, origin, "save-workspace", payload, csrf,
+                        "http://attacker.example")[0] == 403
+            assert post(bob, origin, "save-workspace", payload, bob_csrf)[0] == 403
+            assert post(other, origin, "save-workspace", payload, other_csrf)[0] == 409
+            assert post(alice, origin, "save-workspace",
+                        {**payload, "owner_user_id": "somebody"}, csrf)[0] == 422
+            assert post(alice, origin, "save-workspace",
+                        {**payload, "settings": {**desired, "access_token": "fake"}}, csrf)[0] == 422
+            status, updated_workspace, _ = post(alice, origin, "save-workspace", payload, csrf)
+            assert status == 200 and updated_workspace["workspace"]["revision"] == 1
+            assert updated_workspace["workspace"]["settings"] == desired
+            assert post(alice, origin, "save-workspace", payload, csrf)[0] == 409
+            assert request(alice, origin, ACCOUNTS + "workspace")[1]["workspace"] == updated_workspace["workspace"]
             status, preview_a, _ = request(alice, origin, ACCOUNTS + "bars")
             assert status == 200 and preview_a["account_id"] == a["account_id"], preview_a
             assert preview_a["source"] == "account-scoped-mock-fixture"
@@ -142,6 +167,12 @@ def run():
             assert request(alice, origin, ACCOUNTS + "list")[1]["selection"] == {
                 "account_id": b["account_id"], "revision": 2
             }
+            status, isolated_b, _ = request(alice, origin, ACCOUNTS + "workspace")
+            assert status == 200 and isolated_b["workspace"]["revision"] == 0
+            assert isolated_b["workspace"]["settings"]["theme"] == "dark"
+            assert post(alice, origin, "save-workspace", {
+                "account_id": a["account_id"], "expected_revision": 1, "settings": desired
+            }, csrf)[0] == 409
 
             status, disc, _ = post(alice, origin, "disconnect", {
                 "account_id": b["account_id"], "expected_revision": 2
@@ -149,6 +180,7 @@ def run():
             assert status == 200 and disc["account"]["auth_status"] == "disconnected"
             assert disc["selection"] == {"account_id": None, "revision": 2}
             assert request(alice, origin, ACCOUNTS + "bars")[0] == 409
+            assert request(alice, origin, ACCOUNTS + "workspace")[0] == 409
             assert post(alice, origin, "select", {
                 "account_id": b["account_id"], "expected_revision": 2
             }, csrf)[0] == 409
@@ -174,6 +206,20 @@ def run():
                 "expected_revision": 1
             }, csrf)[0] == 404
             assert request(alice, origin, AUTH + "me")[0] == 200
+            # Private audit records contain only typed metadata and authenticated
+            # actor IDs, never session secrets, raw request bodies or credentials.
+            event_files = list((directory / "mock_audit_events").glob("e_*.json"))
+            events = [json.loads(file.read_text())["data"] for file in event_files]
+            assert len(events) >= 16, "Expected audit intents and outcomes"
+            assert any(e["event"] == "auth.login" and e["state"] == "completed" for e in events)
+            assert any(e["event"] == "workspace.save" and e["state"] == "completed" for e in events)
+            assert any(e["event"] == "workspace.save" and e["state"] == "rejected" for e in events)
+            assert all(e["tenant_id"] in {"tenant-one", "tenant-two"} for e in events)
+            assert all(e["actor_user_id"].startswith("u_") for e in events)
+            assert all((file.stat().st_mode & 0o777) == 0o600 for file in event_files)
+            raw_events = " ".join(file.read_text() for file in event_files)
+            assert FAKE_PASSWORD not in raw_events and "access_token" not in raw_events
+            assert "mock-upstox" not in raw_events
             print("PASS: HTTP mock accounts owner/tenant isolation, role, CSRF, CAS and selection")
 
             assert request(alice, origin, ACCOUNTS + "list", "POST", {},)[0] == 405
