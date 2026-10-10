@@ -10,6 +10,8 @@ pub mod openalgo_stream;
 pub mod private_live_pipeline;
 pub mod chart_entitlement;
 pub mod paper_oms;
+pub mod authorized_ingest;
+pub mod history_backfill;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Leg {
