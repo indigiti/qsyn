@@ -1,0 +1,9 @@
+{
+  "schema": "QSYN-OPENALGO-FOUNDATION-LOCK/1",
+  "upstream": "marketcalls/openalgo",
+  "commit": "12e1114657981a3e50dde8c8ce04eb778ae1cf2f",
+  "frontend_openalgo_charts": "2.6.0",
+  "upstream_license_file": "License.md",
+  "application_base_path": "/",
+  "integration_target": "isolated-root-origin"
+}
