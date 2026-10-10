@@ -54,7 +54,10 @@ jobs:
           python3 apps/web-php/tests/IdentityHttpSmoke.py
           php -l apps/web-php/src/FileMockAccountSelection.php
           php -l apps/web-php/src/AccountApi.php
+          php -l apps/web-php/src/SimulatedAccountBars.php
+          php -l apps/web-php/public/account-dashboard.php
           python3 apps/web-php/tests/AccountHttpSmoke.py
+          php apps/web-php/tests/SimulatedAccountBarsTest.php
           php apps/web-php/tests/RustAdminTest.php
           php apps/web-php/tests/RustAdminBootstrapTest.php
           php apps/web-php/tests/RustDemoConfigTest.php
@@ -94,6 +97,10 @@ jobs:
           cp apps/web-php/public/admin-rust.php staging/public/admin-rust.php
           cp apps/web-php/public/.htaccess staging/public/.htaccess
           cp frontend/dist/chart.js staging/public/assets/chart.js
+          cp frontend/dist/account-chart.js staging/public/assets/account-chart.js
+          cp apps/web-php/public/assets/account-dashboard.js staging/public/assets/account-dashboard.js
+          cp apps/web-php/public/assets/account-dashboard.css staging/public/assets/account-dashboard.css
+          cp apps/web-php/public/account-dashboard.php staging/public/account-dashboard.php
           cp apps/web-php/public/assets/rust-diagnostics.js staging/public/assets/rust-diagnostics.js
           cp apps/web-php/public/assets/chart-diagnostics.js staging/public/assets/chart-diagnostics.js
           cp apps/web-php/public/assets/rust-stream-test.js staging/public/assets/rust-stream-test.js
@@ -113,6 +120,7 @@ jobs:
           cp apps/web-php/src/IdentityApi.php staging/private/app/src/IdentityApi.php
           cp apps/web-php/src/FileMockAccountSelection.php staging/private/app/src/FileMockAccountSelection.php
           cp apps/web-php/src/AccountApi.php staging/private/app/src/AccountApi.php
+          cp apps/web-php/src/SimulatedAccountBars.php staging/private/app/src/SimulatedAccountBars.php
           cp apps/web-php/src/RustProbe.php staging/private/app/src/RustProbe.php
           cp apps/web-php/src/RustStreamProbe.php staging/private/app/src/RustStreamProbe.php
           cp apps/web-php/src/RustAdmin.php staging/private/app/src/RustAdmin.php
@@ -161,6 +169,11 @@ jobs:
           test -s staging/private/app/src/IdentityApi.php
           test -s staging/private/app/src/FileMockAccountSelection.php
           test -s staging/private/app/src/AccountApi.php
+          test -s staging/private/app/src/SimulatedAccountBars.php
+          test -s staging/public/account-dashboard.php
+          test -s staging/public/assets/account-dashboard.js
+          test -s staging/public/assets/account-dashboard.css
+          test -s staging/public/assets/account-chart.js
           test -s staging/private/app/src/RustProbe.php
           test -x staging/private/app/bin/qsyn-stream
           test -s staging/RELEASE.json
@@ -215,6 +228,11 @@ jobs:
           test -s verified-release/private/app/src/IdentityApi.php
           test -s verified-release/private/app/src/FileMockAccountSelection.php
           test -s verified-release/private/app/src/AccountApi.php
+          test -s verified-release/private/app/src/SimulatedAccountBars.php
+          test -s verified-release/public/account-dashboard.php
+          test -s verified-release/public/assets/account-dashboard.js
+          test -s verified-release/public/assets/account-dashboard.css
+          test -s verified-release/public/assets/account-chart.js
           test -s verified-release/private/app/bin/qsyn-stream
           test -s verified-release/RELEASE.json
           test -s verified-release/private/build/release.json
