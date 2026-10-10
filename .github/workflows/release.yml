@@ -8,13 +8,13 @@ on:
       - 'apps/**'
       - 'frontend/**'
       - 'services/**'
+  # DigiOps matches its artifact to the newest source SHA on main.
+  # Never path-filter main pushes: architecture, ops and upstream-lock merges
+  # also need an attested digiops-release artifact at the exact merged SHA.
+  # This packages the PHP/Rust website only; the separate OpenAlgo foundation
+  # archive requires an approved Python service installation.
   push:
     branches: [main]
-    paths:
-      - 'apps/**'
-      - 'frontend/**'
-      - 'services/**'
-      - '.github/workflows/release.yml'
 
 permissions:
   contents: read
