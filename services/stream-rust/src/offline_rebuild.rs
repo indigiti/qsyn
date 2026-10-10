@@ -6,15 +6,19 @@ use crate::market_pipeline::{Candle, DataMode, ScopedBasket, WeightedLeg};
 use std::io;
 use std::path::Path;
 
+pub struct ReplayWindow {
+    pub start_ms: u64,
+    pub end_ms: u64,
+    pub max_leg_skew_ms: u64,
+}
+
 pub fn rebuild_offline_basket(
     wal_root: &Path,
     candle_root: &Path,
     partition: &str,
     descriptor: &SeriesDescriptor,
     legs: &[WeightedLeg],
-    start_ms: u64,
-    end_ms: u64,
-    max_leg_skew_ms: u64,
+    window: ReplayWindow,
 ) -> io::Result<usize> {
     // Live source data requires a separate independently authorized ingestion
     // and entitlement layer. The offline adapter must never invent it.
@@ -22,7 +26,7 @@ pub fn rebuild_offline_basket(
         || descriptor.interval_ms != 60_000
         || legs.is_empty()
         || legs.len() > 8
-        || start_ms > end_ms
+        || window.start_ms > window.end_ms
     {
         return Err(io::Error::new(io::ErrorKind::InvalidInput, "offline_demo_only"));
     }
@@ -30,14 +34,14 @@ pub fn rebuild_offline_basket(
         descriptor.scope.clone(),
         descriptor.mode.clone(),
         legs.to_vec(),
-        max_leg_skew_ms,
+        window.max_leg_skew_ms,
     ).map_err(|message| io::Error::new(io::ErrorKind::InvalidInput, message))?;
 
     let mut quotes = Vec::new();
     for leg in legs {
         let events = durable_market_wal::query(
             wal_root, &descriptor.scope, &descriptor.mode, &leg.instrument_id,
-            start_ms, end_ms, 5_000,
+            window.start_ms, window.end_ms, 5_000,
         )?;
         if events.len() == 5_000 {
             // Cannot prove this finite read captured all input events.
@@ -147,7 +151,9 @@ mod tests {
         ];
         let count = rebuild_offline_basket(
             &fixture.wal, &fixture.candles, "202610",
-            &fixture.descriptor(), &legs, 60_000, 150_000, 100,
+            &fixture.descriptor(), &legs, ReplayWindow {
+                start_ms: 60_000, end_ms: 150_000, max_leg_skew_ms: 100,
+            },
         ).unwrap();
         assert_eq!(count, 1);
         let mut part = CandlePartition::open(
@@ -172,7 +178,9 @@ mod tests {
         let mut live = descriptor.clone();
         live.mode = DataMode::AuthorizedLive;
         assert!(rebuild_offline_basket(
-            &fixture.wal, &fixture.candles, "202610", &live, &legs, 0, 1, 100,
+            &fixture.wal, &fixture.candles, "202610", &live, &legs, ReplayWindow {
+                start_ms: 0, end_ms: 1, max_leg_skew_ms: 100,
+            },
         ).is_err());
     }
 }
