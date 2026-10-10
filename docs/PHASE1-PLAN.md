@@ -157,3 +157,46 @@ mock users, two Upstox references, mock Dhan, another QSYN user, another
 tenant, a read-only viewer, malformed input, cross-owner requests,
 wrong-origin or missing-CSRF denials and stale revisions. No public
 enabling, dashboard, or staging deployment is part of this PR.
+
+
+## Phase 1.4 — Browser mock-account workspace
+
+The browser application lives at \`/qsyn/app\` and **does not replace**
+the verified Phase 0 \`/qsyn/\` chart or the privileged Rust administrator.
+It is **off by default**, requiring the independent
+\`QSYN_DASHBOARD_ENABLED=1\` switch **plus** the Phase 1.2/1.3 mock
+identity + mock account gates and a private developer/test data directory.
+
+It must **not be enabled on public Cloudways staging** as the Phase 1
+file-backed fixture system is not a production-approved multi-user account
+service. GitHub browser tests use disposable PHP localhost and a fixed
+test-only \`QSYN_ALLOW_HTTP_TEST=1\` override. Real hosts require HTTPS.
+
+The HTML/CSS/JS dashboard:
+- Logs in through \`/api/v1/auth/state\` + \`/api/v1/auth/login\`,
+  with secure session cookies/CSRF inherited from Phase 1.2.
+  No accounts can be registered or seeded via web routes.
+- Lists authorized mocked Upstox A/B and another mock broker, with
+  role-aware link, rename, select, disconnect, and sign-out controls.
+  Account names are always inserted via DOM \`textContent\`.
+- Selects **one** mock chart source via a versioned CAS record. On a
+  source switch the browser reloads the isolated chart to prevent stale
+  subscriptions/state from the previously selected account.
+- Uses OpenAlgo Charts 2.6.0 through a **separate bundle**
+  \`/assets/account-chart.js\`. Its history feed only calls
+  \`GET /qsyn/api/v1/accounts/bars\` with the browser session cookie.
+  **There is no account ID query parameter or accepted browser-supplied
+  authorization context**. The server checks logged-in tenant, owner,
+  effective selected account and \`mock_connected\` state before generating
+  120 distinct but *fully synthetic* 1-minute OHLC bars. Responses always
+  say \`source=account-scoped-mock-fixture\`, \`mode=simulated\` and
+  \`trading_enabled=false\`. There are no real-time subscriptions.
+- Does not wire QSYN's demo Rust quotes, OpenAlgo broker sessions,
+  Upstox OAuth, subscriptions, market-data redistribution or order APIs
+  to this demo.
+
+Exit checks: Playwright drives login, three mock links, actual candle
+pixel painting, versioned selection, source switch with different
+fake candle data, disconnect revocation, viewer/tenant isolation,
+cross-site safety and logout. Default-off dashboard route is validated
+by PHP HTTP regression. **No staging deployment during this slice.**
