@@ -149,6 +149,27 @@ if ($route === '/qsyn/studio' || $route === '/qsyn/studio/') {
     exit;
 }
 
+// Independently opted-in, identity-scoped PRIVATE simulated terminal file
+// workspaces. Never expose this during public/demo UI deployment. Without an
+// authenticated mock developer identity the endpoint fails closed.
+if ($route === '/qsyn/api/v1/terminal/workspace') {
+    $src = dirname(__DIR__) . '/src';
+    if (!is_file($src . '/TerminalWorkspaceApi.php')) {
+        $src = dirname(__DIR__, 2) . '/private_html/qsyn/app/src';
+    }
+    foreach (['FileStore', 'UserRepository', 'FileUserRepository', 'UserSession',
+        'IdentityApi', 'FileMockAuditLog', 'FileTerminalWorkspaceRepository',
+        'TerminalWorkspaceApi'] as $unit) {
+        if (!is_file($src . '/' . $unit . '.php')) {
+            respond(['error' => 'private_workspace_modules_unavailable'], 503);
+        }
+        require_once $src . '/' . $unit . '.php';
+    }
+    header('Cache-Control: private, no-store');
+    [$status, $payload] = \QSYN\Terminal\TerminalWorkspaceApi::dispatch($_SERVER);
+    respond($payload, $status);
+}
+
 // Deliberately disabled-by-default QSYN *user* identity test API.
 // Separate cookie and code from the Rust operations administrator.
 if (preg_match('#^/qsyn/api/v1/auth/(state|me|login|logout)$#', $route, $identityMatch)) {

@@ -129,3 +129,11 @@ button:focus-visible,a:focus-visible{outline:2px solid var(--q-accent);outline-o
 @media(max-width:1000px){.terminal-workspace-grid{grid-template-columns:minmax(0,1fr)}.terminal-chart-panes.compared{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:800px){.terminal-chart-panes.compared{grid-template-columns:1fr}}
 @media(max-width:700px){.terminal-layout-tools{align-items:stretch}.terminal-layout-tools label{flex:1 1 135px}.terminal-layout-tools input,.terminal-layout-tools select{width:100%}.terminal-layout-tools .terminal-action{align-self:end;min-height:37px}.terminal-delete-layout{align-self:end}.terminal-pane-heading select{width:min(55vw,210px)}}
+
+
+/* Strictly optional private developer file sync; no credential/account controls. */
+.terminal-file-controls{margin-top:13px;padding-top:13px;border-top:1px solid var(--q-line);display:flex;align-items:center;flex-wrap:wrap;gap:8px}
+.terminal-file-status{color:var(--q-muted);font-size:11px;flex:1 1 260px}
+.terminal-file-controls button:disabled{cursor:not-allowed;opacity:.5}
+.terminal-file-controls .terminal-action{font-size:11px;min-height:33px;padding:7px 10px}
+@media(max-width:700px){.terminal-file-controls .terminal-file-status{flex-basis:100%}}
