@@ -56,7 +56,7 @@ pub fn review_live_readiness(approval: &ExecutionApproval, order: &ProposedOrder
         || order.requested_ms - order.tick_time_ms > approval.max_tick_age_ms
         || approval.max_tick_age_ms > 5_000
         || order.quantity == 0 || order.lot_size == 0
-        || order.quantity % order.lot_size != 0
+        || !order.quantity.is_multiple_of(order.lot_size)
         || order.quantity > approval.max_net_contracts
         || approval.active_net_contracts > approval.max_net_contracts - order.quantity
         || order.side != "BUY" && order.side != "SELL"
