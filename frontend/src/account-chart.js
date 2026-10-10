@@ -24,7 +24,12 @@ async function fetchMockHistory(expectedId) {
   return result.bars;
 }
 
-async function mount(root, expectedId) {
+async function mount(root, expectedId, prefs) {
+  if (!prefs || !['dark', 'light'].includes(prefs.theme) ||
+      ![60, 100, 120].includes(prefs.visible_bars) ||
+      !['split', 'focus'].includes(prefs.layout)) {
+    throw new Error('Invalid server-saved workspace options');
+  }
   if (!root || !/^[a-f0-9-]{36}$/.test(expectedId)) throw new Error('Invalid selected mock account');
   if (currentAccount === expectedId && mounting) return mounting;
   if (currentAccount !== null) {
@@ -49,12 +54,12 @@ async function mount(root, expectedId) {
     symbol: 'QSYN-MOCK',
     exchange: 'QSYN',
     interval: '1m',
-    theme: 'dark',
-    persist: 'qsyn-test-accounts-' + expectedId,
-    navigation: { defaultVisibleBars: 100, mousePan: 'horizontal' },
+    theme: prefs.theme,
+    // No browser localStorage persistence: the PHP session-owned workspace
+    // is the only authority for selected-account chart preferences.
+    navigation: { defaultVisibleBars: prefs.visible_bars, mousePan: 'horizontal' },
   });
   mounting = widget.ready.then(() => {
-    widget.chart.fitContent();
     return widget;
   });
   return mounting;
