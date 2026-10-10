@@ -153,7 +153,7 @@ final class FileTerminalWorkspaceRepository
                 }
             }
             $layouts[] = ['name' => $name, 'panes' => $panes,
-                'chartStates' => count($chartStates) ? $chartStates : (object) []];
+                'chartStates' => $chartStates];
         }
         $out = ['schema' => self::SCHEMA, 'watchlist' => $watchlist, 'layouts' => $layouts];
         if (strlen(json_encode($out, JSON_THROW_ON_ERROR)) > self::MAX_DATA_BYTES) {
