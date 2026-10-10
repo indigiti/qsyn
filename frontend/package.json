@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "esbuild src/main.js --bundle --format=iife --minify --outfile=dist/chart.js && esbuild src/account-chart.js --bundle --format=iife --minify --outfile=dist/account-chart.js"
+    "build": "esbuild src/main.js --bundle --format=iife --minify --outfile=dist/chart.js && esbuild src/account-chart.js --bundle --format=iife --minify --outfile=dist/account-chart.js && esbuild src/studio.js --bundle --format=iife --minify --outfile=dist/studio.js"
   },
   "dependencies": {
     "openalgo-charts": "2.6.0"
