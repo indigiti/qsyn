@@ -188,7 +188,7 @@ jobs:
         run: node tests/browser-studio-smoke.mjs
         working-directory: frontend
       - name: Validate strict browser workspace state and simulated instrument whitelist
-        run: node --test tests/terminal-workspace.test.mjs tests/terminal-file-sync.test.mjs
+        run: node --test tests/terminal-workspace.test.mjs tests/terminal-file-sync.test.mjs tests/private-live-chart.test.mjs
         working-directory: frontend
       - name: Validate database-free OpenAlgo-style terminal in desktop/mobile Chromium
         run: node tests/browser-terminal-smoke.mjs
