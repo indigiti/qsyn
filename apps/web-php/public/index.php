@@ -109,6 +109,29 @@ if ($route === '/qsyn/api/v1/studio/market' || $route === '/qsyn/api/v1/studio/b
     }
 }
 
+// File-backed QSYN product-shell preview. No OpenAlgo Python database/login
+// is required; demo charts use existing non-privileged same-origin PHP candles.
+// Do not promote this route as live/authenticated broker functionality.
+if ($route === '/qsyn/terminal' || $route === '/qsyn/terminal/') {
+    if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'GET') {
+        header('Allow: GET');
+        respond(['error' => 'method_not_allowed'], 405);
+    }
+    if (!is_file(__DIR__ . '/assets/terminal.js') || !is_file(__DIR__ . '/assets/terminal.css')) {
+        respond(['error' => 'terminal_bundle_unavailable'], 503);
+    }
+    header('Content-Type: text/html; charset=utf-8');
+    header('Cache-Control: no-store');
+    header('X-Frame-Options: DENY');
+    header('X-Robots-Tag: noindex, nofollow');
+    header('Content-Security-Policy: default-src ' . "'self'" .
+        '; script-src ' . "'self'" . '; style-src ' . "'self' 'unsafe-inline'" .
+        '; connect-src ' . "'self'" . '; img-src ' . "'self' data:" .
+        '; frame-ancestors ' . "'none'" . ';');
+    require __DIR__ . '/terminal.php';
+    exit;
+}
+
 if ($route === '/qsyn/studio' || $route === '/qsyn/studio/') {
     if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'GET') {
         header('Allow: GET');
