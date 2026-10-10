@@ -198,6 +198,7 @@ jobs:
           cp services/stream-rust/target/release/qsyn-private-chart staging/private/app/bin/qsyn-private-chart
           cp services/stream-rust/target/release/qsyn-upstox-worker staging/private/app/bin/qsyn-upstox-worker
           cp services/stream-rust/target/release/qsyn-upstox-history staging/private/app/bin/qsyn-upstox-history
+          cp services/stream-rust/target/release/qsyn-private-history staging/private/app/bin/qsyn-private-history
           cp ops/cloudways/qsyn-upstox-v3.supervisor.conf.example staging/private/app/ops/qsyn-upstox-v3.supervisor.conf.example
           cp ops/cloudways/qsyn-private-feed.supervisor.conf.example staging/private/app/ops/qsyn-private-feed.supervisor.conf.example
           cat > staging/RELEASE.json <<EOF
@@ -233,6 +234,7 @@ jobs:
           test -s staging/private/app/tools/upstox-oauth.php
           test -s staging/private/app/bin/qsyn-upstox-worker
           test -s staging/private/app/bin/qsyn-upstox-history
+          test -s staging/private/app/bin/qsyn-private-history
           test -s staging/private/app/ops/qsyn-upstox-v3.supervisor.conf.example
           test -s staging/private/app/tools/private-history-export.php
           test ! -e staging/private/runtime/market-license.json
@@ -373,6 +375,7 @@ jobs:
           test -s verified-release/private/app/bin/qsyn-private-chart
           test -s verified-release/private/app/bin/qsyn-upstox-worker
           test -s verified-release/private/app/bin/qsyn-upstox-history
+          test -s verified-release/private/app/bin/qsyn-private-history
           test -s verified-release/private/app/ops/qsyn-upstox-v3.supervisor.conf.example
           test -s verified-release/private/app/tools/upstox-oauth.php
           test -s verified-release/private/app/ops/qsyn-private-feed.supervisor.conf.example
