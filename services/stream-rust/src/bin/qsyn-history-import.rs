@@ -2,7 +2,7 @@
 use qsyn_stream::history_backfill::{import, HistoricalImport};
 use serde_json::json;
 use std::{fs, io, path::Path, time::{SystemTime, UNIX_EPOCH}};
-#[cfg(unix)] use std::os::unix::fs::{MetadataExt,PermissionsExt,OpenOptionsExt};
+#[cfg(unix)] use std::os::unix::fs::{MetadataExt,PermissionsExt};
 fn denied()->io::Error {
     io::Error::new(io::ErrorKind::PermissionDenied,"private_history_import_denied")
 }
