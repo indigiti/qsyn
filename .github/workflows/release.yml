@@ -181,6 +181,7 @@ jobs:
           cp apps/web-php/src/RustSupervisor.php staging/private/app/src/RustSupervisor.php
           cp services/stream-rust/target/release/qsyn-stream staging/private/app/bin/qsyn-stream
           cp services/stream-rust/target/release/qsyn-market-archive staging/private/app/bin/qsyn-market-archive
+          cp services/stream-rust/target/release/qsyn-openalgo-feed staging/private/app/bin/qsyn-openalgo-feed
           cat > staging/RELEASE.json <<EOF
           {
             "schema": "DIGIOPS-BUILD/1",
@@ -247,6 +248,7 @@ jobs:
           test -s staging/private/app/src/RustProbe.php
           test -x staging/private/app/bin/qsyn-stream
           test -x staging/private/app/bin/qsyn-market-archive
+          test -x staging/private/app/bin/qsyn-openalgo-feed
           test -s staging/RELEASE.json
           test -s staging/private/build/release.json
       - name: Publish DigiOps artifact
@@ -323,6 +325,7 @@ jobs:
           test -s verified-release/public/assets/account-chart.js
           test -s verified-release/private/app/bin/qsyn-stream
           test -s verified-release/private/app/bin/qsyn-market-archive
+          test -s verified-release/private/app/bin/qsyn-openalgo-feed
           test -s verified-release/RELEASE.json
           test -s verified-release/private/build/release.json
           grep -F 'RewriteBase /qsyn/' verified-release/public/.htaccess
