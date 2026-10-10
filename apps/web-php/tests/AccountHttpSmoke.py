@@ -51,6 +51,8 @@ def run():
         proc = php_server(env, sessions, port)
         try:
             await_server(origin)
+            # Dashboard has an independent opt-in even with accounts enabled.
+            assert request(client()[0], origin, '/qsyn/app')[0] == 404
             guest, _ = client()
             assert request(guest, origin, ACCOUNTS + "list")[0] == 401
             assert request(guest, origin, ACCOUNTS + "get?id=bad")[0] == 401
