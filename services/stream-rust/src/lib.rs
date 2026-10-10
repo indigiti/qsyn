@@ -160,3 +160,6 @@ mod tests {
         assert_eq!(next.observations, 1);
     }
 }
+
+pub mod order_lifecycle;
+pub mod private_chart_ws;
