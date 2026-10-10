@@ -9,7 +9,7 @@ use crate::upstox_v3::{
     observe_one_use_session_with_sink, validate_one_use_redirect, UpstoxV3Decoder, UpstoxV3Plan,
 };
 use reqwest::redirect::Policy;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::io;
 use std::path::{Path, PathBuf};
 use tokio::time::{sleep, Duration};
