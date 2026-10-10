@@ -10,7 +10,7 @@ use crate::market_pipeline::Scope;
 use crate::openalgo_stream::CandidateQuote;
 use futures_util::{SinkExt, StreamExt};
 use prost::Message as ProstMessage;
-use serde_json::{json, Value};
+use serde_json::json;
 use std::collections::HashMap;
 use std::io;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -339,6 +339,7 @@ pub async fn observe_one_use_session(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::Value;
     use crate::authorized_ingest::{PrivateIngestApproval, PrivatePersistentIngest};
     use crate::durable_market_wal;
     use crate::market_pipeline::DataMode;
