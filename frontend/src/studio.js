@@ -14,6 +14,93 @@ const intervals = ['1m', '5m', '15m'];
 let state = { underlying: 'NIFTY', expiry: 'W1', interval: '1m', legs: [] };
 let market = null;
 let currentBars = null;
+
+const TERMINAL_THEME = 'qsyn-terminal-theme-v1';
+function syncTerminalToolbar() {
+  $('toolbar-underlying').value = state.underlying;
+  $('toolbar-expiry').value = state.expiry;
+  $('toolbar-interval').value = state.interval;
+  $('dock-leg-count').textContent = String(state.legs.length);
+}
+function initializeTerminalShell() {
+  document.documentElement.dataset.theme =
+    localStorage.getItem(TERMINAL_THEME) === 'dark' ? 'dark' : 'light';
+  const drawer = $('strategy-drawer');
+  const backdrop = $('drawer-backdrop');
+  const trigger = $('toolbar-builder');
+  const closeButton = $('drawer-close');
+  const openDrawer = (saved = false) => {
+    document.body.classList.add('drawer-open');
+    backdrop.hidden = false;
+    drawer.setAttribute('aria-hidden', 'false');
+    trigger.setAttribute('aria-expanded', 'true');
+    if (saved) $('workspace-storage').scrollIntoView({ behavior: 'instant', block: 'start' });
+    closeButton.focus();
+  };
+  const closeDrawer = () => {
+    document.body.classList.remove('drawer-open');
+    backdrop.hidden = true;
+    drawer.setAttribute('aria-hidden', 'true');
+    trigger.setAttribute('aria-expanded', 'false');
+    trigger.focus();
+  };
+  trigger.addEventListener('click', () => {
+    if (document.body.classList.contains('drawer-open')) closeDrawer();
+    else openDrawer();
+  });
+  closeButton.addEventListener('click', closeDrawer);
+  backdrop.addEventListener('click', closeDrawer);
+  document.addEventListener('keydown', event => {
+    if (!document.body.classList.contains('drawer-open')) return;
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      closeDrawer();
+    } else if (event.key === 'Tab') {
+      const visible = [...drawer.querySelectorAll('button:not(:disabled),a[href],select,input')]
+        .filter(el => el.getClientRects().length > 0);
+      if (!visible.length) return;
+      const first = visible[0], last = visible.at(-1);
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault(); last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault(); first.focus();
+      }
+    }
+  });
+  $('toolbar-theme').addEventListener('click', () => {
+    localStorage.setItem(TERMINAL_THEME,
+      document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark');
+    sessionStorage.setItem(ACTIVE, JSON.stringify(state));
+    location.reload(); // Rebuild charts with matching canvas theme
+  });
+  $('toolbar-render').addEventListener('click', () => {
+    try { validateCurrent(); apply(state); }
+    catch (error) { status(error.message, true); }
+  });
+  const mirrors = [
+    ['toolbar-underlying', 'underlying'],
+    ['toolbar-expiry', 'expiry'],
+    ['toolbar-interval', 'interval'],
+  ];
+  for (const [toolbar, builder] of mirrors) {
+    $(toolbar).addEventListener('change', event => {
+      $(builder).value = event.target.value;
+      $(builder).dispatchEvent(new Event('change', { bubbles: true }));
+    });
+  }
+  $('toolbar-replay').addEventListener('click', () => $('replay-title').scrollIntoView({ behavior: 'smooth' }));
+  $('toolbar-alerts').addEventListener('click', () => $('alert-title').scrollIntoView({ behavior: 'smooth' }));
+  $('toolbar-paper').addEventListener('click', () => $('paper-title').scrollIntoView({ behavior: 'smooth' }));
+  $('toolbar-workspaces').addEventListener('click', () => openDrawer(true));
+  const dockTargets = { builder: () => openDrawer(), paper: () => $('paper-title').scrollIntoView({ behavior: 'smooth' }),
+    risk: () => $('risk-title').scrollIntoView({ behavior: 'smooth' }),
+    replay: () => $('replay-title').scrollIntoView({ behavior: 'smooth' }),
+    alerts: () => $('alert-title').scrollIntoView({ behavior: 'smooth' }) };
+  for (const button of document.querySelectorAll('.terminal-dock button[data-panel]')) {
+    button.addEventListener('click', dockTargets[button.dataset.panel]);
+  }
+}
+
 const mountedCharts = new Map();
 const chartGenerations = new Map();
 
@@ -112,6 +199,7 @@ function renderLegs() {
     container.append(row);
   });
   $('leg-count').textContent = String(state.legs.length);
+  syncTerminalToolbar();
   $('add-leg').disabled = state.legs.length >= 4;
 }
 async function loadMarket(underlying) {
@@ -165,7 +253,7 @@ async function chart(rootId, symbol, bars) {
   }
   const widget = createWidget(root, {
     feed: sourceFeed(symbol, bars), symbol, exchange: 'QSYN',
-    interval: state.interval, theme: 'dark',
+    interval: state.interval, theme: document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light',
     navigation: { defaultVisibleBars: 90, mousePan: 'horizontal' },
   });
   mountedCharts.set(rootId, widget);
@@ -307,11 +395,13 @@ function setPreset(strangle) {
   status('Strategy updated. Click Render synthetic basket to apply.');
 }
 async function main() {
+  initializeTerminalShell();
   const remembered = readJson(ACTIVE, sessionStorage);
   if (validConfig(remembered)) state = remembered;
   $('underlying').value = state.underlying;
   $('expiry').value = state.expiry;
   $('interval').value = state.interval;
+  syncTerminalToolbar();
   await loadMarket(state.underlying);
   if (!state.legs.length || state.legs.some(l => !market.chain.some(c => c.strike === l.strike))) {
     state.legs = defaultLegs(market.atm, market.strike_step);
@@ -321,12 +411,13 @@ async function main() {
   $('underlying').addEventListener('change', async e => {
     try {
       state.underlying = e.target.value;
+      syncTerminalToolbar();
       await loadMarket(state.underlying);
       setPreset(false);
     } catch (error) { status(error.message, true); }
   });
-  $('expiry').addEventListener('change', e => { state.expiry = e.target.value; });
-  $('interval').addEventListener('change', e => { state.interval = e.target.value; });
+  $('expiry').addEventListener('change', e => { state.expiry = e.target.value; syncTerminalToolbar(); });
+  $('interval').addEventListener('change', e => { state.interval = e.target.value; syncTerminalToolbar(); });
   $('straddle').addEventListener('click', () => setPreset(false));
   $('strangle').addEventListener('click', () => setPreset(true));
   $('reset').addEventListener('click', () => {
