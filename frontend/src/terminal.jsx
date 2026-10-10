@@ -7,17 +7,21 @@
  * This is an independent, explicitly scoped QSYN React shell, NOT a claim that
  * upstream Flask-backed account/trading pages have been ported.
  */
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import {
   Activity, BookOpen, CandlestickChart, ChartColumnIncreasing, ChevronDown,
   ClipboardList, Compass, FlaskConical, Gauge, Layers, LayoutDashboard,
   LockKeyhole, Menu, Moon, PanelLeftClose, PanelLeftOpen, Search,
-  Settings, ShieldAlert, Sun, Wallet, Wrench, X,
+  Settings, ShieldAlert, Sun, Wallet, Wrench, X, Plus, Save, Columns2, Trash2,
 } from 'lucide-react';
 import { createWidget } from 'openalgo-charts/widget';
 import 'openalgo-charts/indicators';
-import { QsynDemoFeed } from './rust-demo-feed.js';
+import { QsynWorkspaceFeed } from './terminal-feed.js';
+import {
+  SYMBOLS, DEFAULT_PANES, instrumentFor, searchInstruments, loadBrowserWorkspace,
+  storeBrowserWorkspace, saveNamedLayout,
+} from './terminal-workspace.js';
 import './terminal.css';
 
 const BASE = '/qsyn/terminal';
@@ -41,48 +45,219 @@ function currentTheme() {
   try { return localStorage.getItem('qsyn-terminal-theme') === 'light' ? 'light' : 'dark'; }
   catch { return 'dark'; }
 }
-function ChartPanel({ theme }) {
-  const [message, setMessage] = useState('Loading demonstrative candles…');
+function ChartPanel({ pane, theme, savedState, revision, onMount }) {
+  const host = useRef(null);
+  const [message, setMessage] = useState('Loading simulated candles…');
   const [problem, setProblem] = useState('');
-  const containerId = 'qsyn-native-chart';
   useEffect(() => {
-    const root = document.getElementById(containerId);
-    if (!root) return;
-    const feed = new QsynDemoFeed(setMessage);
-    // Never enable the diagnostic polling stream. This is historical SIM data.
-    let widget;
+    if (!host.current) return;
+    let alive = true;
+    const feed = new QsynWorkspaceFeed(text => { if (alive) setMessage(text); });
+    let widget = null;
+    setProblem('');
     try {
-      widget = createWidget(root, {
-        feed, symbol: 'QSYN-DEMO', exchange: 'QSYN',
-        interval: '1m', theme, persist: 'qsyn-native-demo-v1',
+      widget = createWidget(host.current, {
+        feed, symbol: pane.symbol, exchange: 'QSYN', interval: '1m',
+        intervals: ['1m'], theme, persist: false, panels: true,
         navigation: { defaultVisibleBars: 95, mousePan: 'horizontal' },
       });
-      widget.ready.then(() => setMessage('120 simulated 1-minute candles · PHP file-free sample API'))
-        .catch(() => setProblem('The chart could not load. No broker data was requested.'));
+      onMount(pane.id, widget);
+      widget.ready.then(() => {
+        if (!alive) return;
+        if (savedState && savedState.symbol === pane.symbol &&
+            savedState.exchange === 'QSYN' && savedState.interval === '1m') {
+          try { widget.restoreState(savedState); } catch { /* leave chart usable */ }
+        }
+        setMessage('Simulated 1-minute candles · no licensed exchange feed');
+      }).catch(() => {
+        if (alive) setProblem('The demo chart could not load. No broker connection was requested.');
+      });
     } catch {
-      setProblem('OpenAlgo Charts is unavailable. No broker data was requested.');
+      setProblem('OpenAlgo Charts is unavailable. No broker connection was requested.');
     }
     return () => {
-      // React StrictMode and navigation must never leave orphan chart listeners.
+      alive = false;
+      onMount(pane.id, null);
       try { widget?.destroy(); } catch {}
-      feed.stopSubscription();
-      feed.setEnabled(false);
+      feed.destroy();
     };
-  }, [theme]);
+  }, [pane.id, pane.symbol, theme, revision, onMount]);
+  const definition = instrumentFor(pane.symbol);
   return (
-    <section className="terminal-chart-card" aria-label="OpenAlgo Charts candlestick terminal">
+    <section className="terminal-chart-card" aria-label={pane.id === 'primary' ? 'Primary candlestick chart' : 'Comparison candlestick chart'}>
       <div className="terminal-card-head">
-        <div>
-          <div className="terminal-eyebrow">OPENALGO CHARTS · QSYN ADAPTER</div>
-          <h2>QSYN-DEMO <small>· 1m · SIMULATED</small></h2>
+        <div><div className="terminal-eyebrow">OPENALGO CHARTS · SIMULATED QSYN FEED</div>
+          <h2>{definition?.label || pane.symbol} <small>· 1m · DEMO</small></h2>
         </div>
         <span className="terminal-chip">No live orders</span>
       </div>
-      <div id={containerId} className="terminal-chart-host" aria-label="Simulated candlestick chart" />
+      <div ref={host} id={pane.id === 'primary' ? 'qsyn-native-chart' : 'qsyn-secondary-chart'}
+        className="terminal-chart-host" aria-label="Simulated candlestick chart" />
       {problem ? <p role="alert" className="terminal-error">{problem}</p> :
         <p className="terminal-footnote" role="status">{message}</p>}
+      {definition?.kind === 'synthetic' &&
+        <p className="terminal-footnote">Illustrative W1 ATM CE+PE premium basket. Strike is fixed when candles load and may re-anchor on refresh. Fictional points, not INR or market prices.</p>}
     </section>
   );
+}
+function browserStorage() {
+  try { return window.localStorage; } catch { return null; }
+}
+function ChartWorkspace({ theme }) {
+  const [saved, setSaved] = useState(() => loadBrowserWorkspace(browserStorage()));
+  const [panes, setPanes] = useState(DEFAULT_PANES);
+  const [active, setActive] = useState('primary');
+  const [search, setSearch] = useState('');
+  const [layoutName, setLayoutName] = useState('');
+  const [snapshots, setSnapshots] = useState({});
+  const [revision, setRevision] = useState(0);
+  const [notice, setNotice] = useState('Watchlist and layouts stay in this browser only.');
+  const chartRefs = useRef(new Map());
+  const onMount = useCallback((id, widget) => {
+    if (widget) chartRefs.current.set(id, widget);
+    else chartRefs.current.delete(id);
+  }, []);
+
+  function write(next) {
+    try {
+      const stored = storeBrowserWorkspace(browserStorage(), next);
+      setSaved(stored);
+      return true;
+    } catch (error) {
+      setNotice(error.message);
+      return false;
+    }
+  }
+  function setSymbol(symbol) {
+    if (!instrumentFor(symbol)) return;
+    setPanes(current => current.map(p => p.id === active ? { ...p, symbol } : p));
+    setSnapshots({});
+    setNotice(symbol + ' selected · SIMULATED ONLY.');
+  }
+  function toggleCompare() {
+    setPanes(current => current.length === 2 ? current.slice(0, 1) :
+      [...current, { id: 'secondary', symbol: SYMBOLS.find(s => s.id !== current[0].symbol).id }]);
+    setActive('primary');
+    setSnapshots({});
+  }
+  function toggleWatch(symbol) {
+    const has = saved.watchlist.includes(symbol);
+    const watchlist = has ? saved.watchlist.filter(s => s !== symbol)
+      : [...saved.watchlist, symbol];
+    if (write({ ...saved, watchlist })) {
+      setNotice(has ? 'Removed from browser watchlist.' : 'Added to browser watchlist.');
+    }
+  }
+  function saveLayout() {
+    const name = layoutName.trim();
+    const chartStates = {};
+    for (const pane of panes) {
+      try {
+        const state = chartRefs.current.get(pane.id)?.getState();
+        if (state) chartStates[pane.id] = state;
+      } catch { /* only the selected instrument/layout will be saved */ }
+    }
+    try {
+      const next = saveNamedLayout(saved, { name, panes, chartStates });
+      if (write(next)) setNotice('Layout saved in this browser. No server synchronization.');
+    } catch (error) { setNotice(error.message); }
+  }
+  function openLayout(name) {
+    const layout = saved.layouts.find(l => l.name === name);
+    if (!layout) return;
+    setPanes(layout.panes.map(p => ({ ...p })));
+    setSnapshots(layout.chartStates);
+    setActive('primary');
+    setLayoutName(layout.name);
+    setRevision(v => v + 1);
+    setNotice('Opened local layout ' + layout.name + '.');
+  }
+  function deleteLayout() {
+    const next = saved.layouts.filter(l => l.name !== layoutName);
+    if (next.length === saved.layouts.length) {
+      setNotice('Select a saved layout to remove.');
+      return;
+    }
+    if (write({ ...saved, layouts: next })) {
+      setLayoutName('');
+      setNotice('Local layout removed.');
+    }
+  }
+  const searchResults = searchInstruments(search);
+  return <div className="terminal-workspace">
+    <section className="terminal-workspace-controls terminal-surface" aria-label="Chart workspace controls">
+      <div className="terminal-workspace-header">
+        <div><h2>Chart workspace</h2><p>Four supported sample instruments. No real NSE/BSE symbol lookup.</p></div>
+        <button type="button" className="terminal-action terminal-secondary-action" onClick={toggleCompare}>
+          <Columns2 size={16}/> {panes.length === 1 ? 'Compare two charts' : 'Single chart'}
+        </button>
+      </div>
+      <div className="terminal-layout-tools">
+        <label>Layout name
+          <input aria-label="Layout name" value={layoutName} maxLength={36}
+            onChange={e => setLayoutName(e.target.value)} placeholder="My workspace"/>
+        </label>
+        <button type="button" className="terminal-action" onClick={saveLayout}><Save size={16}/> Save layout</button>
+        <label>Saved layouts
+          <select aria-label="Saved layouts" value={saved.layouts.some(l => l.name === layoutName) ? layoutName : ''}
+            onChange={e => openLayout(e.target.value)}>
+            <option value="">Select layout</option>
+            {saved.layouts.map(l => <option key={l.name} value={l.name}>{l.name}</option>)}
+          </select>
+        </label>
+        <button type="button" className="terminal-icon terminal-delete-layout" aria-label="Delete saved layout"
+          onClick={deleteLayout}><Trash2 size={16}/></button>
+      </div>
+      <p className="terminal-footnote" role="status">{notice}</p>
+    </section>
+    <div className="terminal-workspace-grid">
+      <div className={'terminal-chart-panes' + (panes.length === 2 ? ' compared' : '')}>
+        {panes.map(p => <div key={p.id} className={'terminal-chart-pane' + (active === p.id ? ' pane-active' : '')}
+          onClick={() => setActive(p.id)}>
+          <div className="terminal-pane-heading">
+            <strong>{p.id === 'primary' ? 'Primary chart' : 'Comparison chart'}</strong>
+            <label>Instrument
+              <select aria-label={p.id === 'primary' ? 'Primary instrument' : 'Comparison instrument'}
+                value={p.symbol} onChange={e => { setActive(p.id); setPanes(old => old.map(x => x.id === p.id ? { ...x, symbol: e.target.value } : x)); setSnapshots({}); }}>
+                {SYMBOLS.map(s => <option key={s.id} value={s.id}>{s.id}</option>)}
+              </select>
+            </label>
+          </div>
+          <ChartPanel pane={p} theme={theme} savedState={snapshots[p.id]} revision={revision} onMount={onMount}/>
+        </div>)}
+      </div>
+      <aside className="terminal-watchlist terminal-surface" aria-label="Browser watchlist">
+        <div className="terminal-card-head"><h2>Watchlist</h2><span className="terminal-chip">Browser only</span></div>
+        <p className="terminal-footnote">Select a row to chart in the active panel. No live quotes.</p>
+        <div className="terminal-watch-rows">
+          {saved.watchlist.length === 0 && <p className="terminal-footnote">Your watchlist is empty.</p>}
+          {saved.watchlist.map(id => <div className="terminal-watch-row" key={id}>
+            <button type="button" className="terminal-watch-select" onClick={() => setSymbol(id)}>
+              <strong>{id}</strong><small>SIM · {instrumentFor(id)?.kind === 'synthetic' ? 'ATM CE+PE' : 'sample OHLC'}</small>
+            </button>
+            <button type="button" className="terminal-icon" aria-label={'Remove ' + id + ' from watchlist'}
+              onClick={() => toggleWatch(id)}><X size={14}/></button>
+          </div>)}
+        </div>
+        <label className="terminal-search-label"><Search size={15}/> Find simulated instruments
+          <input aria-label="Find simulated instruments" value={search} maxLength={60}
+            onChange={e => setSearch(e.target.value)} placeholder="NIFTY, FINNIFTY, QSYN…"/>
+        </label>
+        <div className="terminal-search-results" role="group" aria-label="Supported simulated instruments">
+          {searchResults.length === 0 ? <p className="terminal-footnote">No matching supported simulation.</p> :
+            searchResults.map(item => <div key={item.id} className="terminal-search-row">
+              <button type="button" onClick={() => setSymbol(item.id)}>{item.id}</button>
+              <button type="button" className="terminal-icon"
+                aria-label={(saved.watchlist.includes(item.id) ? 'Unwatch ' : 'Watch ') + item.id}
+                onClick={() => toggleWatch(item.id)}>
+                {saved.watchlist.includes(item.id) ? <X size={14}/> : <Plus size={14}/>}
+              </button>
+            </div>)}
+        </div>
+        <a href="/qsyn/studio" className="terminal-studio-link">Open full Synthetic Studio <Layers size={15}/></a>
+      </aside>
+    </div>
+  </div>;
 }
 function StatusBox({ capabilities }) {
   const simulated = !capabilities || capabilities.market_data !== 'simulated' ||
@@ -222,7 +397,7 @@ function App() {
       {view === 'trading' && <div className="terminal-page">
         <header className="terminal-title"><div><p className="terminal-eyebrow">MARKET WORKSPACE</p><h1>Trading charts</h1>
           <p>OpenAlgo Charts 2.6.0 with QSYN's existing simulated PHP data adapter.</p></div></header>
-        <ChartPanel theme={theme}/></div>}
+        <ChartWorkspace theme={theme}/></div>}
       {view === 'tools' && <Tools/>}
     </main>
     <nav className="terminal-bottom-nav" aria-label="Mobile quick navigation">
