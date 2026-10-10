@@ -95,3 +95,26 @@ and disables real broker/trading capabilities.
 read-only check and the independently reviewed two-network private
 acceptance have both passed.** Any future separate deployment needs its
 own release/activation verification and recoverable rollback plan.
+
+## Phase 1.9 — One-time public release verification
+
+The GitHub workflow `.github/workflows/public-stage-acceptance.yml`
+triggers a **read-only external public acceptance run** once when its
+workflow change is merged to `main`. The automatic run expects the
+last operator-reported deployed #78 Rust commit,
+`ccc92c161f5c5d6d45e02808cffabb40b7181bc4`.
+
+The workflow sends anonymous GET requests only to the QSYN public
+health/demo/diagnostics endpoints and checks that public test identity,
+mock accounts, and dashboard remain denied. It does **not** deploy
+an artifact, enable identity flags, or change Cloudways.
+
+A failed run must not be interpreted automatically as a vulnerable host:
+DNS/network unavailability, a stale reported deployment SHA, or an API
+contract difference could also cause failure. Review the job's actual
+checks. A green result establishes only the specific public checks
+performed from that runner, not VPN or private-ingress attestation.
+
+If a later release is deployed, operators must use the workflow's
+manual `workflow_dispatch` input with the **new exact deployed SHA**;
+they must not reuse #78 when its binary is no longer running.
