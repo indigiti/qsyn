@@ -170,6 +170,28 @@ if ($route === '/qsyn/api/v1/terminal/workspace') {
     respond($payload, $status);
 }
 
+// Dev/private ONLY: issue a 30-second instrument-scoped chart WSS grant.
+// The rights file and Rust private chart server remain operator provisioned.
+// No open public chart websocket or broker session is configured by this route.
+if ($route === '/qsyn/api/v1/terminal/private-chart-grant') {
+    $src = dirname(__DIR__) . '/src';
+    if (!is_file($src . '/PrivateChartGrantApi.php')) {
+        $src = dirname(__DIR__, 2) . '/private_html/qsyn/app/src';
+    }
+    foreach (['FileStore', 'UserRepository', 'FileUserRepository', 'UserSession',
+        'IdentityApi', 'PrivateChartGrantApi'] as $unit) {
+        if (!is_file($src . '/' . $unit . '.php')) {
+            respond(['error' => 'private_chart_modules_unavailable'], 503);
+        }
+        require_once $src . '/' . $unit . '.php';
+    }
+    header('Cache-Control: private, no-store');
+    header('Pragma: no-cache');
+    header('X-Robots-Tag: noindex, nofollow');
+    [$status, $payload] = \QSYN\MarketData\PrivateChartGrantApi::dispatch($_SERVER);
+    respond($payload, $status);
+}
+
 // Deliberately disabled-by-default QSYN *user* identity test API.
 // Separate cookie and code from the Rust operations administrator.
 if (preg_match('#^/qsyn/api/v1/auth/(state|me|login|logout)$#', $route, $identityMatch)) {
