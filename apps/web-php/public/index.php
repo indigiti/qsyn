@@ -61,7 +61,7 @@ if (preg_match('#^/qsyn/api/v1/auth/(state|me|login|logout)$#', $route, $identit
     if (!is_file($src . '/IdentityApi.php')) {
         $src = dirname(__DIR__, 2) . '/private_html/qsyn/app/src';
     }
-    foreach (['FileStore', 'UserRepository', 'FileUserRepository', 'IdentityThrottle', 'UserSession', 'IdentityApi'] as $unit) {
+    foreach (['FileStore', 'UserRepository', 'FileUserRepository', 'IdentityThrottle', 'UserSession', 'FileMockAuditLog', 'IdentityApi'] as $unit) {
         if (!is_file($src . '/' . $unit . '.php')) {
             respond(['error' => 'identity_modules_unavailable'], 503);
         }
@@ -73,14 +73,15 @@ if (preg_match('#^/qsyn/api/v1/auth/(state|me|login|logout)$#', $route, $identit
 
 // Phase 1.3: session-owned simulated account control; disabled by default.
 // No real broker credentials, account linking or order execution.
-if (preg_match('#^/qsyn/api/v1/accounts/(list|get|bars|link|rename|select|disconnect)$#', $route, $accountMatch)) {
+if (preg_match('#^/qsyn/api/v1/accounts/(list|get|bars|workspace|link|rename|select|disconnect|save-workspace)$#', $route, $accountMatch)) {
     $src = dirname(__DIR__) . '/src';
     if (!is_file($src . '/AccountApi.php')) {
         $src = dirname(__DIR__, 2) . '/private_html/qsyn/app/src';
     }
     foreach (['FileStore', 'UserRepository', 'FileUserRepository',
         'UserSession', 'IdentityApi', 'BrokerConnectionRepository',
-        'FileMockBrokerConnectionRepository', 'FileMockAccountSelection', 'SimulatedAccountBars', 'AccountApi'] as $unit) {
+        'FileMockBrokerConnectionRepository', 'FileMockAccountSelection', 'FileMockWorkspaceRepository',
+        'FileMockAuditLog', 'SimulatedAccountBars', 'AccountApi'] as $unit) {
         if (!is_file($src . '/' . $unit . '.php')) {
             respond(['error' => 'mock_account_modules_unavailable'], 503);
         }
