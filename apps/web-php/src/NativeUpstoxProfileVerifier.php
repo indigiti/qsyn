@@ -19,6 +19,7 @@ final class NativeUpstoxProfileVerifier
         $result = [
             'session_verified' => false,
             'status' => 'unavailable_or_expired',
+            'diagnostic_code' => 'UPSTOX_TOKEN_MISSING_OR_PRIVATE_FILE_UNAVAILABLE',
             'profile_account_matches' => false,
             'provider_account_active' => false,
             'index_display_entitlement_verified' => false,
@@ -44,6 +45,7 @@ final class NativeUpstoxProfileVerifier
                 || ($session['order_routing_enabled'] ?? null) !== false
                 || ($session['display_entitlement_verified'] ?? null) !== false
                 || ($session['retention_entitlement_verified'] ?? null) !== false) {
+                $result['diagnostic_code'] = 'UPSTOX_STORED_ACCOUNT_MISMATCH';
                 return $result;
             }
             $token = $session['access_token'] ?? null;
@@ -56,22 +58,43 @@ final class NativeUpstoxProfileVerifier
                 ? $transport(self::PROFILE, $token) : self::getProfile($token);
             // Expected test transport and default live cURL share the same
             // bounded, provider-shaped status/data contract.
-            if (!is_array($response) || ($response['http_status'] ?? null) !== 200
-                || !is_array($response['body'] ?? null)
+            if (!is_array($response)) {
+                $result['diagnostic_code'] = 'UPSTOX_INVALID_PROVIDER_RESPONSE';
+                return $result;
+            }
+            $http = $response['http_status'] ?? null;
+            if ($http === 401 || $http === 403) {
+                $result['diagnostic_code'] = 'UPSTOX_TOKEN_EXPIRED_OR_REVOKED';
+                return $result;
+            }
+            if ($http !== 200) {
+                $result['diagnostic_code'] = 'UPSTOX_PROFILE_PROVIDER_UNAVAILABLE';
+                return $result;
+            }
+            if (!is_array($response['body'] ?? null)
                 || ($response['body']['status'] ?? null) !== 'success'
-                || !is_array($response['body']['data'] ?? null)) return $result;
+                || !is_array($response['body']['data'] ?? null)) {
+                $result['diagnostic_code'] = 'UPSTOX_INVALID_PROVIDER_RESPONSE';
+                return $result;
+            }
             $profile = $response['body']['data'];
-            if (($profile['user_id'] ?? null) !== $expectedUserId
-                || ($profile['is_active'] ?? null) !== true) {
+            if (($profile['user_id'] ?? null) !== $expectedUserId) {
+                $result['diagnostic_code'] = 'UPSTOX_PROFILE_ACCOUNT_MISMATCH';
+                return $result;
+            }
+            if (($profile['is_active'] ?? null) !== true) {
+                $result['diagnostic_code'] = 'UPSTOX_ACCOUNT_INACTIVE';
                 return $result;
             }
             $result['session_verified'] = true;
             $result['profile_account_matches'] = true;
             $result['provider_account_active'] = true;
             $result['status'] = 'verified_now';
+            $result['diagnostic_code'] = 'UPSTOX_PROFILE_VERIFIED_NOW';
             return $result;
         } catch (\Throwable) {
-            // Avoid leaking Upstox identifiers, tokens, HTTP contents or paths.
+            // Never reflect exception messages: they can embed tokens or paths.
+            $result['diagnostic_code'] = 'UPSTOX_PROFILE_TRANSPORT_ERROR';
             return $result;
         }
     }
