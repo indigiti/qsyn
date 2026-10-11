@@ -98,6 +98,8 @@ jobs:
           python3 apps/web-php/tests/OpenAlgoUpstoxReadinessTest.py
           php -l apps/web-php/src/OpenAlgoAdminWebApi.php
           python3 apps/web-php/tests/OpenAlgoAdminWebHttpSmoke.py
+          php -l apps/web-php/src/OpenAlgoAdminSetup.php
+          python3 apps/web-php/tests/OpenAlgoAdminWebSetupHttpSmoke.py
           php -l apps/web-php/src/OpenAlgoBrokerConnectionsApi.php
           php apps/web-php/tests/OpenAlgoBrokerConnectionsTest.php
           python3 apps/web-php/tests/OpenAlgoBrokerConnectionsHttpSmoke.py
