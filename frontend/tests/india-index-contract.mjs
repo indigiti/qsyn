@@ -1,7 +1,13 @@
 import assert from 'node:assert/strict';
 import { INDIA_INDEX_MARKETS,findIndiaIndex,searchIndiaIndexes } from '../src/india-index-catalog.js';
-import { QsynMarketsFeed } from '../src/qsyn-markets-feed.js';
+import { QsynMarketsFeed,validIndexBarTime } from '../src/qsyn-markets-feed.js';
 
+const epoch=value=>Math.floor(Date.parse(value)/1000);
+assert(validIndexBarTime(epoch('2026-10-09T09:15:00+05:30'),'1h'),'NSE 09:15 hourly bucket');
+assert(validIndexBarTime(epoch('2026-10-09T00:00:00+05:30'),'1d'),'IST midnight daily bucket');
+assert(!validIndexBarTime(epoch('2026-10-09T00:00:00Z'),'1d'),'UTC daily cannot replace IST daily');
+assert(validIndexBarTime(epoch('2026-10-09T09:15:00+05:30'),'15m'),'IST intraday 15m alignment');
+assert(!validIndexBarTime(epoch('2026-10-09T09:16:00+05:30'),'15m'),'reject misaligned minute');
 assert.equal(INDIA_INDEX_MARKETS.length,6);
 assert.equal(new Set(INDIA_INDEX_MARKETS.map(x=>x.id)).size,6);
 assert.equal(findIndiaIndex('NSE_INDEX:index','NIFTY')?.name,'NIFTY 50');
