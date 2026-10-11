@@ -234,3 +234,14 @@ button:focus-visible,a:focus-visible{outline:2px solid var(--q-accent);outline-o
   .qsyn-home-chart .oac-topbar__data::after,
   .qsyn-home-chart .oac-topbar__alerts::after {transition:none}
 }
+
+/* Native OpenAlgo Layouts button: keep the QSYN homepage chart-only.
+   Library owns the click handler, save status dot and hover/focus tooltip. */
+.qsyn-home-chart .oac-topbar__layouts {
+  width:32px;
+  min-width:32px;
+  padding:0;
+  gap:0;
+}
+.qsyn-home-chart .oac-topbar__layouts-name { display:none; }
+.qsyn-home-chart .oac-topbar__layouts .oac-glyph { flex:none; }
