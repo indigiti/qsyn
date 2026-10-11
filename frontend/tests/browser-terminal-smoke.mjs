@@ -91,10 +91,16 @@ try {
   if(await page.locator('html').getAttribute('data-qsyn-theme')!=='light')
     throw new Error('Light theme did not activate');
   await page.getByRole('button',{name:'Dashboard',exact:true}).first().click();
-  await page.getByRole('heading',{name:'Dashboard'}).waitFor();
+  await page.getByRole('heading',{name:'Command center'}).waitFor();
   if(!page.url().includes('view=dashboard'))throw new Error('Dashboard deep link failed');
+  if(!(await page.getByText('SIMULATION ONLY').count()))
+    throw new Error('Dashboard simulation provenance label missing');
+  await page.waitForFunction(()=>document.querySelectorAll('.qd-chart-preview #qsyn-native-chart canvas').length>0);
+  if(!(await page.getByRole('heading',{name:'Synthetic premium workspace'}).count()))
+    throw new Error('Dashboard lost chart preview');
   await page.reload({waitUntil:'domcontentloaded'});
-  await page.getByRole('heading',{name:'Dashboard'}).waitFor();
+  await page.getByRole('heading',{name:'Command center'}).waitFor();
+  await page.waitForFunction(()=>document.querySelectorAll('.qd-chart-preview #qsyn-native-chart canvas').length>0);
   await page.getByRole('button',{name:'Tools',exact:true}).first().click();
   await page.getByRole('heading',{name:'Tools'}).waitFor();
   if(!(await page.locator('a[href="/qsyn/studio"]').count()>0))
