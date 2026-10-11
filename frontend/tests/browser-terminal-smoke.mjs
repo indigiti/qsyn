@@ -169,7 +169,7 @@ try {
   await indicators.click();
   const picker=page.locator('.qsyn-home-chart .oac-pick');
   await picker.waitFor({state:'visible',timeout:12000});
-  await picker.getByRole('textbox',{name:'Search indicators'}).fill('Wick Science');
+  await picker.locator('input[aria-label="Search indicators"]').fill('Wick Science');
   await picker.locator('.oac-pick__row').first().click();
   await picker.getByRole('button',{name:'Done'}).click();
   await picker.waitFor({state:'detached'});
