@@ -1,8 +1,8 @@
-mod stream;
 //! Read-only public crypto OHLCV gateway. No API keys, trading, arbitrary URLs,
 //! private Upstox data or per-browser upstream credentials are accepted.
-//! Provider history is polled for the *latest authoritative forming candle*;
-//! this is NOT yet an exchange WebSocket/tick-by-tick feed.
+//! Provider OHLCV comes from validated exchange REST history and native
+//! public upstream WebSocket candles, with REST refresh on reconnect.
+mod stream;
 use axum::{extract::Query, http::StatusCode, response::{IntoResponse, Response}, routing::get, Json, Router};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
