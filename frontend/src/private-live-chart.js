@@ -39,7 +39,11 @@ export async function fetchPrivateChartGrant(fetcher, account, instrument, signa
     headers: {'Content-Type':'application/json', 'X-CSRF-Token':identity.csrf},
     body: JSON.stringify({account_id: account, instrument}),
   });
-  if (!response.ok) throw new Error('Current private display entitlement denied.');
+  if (!response.ok) {
+    const error = new Error('Current private display entitlement denied.');
+    error.status = response.status;
+    throw error;
+  }
   const result = await response.json();
   if (result.schema !== 'QSYN-PRIVATE-CHART-GRANT-RESPONSE/1'
       || result.account_id !== account || result.instrument !== instrument
