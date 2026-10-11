@@ -1,0 +1,42 @@
+name: QSYN #246 Live Terminal Acceptance
+
+on:
+  push:
+    branches: [probe/unified-terminal-stage-246]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  staging-browser:
+    name: Verify homepage and unified React terminal on staging
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install browser-only acceptance dependencies
+        working-directory: frontend
+        run: |
+          npm install --no-audit --no-fund
+          npm install --no-save --no-audit --no-fund playwright@1.55.0
+          npx playwright install --with-deps chromium
+      - name: Verify deployed QSYN #246 without any privileged writes
+        working-directory: frontend
+        run: node tests/stage-unified-terminal-246.mjs 2>&1 | tee stage-246-browser-result.txt
+        shell: bash
+        env:
+          CI: 'true'
+      - name: Retain browser screenshots and acceptance transcript
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qsyn-246-unified-terminal-staging-acceptance
+          path: |
+            frontend/artifacts/qsyn-246-*.png
+            frontend/stage-246-browser-result.txt
+          if-no-files-found: warn
+          retention-days: 7
