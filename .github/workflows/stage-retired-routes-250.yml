@@ -1,0 +1,45 @@
+name: QSYN Stage #250 Legacy Redirect Acceptance
+on:
+  push:
+    branches: [probe/unified-terminal-stage-246]
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Check actual stage redirects without following them
+        run: |
+          python3 - <<'PY'
+          from urllib.request import Request,build_opener,HTTPRedirectHandler
+          from urllib.error import HTTPError
+          import json
+          class Stay(HTTPRedirectHandler):
+              def redirect_request(self,req,fp,code,msg,hdrs,newurl):
+                  return None
+          opener=build_opener(Stay)
+          pairs=[
+            ('/qsyn/admin/rust','/qsyn/terminal?view=operations'),
+            ('/qsyn/legacy-chart','/qsyn/terminal?view=diagnostics'),
+            ('/qsyn/studio/','/qsyn/terminal?view=strategy'),
+          ]
+          result=[]
+          for path,expect in pairs:
+              req=Request('https://stage.digiti.in'+path,headers={
+                'Accept':'text/html,application/json','Cache-Control':'no-cache',
+                'User-Agent':'QSYN-Stage-250-Retired-Route-Acceptance/1'})
+              try:
+                  with opener.open(req,timeout=20) as resp:
+                      status=resp.status;head=resp.headers;body=resp.read(350)
+              except HTTPError as e:
+                  status=e.code;head=e.headers;body=e.read(350)
+              x={'path':path,'status':status,'location':head.get('Location'),
+                'cache_control':head.get('Cache-Control'),'age':head.get('Age'),
+                'cache_hit':head.get('X-Cache'),'html_seen':b'<html' in body.lower()}
+              print('STAGE_REDIRECT',json.dumps(x))
+              result.append(status==302 and head.get('Location')==expect)
+          print('STAGE_SUMMARY',json.dumps({'passed':sum(result),'tested':len(result)}))
+          if not all(result):
+              raise SystemExit('Staging missing expected #250 redirects (may be stale Cloudflare cache)')
+          PY
