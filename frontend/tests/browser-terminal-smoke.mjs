@@ -77,12 +77,13 @@ try {
     throw new Error('First-visit homepage did not match light reference');
   // The public homepage must contain ONLY the OpenAlgo chart widget.
   // The detailed simulation disclosures and navigation remain in /qsyn/terminal.
-  if(await page.locator('.qsyn-homepage .qsyn-home-disclaimer, .qsyn-homepage nav, .qsyn-homepage header').count())
-    throw new Error('Unexpected navigation, heading, or footer on chart-only homepage');
+  if(await page.locator('.qsyn-home-topbar, .qsyn-home-heading, .qsyn-home-disclaimer').count())
+    throw new Error('Unexpected QSYN header or footer on chart-only homepage');
   if(await page.locator('.qsyn-home-chart .terminal-footnote').filter({visible:true}).count())
     throw new Error('Homepage chart footnotes should not occupy page space');
-  if(await page.locator('.qsyn-homepage a').count())
-    throw new Error('Homepage should not render shortcut/footer links');
+  // Do not mistake provider-owned chart links/controls for removed QSYN UI.
+  if(await page.locator('.qsyn-homepage a[href^="/qsyn/terminal"], .qsyn-homepage a[href="/qsyn/studio"]').count())
+    throw new Error('Homepage should not render QSYN shortcut/footer links');
   const chartHeight=await page.locator('.qsyn-home-chart .terminal-chart-host')
     .evaluate(node=>node.getBoundingClientRect().height);
   if(chartHeight<890)throw new Error('Homepage chart does not fill 900px desktop viewport: '+chartHeight);
