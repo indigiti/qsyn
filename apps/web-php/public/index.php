@@ -54,6 +54,52 @@ if ($route === '/qsyn/api/v1/diagnostics/rust' || $route === '/api/v1/diagnostic
     respond(\QSYN\Diagnostics\RustProbe::inspect());
 }
 
+// Public crypto candles: strict query allowlist and loopback Rust only.
+// No client-chosen host, port, URL, API token, private account, or order route.
+if ($route === '/qsyn/api/v1/crypto/bars') {
+    if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'GET') {
+        header('Allow: GET'); respond(['error' => 'method_not_allowed'], 405);
+    }
+    $exchange = $_GET['exchange'] ?? '';
+    $market = $_GET['market'] ?? '';
+    $symbol = $_GET['symbol'] ?? '';
+    $interval = $_GET['interval'] ?? '';
+    $limit = $_GET['limit'] ?? '250';
+    if (!is_string($exchange) || !is_string($market) || !is_string($symbol)
+        || !is_string($interval) || !is_string($limit)
+        || !preg_match('/\A[A-Z]{2,16}\z/', $exchange)
+        || !in_array($market, ['spot', 'perp'], true)
+        || !preg_match('/\A[A-Z0-9-]{2,32}\z/', $symbol)
+        || !in_array($interval, ['1m','5m','15m','1h','1d'], true)
+        || !ctype_digit($limit) || (int)$limit < 1 || (int)$limit > 300) {
+        respond(['error' => 'invalid_crypto_request'], 422);
+    }
+    $params = http_build_query(compact('exchange', 'market', 'symbol', 'interval', 'limit'), '', '&', PHP_QUERY_RFC3986);
+    $ch = curl_init('http://127.0.0.1:10251/api/v1/crypto/bars?' . $params);
+    if ($ch === false) respond(['error' => 'crypto_gateway_unavailable'], 503);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true, CURLOPT_CONNECTTIMEOUT => 2,
+        CURLOPT_TIMEOUT => 10, CURLOPT_FOLLOWLOCATION => false,
+        CURLOPT_HTTPHEADER => ['Accept: application/json'],
+    ]);
+    $body = curl_exec($ch);
+    $status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    if (!is_string($body) || strlen($body) > 1000000 || $status !== 200) {
+        respond(['error' => 'crypto_market_data_unavailable'], 503);
+    }
+    $data = json_decode($body, true);
+    if (!is_array($data) || ($data['schema'] ?? '') !== 'QSYN-PUBLIC-CRYPTO-BARS/1'
+        || ($data['source'] ?? '') !== 'exchange_public'
+        || ($data['trading_enabled'] ?? true) !== false
+        || ($data['exchange'] ?? '') !== $exchange || ($data['market'] ?? '') !== $market
+        || ($data['symbol'] ?? '') !== $symbol || ($data['interval'] ?? '') !== $interval
+        || !is_array($data['bars'] ?? null)) {
+        respond(['error' => 'crypto_gateway_invalid_response'], 502);
+    }
+    respond($data);
+}
+
 // Integrated Options Studio is a public, read-only simulation, NOT a broker API.
 // It is independent of disabled-by-default user/account/fixture features.
 if ($route === '/qsyn/api/v1/studio/market' || $route === '/qsyn/api/v1/studio/bars'
