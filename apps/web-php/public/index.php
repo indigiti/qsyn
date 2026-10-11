@@ -95,6 +95,7 @@ if ($route === '/qsyn/api/v1/crypto/bars' || $route === '/qsyn/api/v1/crypto/hea
             || !preg_match('/\\A[1-9][0-9]{9}\\z/', $before)
             || (int)$before > time()+86400
             || (int)$before < 1500000000
+            || (int)$before < time() - 15316 * (['1m'=>60,'5m'=>300,'15m'=>900,'1h'=>3600,'1d'=>86400][$interval] ?? 1)
             || ((int)$before) % (['1m'=>60,'5m'=>300,'15m'=>900,'1h'=>3600,'1d'=>86400][$interval] ?? 1) !== 0))) {
         respond(['error' => 'invalid_crypto_request'], 422);
     }
