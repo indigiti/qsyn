@@ -16,7 +16,7 @@ final class TerminalAdminGate
     private const LOGIN = '/qsyn/terminal/login';
     private const DEFAULT = '/qsyn/terminal/trading';
 
-    public static function enforce(string $route, array $server): void
+    public static function enforce(string $route, array $server, string $loginTemplatePath): void
     {
         header('Cache-Control: private, no-store, max-age=0');
         header('Pragma: no-cache');
@@ -27,7 +27,7 @@ final class TerminalAdminGate
         }
         RustAdmin::boot();
         if ($route === self::LOGIN) {
-            self::login($server);
+            self::login($server, $loginTemplatePath);
         }
         $method = $server['REQUEST_METHOD'] ?? 'GET';
         if ($method !== 'GET' && $method !== 'HEAD') {
@@ -41,7 +41,7 @@ final class TerminalAdminGate
         // Authenticated request continues to the existing pretty URL router.
     }
 
-    private static function login(array $server): never
+    private static function login(array $server, string $loginTemplatePath): never
     {
         $method = $server['REQUEST_METHOD'] ?? 'GET';
         if ($method !== 'GET' && $method !== 'POST') {
@@ -111,7 +111,10 @@ final class TerminalAdminGate
             . '; frame-ancestors ' . "'none'"
             . ';');
         define('QSYN_TERMINAL_LOGIN_TEMPLATE', true);
-        require dirname(__DIR__) . '/public/terminal-login.php';
+        if (!is_file($loginTemplatePath)) {
+            self::error(503, 'Administrator login view unavailable.');
+        }
+        require $loginTemplatePath;
         exit;
     }
 
