@@ -112,22 +112,22 @@ fn parse_rows(req:&Request, value:&Value) -> Result<Vec<Bar>,()> {
 fn source(req:&Request) -> Result<(String,Option<Value>),()> {
     let n=req.limit.unwrap_or(250).to_string();
     let i=req.interval.as_str(); let s=req.symbol.as_str();
-    let (host,path,params)= match req.exchange.as_str() {
+    let (host,path,params):(&str,String,Vec<(&str,&str)>)= match req.exchange.as_str() {
         "BINANCE" => (
             if req.market=="perp" {"https://fapi.binance.com"} else {"https://api.binance.com"},
-            if req.market=="perp" {"/fapi/v1/klines"} else {"/api/v3/klines"},
+            if req.market=="perp" {"/fapi/v1/klines"} else {"/api/v3/klines"}.to_owned(),
             vec![("symbol",s),("interval",i),("limit",&n)]),
-        "BYBIT" => ("https://api.bybit.com","/v5/market/kline",
+        "BYBIT" => ("https://api.bybit.com","/v5/market/kline".into(),
             vec![("category",if req.market=="perp" {"linear"}else{"spot"}),
                  ("symbol",s),("interval",match i {"1m"=>"1","5m"=>"5","15m"=>"15","1h"=>"60","1d"=>"D",_=>return Err(())}),("limit",&n)]),
-        "OKX" => ("https://www.okx.com","/api/v5/market/candles",
+        "OKX" => ("https://www.okx.com","/api/v5/market/candles".into(),
             vec![("instId",s),("bar",match i {"1d"=>"1D",_=>i}),("limit",&n)]),
         "COINBASE" => ("https://api.exchange.coinbase.com",
-            &*Box::leak(format!("/products/{s}/candles").into_boxed_str()),
+            format!("/products/{s}/candles"),
             vec![("granularity",match i {"1m"=>"60","5m"=>"300","15m"=>"900","1h"=>"3600","1d"=>"86400",_=>return Err(())})]),
-        "KRAKEN" => ("https://api.kraken.com","/0/public/OHLC",
+        "KRAKEN" => ("https://api.kraken.com","/0/public/OHLC".into(),
             vec![("pair",s),("interval",match i {"1m"=>"1","5m"=>"5","15m"=>"15","1h"=>"60","1d"=>"1440",_=>return Err(())})]),
-        "BITGET" => ("https://api.bitget.com","/api/v3/market/candles",
+        "BITGET" => ("https://api.bitget.com","/api/v3/market/candles".into(),
             vec![("category",if req.market=="perp" {"USDT-FUTURES"}else{"SPOT"}),
                  ("symbol",s),("interval",match i {"1h"=>"1H","1d"=>"1D",_=>i}),("limit",&n)]),
         "HYPERLIQUID" => {
@@ -140,7 +140,7 @@ fn source(req:&Request) -> Result<(String,Option<Value>),()> {
         _=>return Err(()),
     };
     let mut url=reqwest::Url::parse(host).map_err(|_|())?;
-    url.set_path(path);
+    url.set_path(&path);
     url.query_pairs_mut().extend_pairs(params);
     Ok((url.to_string(),None))
 }
