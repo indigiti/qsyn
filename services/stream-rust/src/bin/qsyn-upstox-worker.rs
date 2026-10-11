@@ -10,13 +10,19 @@ fn main() {
             let settings = WorkerSettings::from_private_file(Path::new(path));
             match (op.as_str(), settings) {
                 ("check", Ok(_)) => {
-                    println!("{}", serde_json::json!({"status":"ready_for_operator_review","connection_tested":false,"market_feed":"not_verified","trading_enabled":false}));
+                    println!(
+                        "{}",
+                        serde_json::json!({"status":"ready_for_operator_review","connection_tested":false,"market_feed":"not_verified","trading_enabled":false})
+                    );
                     Ok(())
                 }
-                ("run", Ok(settings)) if std::env::var("QSYN_UPSTOX_WORKER_ENABLE").as_deref() == Ok("1")
-                    && std::env::var("QSYN_TRADING_ENABLED").as_deref() != Ok("1") => {
+                ("run", Ok(settings))
+                    if std::env::var("QSYN_UPSTOX_WORKER_ENABLE").as_deref() == Ok("1")
+                        && std::env::var("QSYN_TRADING_ENABLED").as_deref() != Ok("1") =>
+                {
                     let runtime = tokio::runtime::Builder::new_current_thread()
-                        .enable_all().build();
+                        .enable_all()
+                        .build();
                     match runtime {
                         Ok(rt) => rt.block_on(qsyn_stream::upstox_worker::run(&settings)),
                         Err(_) => Err(std::io::Error::other("worker_runtime_unavailable")),
@@ -29,7 +35,9 @@ fn main() {
     };
     if result.is_err() {
         // Intentionally no paths, tokens, credentials or raw upstream URLs.
-        eprintln!("QSYN private Upstox worker stopped: operator authorization or readiness gate failed.");
+        eprintln!(
+            "QSYN private Upstox worker stopped: operator authorization or readiness gate failed."
+        );
         std::process::exit(2);
     }
 }
