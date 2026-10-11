@@ -30,6 +30,16 @@ if (!in_array($requestedPath, ['/', '/qsyn', '/qsyn/'], true)) {
         exit;
     }
 }
+// Defense in depth for installations that expose this physical PHP shell
+// directly: apply the same strict HTML transport/CSP as the canonical router.
+header('Content-Type: text/html; charset=utf-8');
+header('Cache-Control: no-store, no-transform');
+header('X-Frame-Options: DENY');
+header('X-Robots-Tag: noindex, nofollow');
+header('Content-Security-Policy: default-src ' . "'self'" .
+    '; script-src ' . "'self'" . '; style-src ' . "'self' 'unsafe-inline'" .
+    '; connect-src ' . "'self'" . '; img-src ' . "'self' data:" .
+    '; frame-ancestors ' . "'none'" . ';');
 $js = __DIR__ . '/assets/terminal.js';
 $css = __DIR__ . '/assets/terminal.css';
 $jsVersion = (string) (@filemtime($js) ?: '0');
