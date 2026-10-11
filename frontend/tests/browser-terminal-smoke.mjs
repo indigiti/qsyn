@@ -59,8 +59,12 @@ try {
     throw new Error('QSYN homepage emitted an inline script prohibited by its own CSP');
   if(!String(response.headers()['content-security-policy']||'').includes("script-src 'self'"))
     throw new Error('QSYN homepage CSP script policy unexpectedly weakened');
-  if(!String(response.headers()['cache-control']||'').includes('no-transform'))
-    throw new Error('QSYN homepage did not protect strict-CSP HTML from Cloudflare script injection');
+  const homeNonce=String(response.headers()['content-security-policy']||'')
+    .match(/script-src 'self' 'nonce-([A-Za-z0-9+/=]+)'/);
+  if(!homeNonce || !firstHtml.includes('nonce="'+homeNonce[1]+'"'))
+    throw new Error('Homepage must bind a fresh CSP nonce to its terminal bundle');
+  if(String(response.headers()['cache-control']||'').includes('no-transform'))
+    throw new Error('Homepage unexpectedly disabled Cloudflare JavaScript Detections');
 
   if(new URL(page.url()).pathname!=='/qsyn/') throw new Error('Homepage redirected');
   const alternate=await page.request.get(origin+'/qsyn/terminal',{maxRedirects:0});
@@ -347,8 +351,13 @@ try {
   if(!String(brokerResponse.headers()['content-security-policy']||'')
       .includes("script-src 'self'"))
     throw new Error('Brokers HTML lost its strict script-src CSP');
-  if(!String(brokerResponse.headers()['cache-control']||'').includes('no-transform'))
-    throw new Error('Brokers HTML did not protect its strict CSP from Cloudflare injection');
+  const brokersNonce=String(brokerResponse.headers()['content-security-policy']||'')
+    .match(/script-src 'self' 'nonce-([A-Za-z0-9+/=]+)'/);
+  if(!brokersNonce || !brokerHtml.includes('nonce="'+brokersNonce[1]+'"')
+      || brokersNonce[1]===homeNonce[1])
+    throw new Error('Brokers HTML missing unique CSP nonce or script binding');
+  if(String(brokerResponse.headers()['cache-control']||'').includes('no-transform'))
+    throw new Error('Brokers unexpectedly disabled Cloudflare JavaScript Detections');
   await page.getByRole('heading',{name:'Accounts & authorizations'}).waitFor();
   await page.getByRole('button',{name:'Discover index instrument keys'}).waitFor({state:'visible'});
   if(browserErrors.length)
