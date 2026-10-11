@@ -16,6 +16,7 @@ pub mod private_chart_hub;
 pub mod private_history_http;
 pub mod private_live_pipeline;
 pub mod upstox_history;
+pub mod upstox_index_history;
 pub mod upstox_index_worker;
 pub mod upstox_v3;
 pub mod upstox_worker;
