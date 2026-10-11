@@ -24,9 +24,10 @@ QSYN uses pinned `openalgo-charts@2.6.0`. This implementation passes an actual
 ## Persistence model
 
 Stores are `WorkspaceRepository(createIndexedDbWorkspaceStorage(window.indexedDB))`,
-backed by the database `qsyn-simulated-openalgo-workspaces-v1` and distinct
-public-simulation namespaces for `home`, `terminal-primary` and
-`terminal-secondary`. All are local to this browser + origin; no Python app,
+backed by the database `qsyn-simulated-openalgo-workspaces-v1` and a single
+public-simulation namespace `qsyn-public-simulated-v1-charts`. The homepage
+uses its Layouts menu; the simulated Terminal shares indicator templates
+without auto-opening a layout. All are local to this browser + origin; no Python app,
 SQL, Upstox credentials, network sync or broker session is involved.
 
 If IndexedDB is not available, the native repository is not passed in, rather
@@ -37,9 +38,7 @@ are never silently overwritten.
 Older QSYN layouts under `qsyn-terminal-browser-workspaces-v2` are untouched.
 The two formats are **not** silently migrated or deleted. Existing QSYN
 two-chart layouts can still be selected in the full Terminal. Native homepage
-layouts are separate, single-chart documents. Template stores for terminal
-primary/secondary are independent of homepage templates in this initial
-safety-first integration.
+layouts are separate, single-chart documents. Native indicator templates are shared across public simulated charts.
 
 ## Boundaries and future work
 
