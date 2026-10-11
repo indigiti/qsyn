@@ -168,7 +168,7 @@ impl UpstoxV3Plan {
 }
 
 /// A current BOD-resolved NSE/BSE index (never from unauthenticated chart inputs).
-#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ApprovedIndexInstrument {
     pub exchange: String,
