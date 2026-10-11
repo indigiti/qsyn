@@ -277,7 +277,14 @@ try {
     null,{timeout:14000});
   if(new URL(page.url()).pathname!=='/qsyn/terminal/markets')
     throw new Error('Market view escaped unified React terminal');
-  const mobile=await browser.newPage({viewport:{width:390,height:844}});
+  // Mobile checks use a separate viewport and storage, but retain the
+  // already-authenticated admin cookie so protected terminal routes load.
+  const mobileState=await context.storageState();
+  const mobileContext=await browser.newContext({
+    viewport:{width:390,height:844},
+    storageState:{cookies:mobileState.cookies,origins:[]},
+  });
+  const mobile=await mobileContext.newPage();
   mobile.on('pageerror',e=>browserErrors.push(e.message));
   await mobile.goto(origin+'/qsyn/',{waitUntil:'domcontentloaded'});
   await mobile.waitForFunction(()=>document.querySelectorAll('.qsyn-home-chart canvas').length>0);
@@ -302,6 +309,7 @@ try {
   if(oversized)throw new Error('Terminal overflows on mobile');
   if(browserRequests.some(url=>/(\/api\/v1\/(placeorder|cancelorder|modifyorder)|\/auth\/login|\/socket\.io)/i.test(url)))
     throw new Error('Terminal unexpectedly requested broker, auth or order execution endpoints');
+  await mobileContext.close();
   if(browserErrors.length)throw new Error('Browser exceptions: '+JSON.stringify(browserErrors));
   console.log('PASS: full-viewport OpenAlgo-only homepage, legacy rollback, terminal, mobile, CSP and no order calls');
 }finally{
