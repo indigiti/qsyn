@@ -109,10 +109,11 @@ if ($route === '/qsyn/api/v1/studio/market' || $route === '/qsyn/api/v1/studio/b
     }
 }
 
-// File-backed QSYN product-shell preview. No OpenAlgo Python database/login
-// is required; demo charts use existing non-privileged same-origin PHP candles.
-// Do not promote this route as live/authenticated broker functionality.
-if ($route === '/qsyn/terminal' || $route === '/qsyn/terminal/') {
+// Chart-first public homepage and canonical terminal share the same React
+// shell. This renders in place at /qsyn/ (no redirect or URL change), with
+// simulated candles and the existing disabled broker / OMS actions.
+// The previous standalone diagnostic chart is retained at /qsyn/legacy-chart.
+if (in_array($route, ['/', '/qsyn', '/qsyn/', '/qsyn/terminal', '/qsyn/terminal/'], true)) {
     if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'GET') {
         header('Allow: GET');
         respond(['error' => 'method_not_allowed'], 405);
@@ -407,8 +408,12 @@ if (str_ends_with($route, '/api/v1/demo/bars')) {
     respond(['symbol' => 'QSYN-DEMO', 'exchange' => 'QSYN', 'mode' => 'simulated', 'bars' => $bars]);
 }
 
-if ($route !== '/' && $route !== '/qsyn' && $route !== '/qsyn/') {
+if ($route !== '/qsyn/legacy-chart' && $route !== '/qsyn/legacy-chart/') {
     respond(['error' => 'not_found'], 404);
+}
+if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'GET') {
+    header('Allow: GET');
+    respond(['error' => 'method_not_allowed'], 405);
 }
 header('Content-Type: text/html; charset=utf-8');
 header('Cache-Control: private, no-store');
@@ -425,7 +430,7 @@ $rustStreamTestVersion = (string)(@filemtime(__DIR__ . '/assets/rust-stream-test
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>QSYN — Development Terminal</title>
+<title>QSYN — Legacy Chart Diagnostics (Simulated)</title>
 <script src="/qsyn/assets/chart-diagnostics.js?v=<?= rawurlencode($diagnosticsVersion) ?>"></script>
 <style>
 html,body{margin:0;background:#0b111b;color:#e5eaf3;font:14px system-ui,sans-serif}
