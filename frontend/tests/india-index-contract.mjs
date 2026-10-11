@@ -35,10 +35,20 @@ try{
   };
   const index={exchange:'NSE_INDEX:index',symbol:'NIFTY',interval:'1m'};
   assert.deepEqual(await feed.getBars(index),[]);
-  assert.equal(calls,1);
+  assert.equal(calls,0,'public homepage must not even request unlicensed index bars');
   assert(status.at(-1).includes('authorization required'));
   assert.deepEqual(await feed.getBars(index),[]);
-  assert.equal(calls,1,'locked index must not repeatedly hit public route');
+  assert.equal(calls,0,'locked index must never poll an unauthorized public route');
+
+  // The full contract remains fail-closed even if a separately authorized
+  // PRIVATE chart opts into request attempts; credentials are still checked
+  // server-side and a 503 returns no fabricated NSE/BSE candles.
+  const approved=new QsynMarketsFeed(s=>status.push(s),{indexAccessApproved:true});
+  assert.deepEqual(await approved.getBars(index),[]);
+  assert.equal(calls,1);
+  assert.deepEqual(await approved.getBars(index),[]);
+  assert.equal(calls,1,'permission denial must stop repeat queries per key');
+  approved.destroy();
 
   // Even an accidentally misconfigured endpoint cannot inject demo candles
   // or unauthenticated data into an NSE/BSE index chart.
@@ -50,10 +60,12 @@ try{
       time:1696982400,open:100,high:102,low:99,close:101,volume:1,
     }],
   })});
+  const privateCandidate=new QsynMarketsFeed(s=>status.push(s),{indexAccessApproved:true});
   await assert.rejects(
-    feed.getBars({exchange:'BSE_INDEX:index',symbol:'SENSEX',interval:'1m'}),
+    privateCandidate.getBars({exchange:'BSE_INDEX:index',symbol:'SENSEX',interval:'1m'}),
     /source\/entitlement validation failed/
   );
+  privateCandidate.destroy();
 }finally{
   globalThis.fetch=originalFetch;
   feed.destroy();
