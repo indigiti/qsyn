@@ -6,7 +6,7 @@ mod stream;
 use axum::{extract::Query, http::StatusCode, response::{IntoResponse, Response}, routing::get, Json, Router};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use std::{collections::HashMap, sync::OnceLock, time::{Duration, Instant, SystemTime, UNIX_EPOCH}};
+use std::{collections::{BTreeMap,HashMap}, sync::OnceLock, time::{Duration, Instant, SystemTime, UNIX_EPOCH}};
 use tokio::sync::Mutex;
 
 #[derive(Debug, Clone, Deserialize)]
@@ -160,13 +160,15 @@ fn cache() -> &'static Cache {
 }
 async fn load(req:&Request)->Result<Vec<Bar>,()> {
     let live = stream::latest(req).await;
+    let coinbase_recent = stream::recent(req).await;
     let cache_key=format!("{}:{}:{}:{}:{}",req.exchange,req.market,req.symbol,req.interval,req.limit.unwrap_or(250));
     {
         let guard=cache().lock().await;
         if let Some((since,bars))=guard.get(&cache_key) {
             if since.elapsed()<Duration::from_secs(if live.is_some() {60} else {4}) {
                 let mut merged=bars.clone();
-                overlay(&mut merged,live,req.limit.unwrap_or(250));
+                apply_live(req,&mut merged,live,&coinbase_recent);
+
                 return Ok(merged);
             }
         }
@@ -189,7 +191,8 @@ async fn load(req:&Request)->Result<Vec<Bar>,()> {
     if guard.len()>128 {guard.retain(|_,(when,_)|when.elapsed()<Duration::from_secs(30));}
     guard.insert(cache_key,(Instant::now(),bars.clone()));
     let mut merged=bars;
-    overlay(&mut merged,live,req.limit.unwrap_or(250));
+    apply_live(req,&mut merged,live,&coinbase_recent);
+
     Ok(merged)
 }
 async fn invalidate(req:&Request) {
@@ -207,6 +210,38 @@ fn overlay(bars:&mut Vec<Bar>,live:Option<Bar>,limit:usize){
         }
     }
     if bars.len()>limit {bars.drain(..bars.len()-limit);}
+}
+/// Coinbase's Exchange REST candles can trail its real-time public matches
+/// by several minutes. Merge only buckets observed from actual WS trades;
+/// REST remains authoritative for older overlapping history. The forming
+/// minute comes from WS; no forward-filling or gap interpolation is permitted.
+fn reconcile_coinbase(history: &mut Vec<Bar>, ws: &[Bar], limit: usize) {
+    let Some(last_rest) = history.last().map(|b|b.time) else { return };
+    let now_minute=epoch_ms()/60_000*60;
+    let first=history[0].time;
+    let mut indexed:BTreeMap<u64,Bar>=history.drain(..).map(|b|(b.time,b)).collect();
+    for candle in ws {
+        // The <=10min bridge stops a stale REST provider from looking
+        // healthy across hours of missing data after a worker restart.
+        if candle.time<first || candle.time>last_rest.saturating_add(600) {
+            continue;
+        }
+        if candle.time==now_minute {
+            indexed.insert(candle.time,candle.clone());
+        } else {
+            indexed.entry(candle.time).or_insert_with(||candle.clone());
+        }
+    }
+    let skip=indexed.len().saturating_sub(limit);
+    history.extend(indexed.into_values().skip(skip));
+}
+fn apply_live(req: &Request, history: &mut Vec<Bar>, latest: Option<Bar>, recent: &[Bar]) {
+    let limit=req.limit.unwrap_or(250);
+    if req.exchange=="COINBASE" && req.interval=="1m" {
+        reconcile_coinbase(history,recent,limit);
+    } else {
+        overlay(history,latest,limit);
+    }
 }
 async fn health(Query(req):Query<Request>)->Response {
     if !valid(&req) {
@@ -229,6 +264,8 @@ async fn bars(Query(req):Query<Request>)->Response {
             "exchange":req.exchange,"market":req.market,"symbol":req.symbol,
             "interval":req.interval,"bars":bars,"asof_ms":epoch_ms(),
             "feed_transport":stream::status(&req).await,
+            "served_history_gaps":stream::history_gaps(&bars,step_seconds(&req.interval).unwrap_or(60)).0,
+            "served_missing_history_bars":stream::history_gaps(&bars,step_seconds(&req.interval).unwrap_or(60)).1,
             "trading_enabled":false
         }))).into_response(),
         Err(_)=>(StatusCode::BAD_GATEWAY,Json(json!({"error":"exchange_market_data_unavailable"}))).into_response()
@@ -288,6 +325,47 @@ mod tests {
         let mut old=vec![base];
         overlay(&mut old,Some(too_stale),300);
         assert_eq!(old.len(),1); // fail closed on extremely stale REST history
+    }
+
+    #[test]
+    fn coinbase_websocket_closes_real_rest_gaps_with_trade_sourced_buckets_only() {
+        let t=epoch_ms()/60_000*60;
+        let candle=|time:u64,price:f64|Bar{time,open:price,high:price,low:price,close:price,volume:1.0};
+        let older=(0..5).map(|i|candle(t-540+i*60,100.0+i as f64)).collect::<Vec<_>>();
+        let from_ws=(0..4).map(|i|candle(t-240+i*60,110.0+i as f64)).collect::<Vec<_>>();
+        let mut merged=older.clone();
+        reconcile_coinbase(&mut merged,&from_ws,300);
+        assert_eq!(merged.len(),9);
+        assert_eq!(stream::history_gaps(&merged,60),(0,0));
+        assert_eq!(merged[5].time,t-240);
+        assert_eq!(merged[8].time,t-60);
+        // Idempotent: repeated HTTP polls do not duplicate a single bucket.
+        reconcile_coinbase(&mut merged,&from_ws,300);
+        assert_eq!(merged.len(),9);
+        let mut gap=older;
+        let incomplete=vec![from_ws[0].clone(),from_ws[3].clone()];
+        reconcile_coinbase(&mut gap,&incomplete,300);
+        assert_eq!(gap.len(),7); // do not create the missing 2 timestamps
+        assert_eq!(stream::history_gaps(&gap,60),(1,2));
+    }
+    #[test]
+    fn coinbase_rest_remains_authoritative_for_closed_overlapping_candles() {
+        let t=epoch_ms()/60_000*60;
+        let candle=|time:u64,price:f64|Bar{time,open:price,high:price,low:price,close:price,volume:2.0};
+        let mut rest=vec![candle(t-120,100.0),candle(t-60,101.0),candle(t,102.0)];
+        let live=vec![candle(t-60,200.0),candle(t,202.0)];
+        reconcile_coinbase(&mut rest,&live,300);
+        assert_eq!(rest.len(),3);
+        assert_eq!(rest[1].close,101.0); // complete REST bucket
+        assert_eq!(rest[2].close,202.0); // live forming WS bucket
+    }
+    #[test]
+    fn coinbase_recovery_does_not_pretend_a_long_rest_outage_is_current() {
+        let t=epoch_ms()/60_000*60;
+        let candle=|time:u64|Bar{time,open:100.0,high:100.0,low:100.0,close:100.0,volume:2.0};
+        let mut history=vec![candle(t-1800)];
+        reconcile_coinbase(&mut history,&[candle(t)],300);
+        assert_eq!(history.len(),1);
     }
 
 }
