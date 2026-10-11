@@ -127,7 +127,7 @@ const ignoreHomepageWidget = () => {};
  * Keep the simulated-data disclosure below the chart, outside its controls.
  */
 function HomepageChart({ theme }) {
-  const nativeWorkspaces = useMemo(() => publicNativeWorkspaceStore('home'), []);
+  const nativeWorkspaces = useMemo(() => publicNativeWorkspaceStore(), []);
   return <main className="qsyn-homepage" aria-label="QSYN simulated chart homepage">
     <div className="qsyn-home-chart">
       <ChartPanel pane={HOME_PANE} theme={theme} savedState={null}
@@ -140,8 +140,7 @@ function browserStorage() {
   try { return window.localStorage; } catch { return null; }
 }
 function ChartWorkspace({ theme }) {
-  const primaryNativeWorkspaces = useMemo(() => publicNativeWorkspaceStore('terminal-primary'), []);
-  const secondaryNativeWorkspaces = useMemo(() => publicNativeWorkspaceStore('terminal-secondary'), []);
+  const templateStore = useMemo(() => publicNativeWorkspaceStore(), []);
   const [saved, setSaved] = useState(() => loadBrowserWorkspace(browserStorage()));
   const [scope, setScope] = useState('browser');
   const [remote, setRemote] = useState({ status: 'checking' });
@@ -341,7 +340,7 @@ function ChartWorkspace({ theme }) {
           </div>
           <ChartPanel pane={p} theme={theme} savedState={snapshots[p.id]} revision={revision} onMount={onMount}
             nativeLayouts={false}
-            nativeWorkspaces={scope === 'browser' ? (p.id === 'primary' ? primaryNativeWorkspaces : secondaryNativeWorkspaces) : null}/>
+            nativeWorkspaces={scope === 'browser' ? templateStore : null}/>
         </div>)}
       </div>
       <aside className="terminal-watchlist terminal-surface" aria-label="Browser watchlist">
