@@ -78,6 +78,13 @@ try {
   if(!joined.saved || !joined.watchlist || joined.textVisible!=='none' || !joined.tooltip)
     throw new Error('Native Layouts icons were not placed beside Watchlist: '+JSON.stringify(joined));
   await arrange.click();
+  await page.waitForTimeout(750);
+  console.log('LAYOUT-DIAGNOSTICS',JSON.stringify(await page.evaluate(()=>({
+    pickerCount:document.querySelectorAll('.oac-grid__picker').length,
+    pickerBoxes:[...document.querySelectorAll('.oac-grid__picker')].map(el=>({display:getComputedStyle(el).display,visibility:getComputedStyle(el).visibility,opacity:getComputedStyle(el).opacity,rect:el.getBoundingClientRect().toJSON()})),
+    overlays:[...document.querySelectorAll('.oac-grid__overlay')].map(el=>({children:el.children.length,html:el.outerHTML.slice(0,400)})),
+    layoutButton:document.querySelector('.oac-topbar .oac-grid__layout')?.outerHTML.slice(0,500)
+  }))));
   await page.locator('.oac-grid__picker[role="menu"]').waitFor({timeout:12000});
   await page.keyboard.press('Escape');
   await watchlist.click();
