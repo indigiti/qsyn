@@ -52,6 +52,12 @@
       "access": "admin-gated"
     },
     {
+      "view": "routes",
+      "slug": "routes",
+      "label": "Route Management",
+      "access": "public-readonly"
+    },
+    {
       "view": "tools",
       "slug": "tools",
       "label": "Tools",
