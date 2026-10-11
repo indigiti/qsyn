@@ -84,6 +84,8 @@ try {
     if(invalidMethod.status()!==405)
       throw new Error('Retired dashboard unexpectedly accepted POST: '+old);
   }
+  // Return to the public homepage before its native-grid rendering checks.
+  await page.goto(origin+'/qsyn/',{waitUntil:'domcontentloaded'});
   const blockedPost=await page.request.post(origin+'/qsyn/');
   if(blockedPost.status()!==405)throw new Error('Homepage accepted POST');
   if(!String(response.headers()['content-security-policy']).includes("connect-src 'self'"))
