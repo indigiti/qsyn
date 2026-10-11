@@ -12,10 +12,15 @@ const TICKET_ENDPOINT = '/qsyn/api/v1/terminal/private-chart-grant';
 const AUTH_ENDPOINT = '/qsyn/api/v1/auth/state';
 const TICK_SCHEMA = 'QSYN-PRIVATE-CHART-TICK/1';
 const INSTRUMENT = /^NSE_FO\|[0-9]{1,24}$/;
+const INDEX_INSTRUMENT = /^(?:NSE_INDEX|BSE_INDEX)\|[A-Za-z0-9][A-Za-z0-9 ._-]{0,99}$/;
+export function isIndexInstrumentKey(value) {
+  return typeof value === 'string' && value.length <= 128 &&
+    INDEX_INSTRUMENT.test(value);
+}
 const ACCOUNT = /^[A-Za-z0-9_.:-]{1,128}$/;
 
 export function validatePrivateChartScope(account, instrument) {
-  return ACCOUNT.test(account) && INSTRUMENT.test(instrument);
+  return ACCOUNT.test(account) && (INSTRUMENT.test(instrument) || isIndexInstrumentKey(instrument));
 }
 
 export async function fetchPrivateChartGrant(fetcher, account, instrument, signal) {
@@ -65,6 +70,13 @@ export class PrivateAuthorizedChartFeed {
   async getBars(request) {
     if (this.ended || request.symbol !== this.instrument ||
         request.exchange !== 'UPSTOX_PRIVATE' || request.interval !== '1m') return [];
+    // The existing private history reader serves NSE_FO archives, not index
+    // candles. Never request that endpoint or fill missing index history with
+    // synthetic prices. The independently authorized WSS remains available.
+    if (isIndexInstrumentKey(this.instrument)) {
+      this.onState('Index history not provisioned; authorized live subscription only.');
+      return [];
+    }
     // History uses a SECOND short-lived, instrument-scoped PHP grant: neither
     // an Upstox token nor a signed grant is kept in browser storage or URL.
     let grant;
