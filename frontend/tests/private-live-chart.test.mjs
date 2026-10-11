@@ -30,7 +30,8 @@ test('canonical NSE/BSE index keys are private-only and supported without relaxi
   assert.deepEqual(await feed.getBars({
     exchange:'UPSTOX_PRIVATE',symbol:'NSE_INDEX|Nifty 50',interval:'1m',
   }),[]);
-  assert.equal(requests.length,0,'never request options history for index instruments');
+  assert.equal(requests.some(([url])=>url==='/qsyn/private-chart/history'),false,
+    'index must never request option history');
   feed.destroy();
 });
 
@@ -262,5 +263,48 @@ test('private WSS disconnect retries are bounded and cleanup cancels timers', as
     timer.active=false;timer.cb();await flush();
   }
   assert.equal(feed.session,null,'max reconnect failures must fail closed');
+  feed.destroy();
+});
+
+test('licensed private NIFTY index history requires a matching ticket and source', async () => {
+  const instrument='NSE_INDEX|Nifty 50';
+  const requests=[];
+  const timestamp=Math.floor((Date.now()-86400000)/60000)*60;
+  let wrong=false;
+  const fetcher=async (url,options)=>{
+    requests.push({url,options});
+    if(url==='/qsyn/api/v1/auth/state')return {ok:true,json:async()=>({
+      authenticated:true,csrf,profile:'mock-only',
+    })};
+    if(url==='/qsyn/api/v1/terminal/private-chart-grant')return {ok:true,json:async()=>({
+      schema:'QSYN-PRIVATE-CHART-GRANT-RESPONSE/1',
+      account_id:account,instrument,transport:'operator_private_wss_only',
+      trading_enabled:false,public_redistribution_allowed:false,
+      ticket,expires_ms:Date.now()+15000,
+    })};
+    if(url==='/qsyn/private-chart/index-history')return {ok:true,json:async()=>({
+      schema:'QSYN-UPSTOX-PRIVATE-INDEX-HISTORY/1',source:'licensed_private_index_history',
+      account: wrong?'OTHER':account,instrument,exchange:'UPSTOX_PRIVATE',interval:'1m',
+      trading_enabled:false,public_redistribution_allowed:false,
+      bars:[{time:timestamp,open:25000,high:25020,low:24998,close:25010}],
+    })};
+    throw Error('Index feed requested unsupported endpoint');
+  };
+  const status=[];
+  const feed=new PrivateAuthorizedChartFeed(account,instrument,x=>status.push(x),{
+    fetcher,location:{protocol:'https:',host:'qsyn.invalid'},
+  });
+  const req={exchange:'UPSTOX_PRIVATE',symbol:instrument,interval:'1m'};
+  const bars=await feed.getBars(req);
+  assert.equal(bars.length,1);
+  assert.equal(bars[0].close,25010);
+  assert.equal(requests[2].url,'/qsyn/private-chart/index-history');
+  assert.equal(requests[2].options.headers.Authorization,'Bearer '+ticket);
+  assert.ok(status.at(-1).includes('Licensed historical index'));
+  wrong=true;
+  assert.deepEqual(await feed.getBars(req),[],'foreign account cannot inject candles');
+  assert.ok(status.at(-1).includes('no simulated'));
+  assert.equal(requests.some(x=>x.url==='/qsyn/private-chart/history'),false);
+  assert.equal(requests.some(x=>x.url.includes('/india/bars')),false);
   feed.destroy();
 });
