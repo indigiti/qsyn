@@ -58,6 +58,18 @@ final class PrivateChartGrantApi
             && preg_match('/^[A-Za-z0-9_.:|-]+$/D', $value) === 1;
     }
 
+    /** Provider index keys contain spaces (e.g. NSE_INDEX|Nifty 50).
+     * Only current account-scoped private rights can authorize one of these keys.
+     * Keep identifiers for account, tenant, owner and license space-free.
+     */
+    private static function validInstrument(mixed $value): bool
+    {
+        return self::ident($value) || (
+            is_string($value) && strlen($value) <= 128
+            && preg_match('/^(?:NSE_INDEX|BSE_INDEX)\\|[A-Za-z0-9][A-Za-z0-9 ._-]{0,99}$/D', $value) === 1
+        );
+    }
+
     private static function validRights(string $root, array $principal, string $account, string $instrument, int $now): ?array
     {
         try {
@@ -90,7 +102,7 @@ final class PrivateChartGrantApi
             if (!self::ident($rights[$field] ?? null)) return null;
         }
         foreach ($rights['instruments'] as $key) {
-            if (!self::ident($key)) return null;
+            if (!self::validInstrument($key)) return null;
         }
         return $rights;
     }
@@ -169,7 +181,7 @@ final class PrivateChartGrantApi
         }
         $account = $body['account_id'];
         $instrument = $body['instrument'];
-        if (!self::ident($account) || !self::ident($instrument)) {
+        if (!self::ident($account) || !self::validInstrument($instrument)) {
             return [422, ['error' => 'invalid_chart_request']];
         }
         $now = (int) floor(microtime(true) * 1000);
