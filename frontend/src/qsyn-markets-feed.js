@@ -3,6 +3,16 @@ import {findIndiaIndex,searchIndiaIndexes} from './india-index-catalog.js';
 
 const INTERVALS=new Set(['1m','5m','15m','1h','1d']);
 const STEP=Object.freeze({'1m':60,'5m':300,'15m':900,'1h':3600,'1d':86400});
+const IST_OFFSET_SECONDS=5*3600+30*60;
+/** NSE/BSE 1h bars may start at 09:15 IST; day bars start at IST
+ * midnight. Neither must be on a UTC hour/day boundary. */
+export function validIndexBarTime(time,interval) {
+  if(!Number.isSafeInteger(time)||time<=0||time%60!==0)return false;
+  if(interval==='1d')return (time+IST_OFFSET_SECONDS)%86400===0;
+  if(interval==='5m'||interval==='15m')
+    return (time+IST_OFFSET_SECONDS)%STEP[interval]===0;
+  return INTERVALS.has(interval);
+}
 
 /** Public crypto + entitlement-scoped India index symbol search.
  * The new index adapter is deliberately fail-closed until a licensed
@@ -48,7 +58,7 @@ export class QsynMarketsFeed extends QsynCryptoFeed {
         throw new Error('Index chart source/entitlement validation failed');
       let prev=0;
       for(const b of data.bars){
-        if(!Number.isSafeInteger(b.time)||b.time<=prev||b.time%STEP[req.interval]!==0||
+        if(!validIndexBarTime(b.time,req.interval)||b.time<=prev||
             b.time>Math.floor(Date.now()/1000)+STEP[req.interval] ||
             !['open','high','low','close','volume'].every(k=>Number.isFinite(b[k]))||
             b.open<=0||b.close<=0||b.low<=0||b.high<Math.max(b.open,b.close)||
