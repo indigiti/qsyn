@@ -570,15 +570,15 @@ function Dashboard({ capabilities, openView }) {
     </div>
   );
 }
-function Tools() {
+function Tools({openView}) {
   return (
     <div className="terminal-page">
       <header className="terminal-title"><div><p className="terminal-eyebrow">ANALYTICS</p>
         <h1>Tools</h1><p>Tools are enabled only when their QSYN backend contracts exist.</p>
       </div></header>
       <div className="terminal-tool-grid">
-        <a className="terminal-tool" href="/qsyn/studio"><Layers /><h2>Synthetic Studio</h2><p>Simulated CE/PE legs, combined premiums, risk and replay.</p><span>Open studio →</span></a>
-        <a className="terminal-tool" href={BASE + '?view=trading'}><CandlestickChart /><h2>Chart terminal</h2><p>Upstream OpenAlgo Charts widget, indicators and drawings.</p><span>Open chart →</span></a>
+        <button type="button" className="terminal-tool" onClick={()=>openView('strategy')}><Layers /><h2>Strategy Studio</h2><p>Simulated CE/PE legs, combined premiums, option chain, expiry payoff and saved research setups.</p><span>Open workspace →</span></button>
+        <button type="button" className="terminal-tool" onClick={()=>openView('markets')}><CandlestickChart /><h2>Public market charts</h2><p>Live crypto charts, licensed India index discovery, native indicators and drawings.</p><span>Open markets →</span></button>
         <div className="terminal-tool unavailable"><LockKeyhole /><h2>Live option chain</h2><p>Requires a licensed, authenticated account-scoped feed.</p><span>Unavailable</span></div>
         <div className="terminal-tool unavailable"><Gauge /><h2>Order management</h2><p>Requires production permissions and execution risk approval.</p><span>Unavailable</span></div>
       </div>
@@ -691,7 +691,7 @@ function App() {
         <header className="terminal-title"><div><p className="terminal-eyebrow">MARKET WORKSPACE</p><h1>Trading charts</h1>
           <p>OpenAlgo Charts 2.6.0 with QSYN's existing simulated PHP data adapter.</p></div></header>
         <ChartWorkspace theme={theme}/></div>}
-      {view === 'tools' && <Tools/>}
+      {view === 'tools' && <Tools openView={openView}/>}
       {view === 'private-live' && <PrivateMarketWorkspace/>}
     </main>
     <nav className="terminal-bottom-nav" aria-label="Mobile quick navigation">
