@@ -160,6 +160,7 @@ jobs:
           cp apps/web-php/src/OpenAlgoLocalProbe.php staging/private/app/src/OpenAlgoLocalProbe.php
           cp apps/web-php/src/PrivateBrokerRegistry.php staging/private/app/src/PrivateBrokerRegistry.php
           cp apps/web-php/src/PrivateOpenAlgoReader.php staging/private/app/src/PrivateOpenAlgoReader.php
+          cp apps/web-php/src/OpenAlgoBrokerConnectionsApi.php staging/private/app/src/OpenAlgoBrokerConnectionsApi.php
           cp apps/web-php/tools/private-broker-gateway.php staging/private/app/tools/private-broker-gateway.php
           cp apps/web-php/tools/upstox-oauth.php staging/private/app/tools/upstox-oauth.php
           cp apps/web-php/tools/private-history-export.php staging/private/app/tools/private-history-export.php
@@ -242,6 +243,8 @@ jobs:
           test -s staging/private/app/src/OpenAlgoLocalProbe.php
           test -s staging/private/app/src/PrivateBrokerRegistry.php
           test -s staging/private/app/src/PrivateOpenAlgoReader.php
+          test -s staging/private/app/src/OpenAlgoBrokerConnectionsApi.php
+          php -l staging/private/app/src/OpenAlgoBrokerConnectionsApi.php
           test -s staging/private/app/tools/private-broker-gateway.php
           test -s staging/private/app/tools/upstox-oauth.php
           test -s staging/private/app/bin/qsyn-upstox-worker
@@ -337,6 +340,8 @@ jobs:
           test -s verified-release/private/app/src/OpenAlgoLocalProbe.php
           test -s verified-release/private/app/src/PrivateBrokerRegistry.php
           test -s verified-release/private/app/src/PrivateOpenAlgoReader.php
+          test -s verified-release/private/app/src/OpenAlgoBrokerConnectionsApi.php
+          php -l verified-release/private/app/src/OpenAlgoBrokerConnectionsApi.php
           test -s verified-release/private/app/tools/private-broker-gateway.php
           test -s verified-release/private/app/tools/private-history-export.php
           test ! -e verified-release/private/runtime/market-license.json
