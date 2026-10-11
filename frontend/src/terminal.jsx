@@ -520,7 +520,7 @@ function PrivateMarketPanel({ account, instrument, label }) {
     <div className="terminal-chart-host" ref={ref} aria-label={'Private '+label+' licensed candlestick chart'} />
     <p className="terminal-footnote" role="status">{status}</p>
     <p className="terminal-footnote">{isIndexInstrumentKey(instrument)
-      ? 'Index live chart requires a running authorized Rust feed and a private WSS gateway. Historical index candles are not yet served.'
+      ? 'Index history requires an authorized private index reader and licensed backfill; live ticks require the separately approved Rust worker and WSS.'
       : 'Exchange last-trade timestamps. No historical candles until licensed backfill is verified.'}</p>
   </section>;
 }
