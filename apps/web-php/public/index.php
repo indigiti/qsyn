@@ -376,7 +376,10 @@ if (in_array($route, ['/', '/qsyn', '/qsyn/'], true)
         respond(['error' => 'terminal_bundle_unavailable'], 503);
     }
     header('Content-Type: text/html; charset=utf-8');
-    header('Cache-Control: no-store');
+    // Cloudflare JavaScript Detections otherwise injects a CSP-blocked inline
+    // challenge script into strict script-src 'self' pages. This HTML-only
+    // no-transform gate keeps the terminal response intact at the edge.
+    header('Cache-Control: no-store, no-transform');
     header('X-Frame-Options: DENY');
     header('X-Robots-Tag: noindex, nofollow');
     header('Content-Security-Policy: default-src ' . "'self'" .
@@ -491,7 +494,8 @@ if ($route === '/qsyn/app' || $route === '/qsyn/app/') {
         respond(['error' => 'dashboard_not_enabled'], 404);
     }
     header('Content-Type: text/html; charset=utf-8');
-    header('Cache-Control: private, no-store');
+    // Private mock dashboard HTML must not be rewritten by an edge JSD script.
+    header('Cache-Control: private, no-store, no-transform');
     header('X-Frame-Options: DENY');
     header('X-Robots-Tag: noindex, nofollow');
     header('Content-Security-Policy: default-src ' . "'self'" .
