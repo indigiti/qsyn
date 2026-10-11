@@ -100,7 +100,13 @@ export function StrategyWorkspace({theme}){
   const [series,setSeries]=useState(null),[result,setResult]=useState(null);
   const [busy,setBusy]=useState(false),[error,setError]=useState('');
   const [saved,setSaved]=useState(fetchSaved),[name,setName]=useState('');
+  const latestRef=useRef(0);
+  function invalidate(){
+    latestRef.current++;
+    setBusy(false);setResult(null);setSeries(null);
+  }
   useEffect(()=>{
+    invalidate();
     const a=new AbortController();
     setMarket(null);setLegs([]);setResult(null);setSeries(null);setError('');
     void simulation('market?underlying='+encodeURIComponent(underlying),a.signal)
@@ -112,7 +118,6 @@ export function StrategyWorkspace({theme}){
       }).catch(e=>{if(!a.signal.aborted)setError(e.message);});
     return ()=>a.abort();
   },[underlying]);
-  const latestRef=useRef(0);
   useEffect(()=>()=>{latestRef.current++;},[]);
   async function render(){
     const config={expiry,interval,legs};
@@ -139,7 +144,7 @@ export function StrategyWorkspace({theme}){
   }
   function modify(index,key,value){
     setLegs(previous=>previous.map((x,i)=>i===index?{...x,[key]:value}:x));
-    setResult(null);setSeries(null);
+    invalidate();
   }
   function addLeg(){
     if(!market||legs.length>=4)return;
@@ -148,7 +153,7 @@ export function StrategyWorkspace({theme}){
       {type:'PE',side:'BUY',strike:c.strike,qty:1}]).find(x=>
         !legs.some(l=>l.type===x.type&&l.strike===x.strike));
     if(candidate)setLegs(v=>[...v,candidate]);
-    setResult(null);setSeries(null);
+    invalidate();
   }
   function save(){
     if(!name.trim()||name.length>40||!market||!contractValid({expiry,interval,legs},market))
@@ -167,7 +172,7 @@ export function StrategyWorkspace({theme}){
   const [pending,setPending]=useState(null);
   useEffect(()=>{
     if(!pending||!market||market.underlying!==pending.underlying)return;
-    if(contractValid(pending,market)){setLegs(pending.legs);setResult(null);setSeries(null);}
+    if(contractValid(pending,market)){setLegs(pending.legs);invalidate();}
     else setError('Saved strategy incompatible with current simulated chain.');
     setPending(null);
   },[market,pending]);
@@ -178,18 +183,18 @@ export function StrategyWorkspace({theme}){
       <div className="qt-actions qt-field-row">
         <label>Underlying<select aria-label="Strategy underlying" value={underlying} onChange={e=>setUnderlying(e.target.value)}>
           {UNDERLYINGS.map(v=><option key={v}>{v}</option>)}</select></label>
-        <label>Demo horizon<select aria-label="Strategy horizon" value={expiry} onChange={e=>{setExpiry(e.target.value);setResult(null);setSeries(null);}}>
+        <label>Demo horizon<select aria-label="Strategy horizon" value={expiry} onChange={e=>{setExpiry(e.target.value);invalidate();}}>
           {HORIZONS.map(v=><option key={v}>{v}</option>)}</select></label>
-        <label>Interval<select aria-label="Strategy interval" value={interval} onChange={e=>{setInterval(e.target.value);setResult(null);setSeries(null);}}>
+        <label>Interval<select aria-label="Strategy interval" value={interval} onChange={e=>{setInterval(e.target.value);invalidate();}}>
           {INTERVALS.map(v=><option key={v}>{v}</option>)}</select></label>
         <span className="qt-atm">Reference ATM: {market?money(market.atm):'Loading'}</span>
       </div>
       <div className="qt-actions">
         <button className="terminal-action terminal-secondary-action" disabled={!market} onClick={()=>{
-          if(market){setLegs(initialLegs(market));setResult(null);setSeries(null);}
+          if(market){setLegs(initialLegs(market));invalidate();}
         }}>ATM straddle</button>
         <button className="terminal-action terminal-secondary-action" disabled={!market} onClick={()=>{
-          if(market){setLegs(initialLegs(market,true));setResult(null);setSeries(null);}
+          if(market){setLegs(initialLegs(market,true));invalidate();}
         }}>OTM strangle</button>
         <button className="terminal-action terminal-secondary-action" disabled={!market||legs.length>=4} onClick={addLeg}><Plus size={15}/> Add leg</button>
       </div>
@@ -204,7 +209,7 @@ export function StrategyWorkspace({theme}){
         <label>Qty<input aria-label={'Leg '+(i+1)+' quantity'} type="number" min="1" max="5" step="1" value={l.qty}
           onChange={e=>modify(i,'qty',Number(e.target.value))}/></label>
         <button type="button" className="terminal-icon" aria-label={'Remove leg '+(i+1)}
-          disabled={legs.length<=1} onClick={()=>{setLegs(v=>v.filter((_,j)=>j!==i));setResult(null);setSeries(null);}}>
+          disabled={legs.length<=1} onClick={()=>{setLegs(v=>v.filter((_,j)=>j!==i));invalidate();}}>
           <Trash2 size={17}/></button>
       </div>)}
       <div className="qt-actions">
