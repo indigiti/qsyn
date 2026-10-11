@@ -125,6 +125,12 @@ jobs:
           curl --fail --silent http://127.0.0.1:18080/qsyn/api/v1/diagnostics/rust-stream | grep -q '"status":"offline"'
           curl --fail --silent http://127.0.0.1:18080/qsyn/api/v1/admin/rust/state | grep -q '"configured":false'
           curl --fail --silent http://127.0.0.1:18080/qsyn/admin/rust | grep -q 'Rust service control'
+          # Health checks do not trigger new exchange subscriptions.
+          test "$(curl --silent -o /tmp/qsyn-crypto-health.json -w '%{http_code}' 'http://127.0.0.1:18080/qsyn/api/v1/crypto/health?exchange=BINANCE&market=spot&symbol=../bad&interval=1m')" = 422
+          grep -q 'invalid_crypto_request' /tmp/qsyn-crypto-health.json
+          # No Rust worker in the PHP CI job: the fixed loopback check fails closed.
+          test "$(curl --silent -o /tmp/qsyn-crypto-health.json -w '%{http_code}' 'http://127.0.0.1:18080/qsyn/api/v1/crypto/health?exchange=BINANCE&market=spot&symbol=BTCUSDT&interval=1m')" = 503
+          python3 -m py_compile services/stream-rust/tests/crypto_public_observe.py
 
   rust:
     name: Rust synthetic engine tests
