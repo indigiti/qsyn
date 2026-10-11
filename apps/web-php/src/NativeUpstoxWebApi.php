@@ -81,7 +81,9 @@ final class NativeUpstoxWebApi
         } catch (\JsonException) {
             return [400, ['error' => 'invalid_json']];
         }
-        if (!is_array($body) || array_is_list($body)) {
+        if (!is_array($body)
+            || ($operation === 'setup' && array_is_list($body))
+            || ($operation === 'begin' && trim($raw) !== '{}')) {
             return [422, ['error' => 'invalid_upstox_request']];
         }
 
