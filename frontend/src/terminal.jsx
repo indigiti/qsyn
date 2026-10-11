@@ -45,8 +45,13 @@ function routeView() {
   return VIEWS.has(proposed) ? proposed : 'trading';
 }
 function currentTheme() {
-  try { return localStorage.getItem('qsyn-terminal-theme') === 'light' ? 'light' : 'dark'; }
-  catch { return 'dark'; }
+  try {
+    const saved = localStorage.getItem('qsyn-terminal-theme');
+    if (saved === 'light' || saved === 'dark') return saved;
+  } catch { /* browser storage is optional */ }
+  // Match the bright full-width reference on first visit, preserving an
+  // explicit light/dark preference and the original terminal defaults.
+  return ['/qsyn/', '/qsyn', '/'].includes(window.location.pathname) ? 'light' : 'dark';
 }
 function ChartPanel({ pane, theme, savedState, revision, onMount }) {
   const host = useRef(null);
@@ -103,6 +108,52 @@ function ChartPanel({ pane, theme, savedState, revision, onMount }) {
     </section>
   );
 }
+const HOME_PANE = Object.freeze({ id: 'primary', symbol: 'QSYN-NIFTY-STRADDLE' });
+const ignoreHomepageWidget = () => {};
+
+/**
+ * The /qsyn/ landing page mirrors the supplied edge-to-edge OpenAlgo Charts
+ * reference without removing any upstream chart controls. Its candles remain
+ * explicitly simulated. Full workspace features remain at /qsyn/terminal.
+ */
+function HomepageChart({ theme, onToggleTheme }) {
+  return <div className="qsyn-homepage">
+    <header className="qsyn-home-topbar">
+      <a className="qsyn-home-brand" href="/qsyn/" aria-label="QSYN chart homepage">
+        <span className="terminal-mark">Q</span><strong>QSYN</strong><small>CHARTS</small>
+      </a>
+      <nav className="qsyn-home-links" aria-label="QSYN homepage navigation">
+        <a href="/qsyn/terminal?view=dashboard">Dashboard</a>
+        <a href="/qsyn/terminal?view=trading">Trading workspace</a>
+        <a href="/qsyn/studio">Synthetic Studio</a>
+      </nav>
+      <div className="qsyn-home-utilities">
+        <span className="qsyn-home-source">SIMULATED DATA</span>
+        <button type="button" className="terminal-icon" aria-label="Toggle theme"
+          onClick={onToggleTheme}>
+          {theme === 'dark' ? <Sun size={18}/> : <Moon size={18}/>}
+        </button>
+      </div>
+    </header>
+    <main className="qsyn-home-content">
+      <div className="qsyn-home-heading">
+        <div><p className="terminal-eyebrow">QSYN / OPENALGO CHARTS</p>
+          <h1>Premium chart</h1></div>
+        <span className="qsyn-home-session">NIFTY ATM CE + PE · 1m · DEMO</span>
+      </div>
+      <div className="qsyn-home-chart">
+        <ChartPanel pane={HOME_PANE} theme={theme} savedState={null}
+          revision={0} onMount={ignoreHomepageWidget}/>
+      </div>
+      <p className="qsyn-home-disclaimer" role="note">
+        <ShieldAlert size={15}/>
+        Illustrative synthetic premium candles only. No exchange market data, connected broker, executable orders or real-money P&amp;L.
+        <a href="/qsyn/terminal?view=trading">Open full chart workspace <ChevronDown size={14}/></a>
+      </p>
+    </main>
+  </div>;
+}
+
 function browserStorage() {
   try { return window.localStorage; } catch { return null; }
 }
@@ -485,8 +536,14 @@ function App() {
   }, []);
   useEffect(() => {
     document.documentElement.setAttribute('data-qsyn-theme', theme);
-    try { localStorage.setItem('qsyn-terminal-theme', theme); } catch {}
   }, [theme]);
+  // Respect the two distinct page defaults. Do not silently save the
+  // homepage's bright default as a user preference for the full terminal.
+  function toggleTheme() {
+    const next = theme === 'dark' ? 'light' : 'dark';
+    setTheme(next);
+    try { localStorage.setItem('qsyn-terminal-theme', next); } catch {}
+  }
   useEffect(() => {
     let active = true;
     const controller = new AbortController();
@@ -518,6 +575,9 @@ function App() {
         <s.icon size={18}/><span>{s.label}</span><LockKeyhole size={13}/></button>)}
     </nav>;
   }
+  if (['/', '/qsyn', '/qsyn/'].includes(window.location.pathname)) {
+    return <HomepageChart theme={theme} onToggleTheme={toggleTheme}/>;
+  }
   return <div className="terminal-shell">
     <header className="terminal-topbar">
       <div className="terminal-top-left">
@@ -531,7 +591,7 @@ function App() {
       <div className="terminal-top-right">
         <span className="terminal-environment">{view === 'private-live' ? '● PRIVATE · GATED' : '● SIMULATED'}</span>
         <button type="button" className="terminal-icon" aria-label="Toggle theme"
-          onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
+          onClick={toggleTheme}>
           {theme === 'dark' ? <Sun size={18}/> : <Moon size={18}/>}</button>
         <a className="terminal-icon" href="/qsyn/admin/rust" aria-label="Administrator diagnostics" title="Restricted administrator diagnostics"><Settings size={17}/></a>
       </div>
