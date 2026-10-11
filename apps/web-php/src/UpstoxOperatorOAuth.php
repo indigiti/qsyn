@@ -75,10 +75,12 @@ final class UpstoxOperatorOAuth
 
     private static function validateConfig(string $clientId, string $redirectUri, string $expectedUserId): void
     {
+        $ciLoopback = getenv('QSYN_ALLOW_HTTP_TEST') === '1'
+            && preg_match('~^http://127\\.0\\.0\\.1:[0-9]{2,5}/qsyn/api/v1/admin/upstox/callback$~D', $redirectUri) === 1;
         if (!preg_match('/^[A-Za-z0-9_-]{8,128}$/D', $clientId)
             || !preg_match('/^[A-Za-z0-9_.@-]{2,128}$/D', $expectedUserId)
             || strlen($redirectUri) > 350
-            || !str_starts_with($redirectUri, 'https://')
+            || (!str_starts_with($redirectUri, 'https://') && !$ciLoopback)
             || filter_var($redirectUri, FILTER_VALIDATE_URL) === false
             || parse_url($redirectUri, PHP_URL_USER) !== null
             || parse_url($redirectUri, PHP_URL_FRAGMENT) !== null) {
