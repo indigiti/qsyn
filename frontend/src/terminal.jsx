@@ -27,7 +27,7 @@ import {registerWickScience} from './wick-science-indicator.js';
 registerWickScience();
 import { QsynWorkspaceFeed } from './terminal-feed.js';
 import { publicNativeWorkspaceStore, cryptoNativeWorkspaceStore } from './native-workspaces.js';
-import { PrivateAuthorizedChartFeed, validatePrivateChartScope } from './private-live-chart.js';
+import { PrivateAuthorizedChartFeed, validatePrivateChartScope, isIndexInstrumentKey } from './private-live-chart.js';
 import { checkPrivateWorkspace, savePrivateWorkspace } from './terminal-file-sync.js';
 import {
   SYMBOLS, DEFAULT_PANES, instrumentFor, searchInstruments, loadBrowserWorkspace,
@@ -503,6 +503,7 @@ function PrivateMarketWorkspace() {
   const [account, setAccount] = useState('');
   const [ce, setCe] = useState('');
   const [pe, setPe] = useState('');
+  const [indexKey, setIndexKey] = useState('');
   const [selected, setSelected] = useState(null);
   useEffect(() => {
     const controller = new AbortController();
@@ -514,31 +515,39 @@ function PrivateMarketWorkspace() {
       }).catch(() => { if (!controller.signal.aborted) setAccess('locked'); });
     return () => controller.abort();
   }, []);
+  const supportedIndex = isIndexInstrumentKey(indexKey.trim()) &&
+    validatePrivateChartScope(account.trim(), indexKey.trim());
   const supported = validatePrivateChartScope(account.trim(), ce.trim()) &&
     validatePrivateChartScope(account.trim(), pe.trim()) && ce.trim() !== pe.trim();
   return <div className="terminal-page">
     <header className="terminal-title"><div><p className="terminal-eyebrow">PRIVATE · READ ONLY</p>
-      <h1>Authorized CE/PE charts</h1><p>Separate from the simulated terminal. No public redistribution or order execution.</p>
+      <h1>Authorized Upstox charts</h1><p>Private CE/PE and NSE/BSE indices. No public redistribution or order execution.</p>
     </div></header>
     <section className="terminal-surface terminal-live-controls">
       {access === 'checking' && <p role="status">Checking private identity access…</p>}
       {access === 'locked' && <p role="status">Unavailable. Requires an authenticated private development identity, verified Upstox entitlements, and an operator-provisioned WSS proxy. Simulation remains on the Trading tab.</p>}
       {access === 'private_test' && <>
-        <p>Private test identity active. Enter only account and CE/PE keys approved in the private rights file. The grant issuer independently verifies access.</p>
+        <p>Private test identity active. Enter only account, CE/PE or index keys approved in the private rights file. The grant issuer independently verifies access.</p>
         <div className="terminal-layout-tools">
           <label>Approved account alias<input aria-label="Approved account alias" value={account} maxLength={128} onChange={e => setAccount(e.target.value)}/></label>
           <label>CE instrument key<input aria-label="Private CE key" placeholder="NSE_FO|12345" value={ce} maxLength={32} onChange={e=>setCe(e.target.value)}/></label>
           <label>PE instrument key<input aria-label="Private PE key" placeholder="NSE_FO|12346" value={pe} maxLength={32} onChange={e=>setPe(e.target.value)}/></label>
           <button className="terminal-action" type="button" disabled={!supported}
             onClick={() => setSelected({account:account.trim(), ce:ce.trim(), pe:pe.trim()})}>Connect authorized charts</button>
+          <label>Approved NSE/BSE index instrument key<input aria-label="Private index instrument key" placeholder="NSE_INDEX|Nifty 50" value={indexKey} maxLength={128} onChange={e=>setIndexKey(e.target.value)}/></label>
+          <button className="terminal-action" type="button" disabled={!supportedIndex}
+            onClick={() => setSelected({account:account.trim(),index:indexKey.trim()})}>Connect authorized index</button>
           <button className="terminal-action terminal-secondary-action" type="button" onClick={() => setSelected(null)}>Disconnect</button>
         </div>
         <p className="terminal-footnote">No broker secret or Upstox OAuth token is entered in the browser. Chart grants expire after 30 seconds and require current server-side rights.</p>
       </>}
     </section>
     {access === 'private_test' && selected && <div className="terminal-private-chart-grid">
-      <PrivateMarketPanel key={selected.account + selected.ce} account={selected.account} instrument={selected.ce} label="Call option (CE)"/>
-      <PrivateMarketPanel key={selected.account + selected.pe} account={selected.account} instrument={selected.pe} label="Put option (PE)"/>
+      {selected.index ?
+        <PrivateMarketPanel key={selected.account + selected.index} account={selected.account} instrument={selected.index} label="Upstox index"/> : <>
+        <PrivateMarketPanel key={selected.account + selected.ce} account={selected.account} instrument={selected.ce} label="Call option (CE)"/>
+        <PrivateMarketPanel key={selected.account + selected.pe} account={selected.account} instrument={selected.pe} label="Put option (PE)"/>
+      </>}
     </div>}
   </div>;
 }
