@@ -59,6 +59,8 @@ try {
     throw new Error('QSYN homepage emitted an inline script prohibited by its own CSP');
   if(!String(response.headers()['content-security-policy']||'').includes("script-src 'self'"))
     throw new Error('QSYN homepage CSP script policy unexpectedly weakened');
+  if(!String(response.headers()['cache-control']||'').includes('no-transform'))
+    throw new Error('QSYN homepage did not protect strict-CSP HTML from Cloudflare script injection');
 
   if(new URL(page.url()).pathname!=='/qsyn/') throw new Error('Homepage redirected');
   const alternate=await page.request.get(origin+'/qsyn/terminal',{maxRedirects:0});
@@ -345,6 +347,8 @@ try {
   if(!String(brokerResponse.headers()['content-security-policy']||'')
       .includes("script-src 'self'"))
     throw new Error('Brokers HTML lost its strict script-src CSP');
+  if(!String(brokerResponse.headers()['cache-control']||'').includes('no-transform'))
+    throw new Error('Brokers HTML did not protect its strict CSP from Cloudflare injection');
   await page.getByRole('heading',{name:'Accounts & authorizations'}).waitFor();
   await page.getByRole('button',{name:'Discover index instrument keys'}).waitFor({state:'visible'});
   if(browserErrors.length)
