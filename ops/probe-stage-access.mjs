@@ -19,7 +19,7 @@ function safeHeaders(headers){
   const result={};
   for(const name of HEADER_ALLOWLIST){
     const value=headers?.get?.(name);
-    if(typeof value==='string'&&value.length<180&&/^[\w .:;/=-]+$/.test(value))
+    if(typeof value==='string'&&value.length<180&&[...value].every(char=>char.charCodeAt(0)>=32&&char.charCodeAt(0)<=126))
       result[name]=value;
   }
   return result;
