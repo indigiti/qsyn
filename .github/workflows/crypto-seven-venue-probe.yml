@@ -22,16 +22,36 @@ jobs:
     timeout-minutes: 12
     steps:
       - uses: actions/checkout@v4
-      - name: Verify all venues with fresh WebSocket updates and advancing candles
+      - name: Inspect deployed Rust commit and exact Coinbase candle gap positions
         shell: bash
         run: |
           set -o pipefail
-          python3 services/stream-rust/tests/crypto_public_observe.py \
-            --base-url https://stage.digiti.in \
-            --observe-seconds 90 \
-            --sample-seconds 20 \
-            --require-websocket \
-            --require-contiguous 2>&1 | tee qsyn-crypto-seven-venue-report.txt
+          python3 - <<'PY' 2>&1 | tee qsyn-crypto-seven-venue-report.txt
+          import json
+          from datetime import datetime,timezone
+          from urllib.request import Request,urlopen
+          def get(path):
+              u="https://stage.digiti.in/qsyn/"+path
+              with urlopen(Request(u,headers={"Accept":"application/json","User-Agent":"QSYN-Coinbase-gap-inspection/1"}),timeout=15) as resp:
+                  return json.load(resp)
+          def iso(t):
+              return datetime.fromtimestamp(t,timezone.utc).isoformat()
+          diagnostic=get("api/v1/diagnostics/rust")
+          print("RUST_COMMIT",diagnostic.get("runtime_commit"),"status",diagnostic.get("status"),"uptime",diagnostic.get("uptime_seconds"))
+          p="exchange=COINBASE&market=spot&symbol=BTC-USD&interval=1m&limit=300"
+          bars=get("api/v1/crypto/bars?"+p)
+          health=get("api/v1/crypto/health?"+p)
+          times=[b["time"] for b in bars["bars"]]
+          gaps=[{"start":iso(a+60),"end_exclusive":iso(b),
+                 "missing_minutes":(b-a)//60-1,"age_minutes":int((bars["asof_ms"]/1000-(a+60))/60)}
+                for a,b in zip(times,times[1:]) if b-a>60]
+          print("COINBASE_FEED",json.dumps({"transport":bars.get("feed_transport"),"health":health.get("feed"),
+              "asof":iso(bars["asof_ms"]/1000),"last":iso(times[-1]),"first":iso(times[0]),
+              "returned_candles":len(times),"gaps":gaps,
+              "served_missing_history_bars":bars.get("served_missing_history_bars"),
+              "served_history_gaps":bars.get("served_history_gaps")},sort_keys=True))
+          print("COINBASE_TAIL",json.dumps([{"time":iso(b["time"]),"volume":b["volume"]} for b in bars["bars"][-12:]]))
+          PY
       - name: Preserve probe report even when a provider fails
         if: always()
         uses: actions/upload-artifact@v4
