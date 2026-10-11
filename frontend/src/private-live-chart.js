@@ -10,6 +10,8 @@ import { CandleBuilder } from 'openalgo-charts';
 
 const TICKET_ENDPOINT = '/qsyn/api/v1/terminal/private-chart-grant';
 const AUTH_ENDPOINT = '/qsyn/api/v1/auth/state';
+const OPERATOR_ACCESS = '/qsyn/api/v1/admin/upstox/private-chart-access';
+const OPERATOR_GRANT = '/qsyn/api/v1/admin/upstox/private-chart-grant';
 const TICK_SCHEMA = 'QSYN-PRIVATE-CHART-TICK/1';
 const INSTRUMENT = /^NSE_FO\|[0-9]{1,24}$/;
 const INDEX_INSTRUMENT = /^(?:NSE_INDEX|BSE_INDEX)\|[A-Za-z0-9][A-Za-z0-9 ._-]{0,99}$/;
@@ -23,18 +25,31 @@ export function validatePrivateChartScope(account, instrument) {
   return ACCOUNT.test(account) && (INSTRUMENT.test(instrument) || isIndexInstrumentKey(instrument));
 }
 
-export async function fetchPrivateChartGrant(fetcher, account, instrument, signal) {
+export async function fetchPrivateChartGrant(fetcher, account, instrument, signal, authMode = 'private_test') {
   if (!validatePrivateChartScope(account, instrument))
     throw new Error('Select an operator-approved option account and NSE_FO instrument key.');
-  const state = await fetcher(AUTH_ENDPOINT, {
+  if (!['private_test','operator_admin'].includes(authMode) ||
+      (authMode === 'operator_admin' && !isIndexInstrumentKey(instrument)))
+    throw new Error('Unsupported private chart identity scope.');
+  const state = await fetcher(authMode === 'operator_admin' ? OPERATOR_ACCESS : AUTH_ENDPOINT, {
     method: 'GET', credentials: 'same-origin', cache: 'no-store', signal,
   });
-  if (!state.ok) throw new Error('Private test identity is not configured.');
+  if (!state.ok) {
+    const error = new Error('Private chart session not authorized.');
+    error.status = state.status;
+    throw error;
+  }
   const identity = await state.json();
-  if (identity.authenticated !== true || identity.profile !== 'mock-only'
-      || !/^[a-f0-9]{64}$/.test(identity.csrf))
-    throw new Error('Private test login required.');
-  const response = await fetcher(TICKET_ENDPOINT, {
+  if (identity.authenticated !== true ||
+      identity.profile !== (authMode === 'operator_admin' ? 'operator-admin' : 'mock-only') ||
+      (authMode === 'operator_admin' &&
+        (identity.schema !== 'QSYN-PRIVATE-OPERATOR-CHART-ACCESS/1' ||
+         identity.account_id !== account || identity.trading_enabled !== false)) ||
+      !/^[a-f0-9]{64}$/.test(identity.csrf))
+    throw new Error(authMode === 'operator_admin'
+      ? 'Operator chart identity or account mismatch.'
+      : 'Private test login required.');
+  const response = await fetcher(authMode === 'operator_admin' ? OPERATOR_GRANT : TICKET_ENDPOINT, {
     method: 'POST', credentials: 'same-origin', cache: 'no-store', signal,
     headers: {'Content-Type':'application/json', 'X-CSRF-Token':identity.csrf},
     body: JSON.stringify({account_id: account, instrument}),
@@ -67,6 +82,10 @@ export class PrivateAuthorizedChartFeed {
     this.fetcher = deps.fetcher || fetch;
     this.socketFactory = deps.socketFactory || (url => new WebSocket(url));
     this.location = deps.location || location;
+    this.authMode = deps.authMode || 'private_test';
+    if (!['private_test','operator_admin'].includes(this.authMode) ||
+        (this.authMode === 'operator_admin' && !isIndexInstrumentKey(instrument)))
+      throw new Error('Invalid private chart identity mode');
     this.schedule = deps.schedule || ((callback, ms) => setTimeout(callback, ms));
     this.cancel = deps.cancel || (handle => clearTimeout(handle));
     this.session = null;
@@ -82,7 +101,7 @@ export class PrivateAuthorizedChartFeed {
     if (isIndexInstrumentKey(this.instrument)) {
       try {
         const grant = await fetchPrivateChartGrant(
-          this.fetcher, this.account, this.instrument, request.signal);
+          this.fetcher, this.account, this.instrument, request.signal, this.authMode);
         if (this.ended || request.signal?.aborted) return [];
         const response = await this.fetcher('/qsyn/private-chart/index-history', {
           method:'GET', credentials:'same-origin', cache:'no-store', signal:request.signal,
@@ -122,7 +141,7 @@ export class PrivateAuthorizedChartFeed {
     // an Upstox token nor a signed grant is kept in browser storage or URL.
     let grant;
     try {
-      grant = await fetchPrivateChartGrant(this.fetcher, this.account, this.instrument);
+      grant = await fetchPrivateChartGrant(this.fetcher, this.account, this.instrument, undefined, this.authMode);
       if (this.ended) return [];
       const response = await this.fetcher('/qsyn/private-chart/history', {
         method: 'GET', credentials: 'same-origin', cache: 'no-store',
@@ -211,7 +230,7 @@ export class PrivateAuthorizedChartFeed {
         // A new short-lived grant is mandatory for EVERY reconnection. It is
         // never retained in localStorage, URL parameters or diagnostic logs.
         const grant = await fetchPrivateChartGrant(
-          this.fetcher, this.account, this.instrument, controller.signal);
+          this.fetcher, this.account, this.instrument, controller.signal, this.authMode);
         if (!active()) return;
         const scheme = this.location.protocol === 'https:' ? 'wss:' : 'ws:';
         const url = scheme+'//'+this.location.host+'/qsyn/private-chart/ws';
