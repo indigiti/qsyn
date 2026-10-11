@@ -167,7 +167,9 @@ function HomepageChart({ theme, embedded = false }) {
       theme,branding:false,panels:true,toolbar:true,bottombar:true,
       preset:'1x1',workspaces:nativeWorkspaces||undefined,
       lookbackBars:INITIAL_BACKFILL_BARS,
-      loading:{pageSize:300,maxBars:MAX_AUTO_BACKFILL_BARS},
+      // OpenAlgo's default 15s history deadline is too short for a bounded
+      // 51-page maximum MFE backfill. Keep PHP/Rust timeouts per request.
+      loading:{pageSize:300,maxBars:MAX_AUTO_BACKFILL_BARS,timeoutMs:120000},
       ...(nativeWatchlists?{watchlist:{store:nativeWatchlists,quotes:noSyntheticQuotes}}:{}),
       links:{crosshair:true},navigation:{defaultVisibleBars:120,mousePan:'horizontal'},
     });
