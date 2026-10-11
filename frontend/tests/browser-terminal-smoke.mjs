@@ -62,7 +62,7 @@ try {
   ]) {
     const retired=await page.request.get(origin+old,{maxRedirects:0});
     if(retired.status()!==302||
-        retired.headers().location!=='/qsyn/terminal?view='+view||
+        retired.headers().location!=='/qsyn/terminal/'+view||
         !String(retired.headers()['cache-control']||'').includes('no-store'))
       throw new Error('Standalone dashboard remains active or cacheable: '+old);
     const invalidMethod=await page.request.post(origin+old,{maxRedirects:0});
@@ -152,7 +152,7 @@ try {
     throw new Error('Light theme did not activate');
   await page.getByRole('button',{name:'Dashboard',exact:true}).first().click();
   await page.getByRole('heading',{name:'Command center'}).waitFor();
-  if(!page.url().includes('view=dashboard'))throw new Error('Dashboard deep link failed');
+  if(!new URL(page.url()).pathname==='/qsyn/terminal/dashboard')throw new Error('Dashboard deep link failed');
   if(!(await page.getByText('SIMULATION ONLY').count()))
     throw new Error('Dashboard simulation provenance label missing');
   await page.waitForFunction(()=>document.querySelectorAll('.qd-chart-preview #qsyn-native-chart canvas').length>0);
@@ -213,13 +213,15 @@ try {
   // Unified shell: no iframe, redirect or new page for markets, strategies,
   // broker readiness, diagnostics, operations or saved workspaces.
   await page.goto(origin+'/qsyn/terminal?view=diagnostics',{waitUntil:'domcontentloaded'});
+  if(new URL(page.url()).pathname!=='/qsyn/terminal/diagnostics')
+    throw new Error('Old query URL was not canonicalized');
   await page.getByRole('heading',{name:'Diagnostics & feed health'}).waitFor();
   if(await page.locator('.qt-table tbody tr').count()!==7)
     throw new Error('Seven crypto worker diagnostics not rendered');
   if(await page.locator('iframe').count())throw new Error('Unified terminal used iframe');
   await page.getByRole('button',{name:'Brokers',exact:true}).first().click();
   await page.getByRole('heading',{name:'Accounts & authorizations'}).waitFor();
-  if(!page.url().includes('view=brokers'))throw new Error('Broker view not routed in React');
+  if(!new URL(page.url()).pathname==='/qsyn/terminal/brokers')throw new Error('Broker view not routed in React');
   await page.getByText('No production broker session verified').waitFor({timeout:12000});
   await page.getByRole('button',{name:'Operations',exact:true}).first().click();
   await page.getByRole('heading',{name:'Service administration'}).waitFor();
@@ -236,11 +238,18 @@ try {
     throw new Error('Strategy payoff not integrated into React');
   await page.getByRole('button',{name:'Workspaces',exact:true}).first().click();
   await page.getByRole('heading',{name:'Chart workspaces'}).waitFor();
+  await page.getByRole('button',{name:'Routes',exact:true}).first().click();
+  await page.getByRole('heading',{name:'Route management'}).waitFor();
+  if(new URL(page.url()).pathname!=='/qsyn/terminal/routes'||
+     await page.locator('.qt-table tbody tr').count()<11)
+    throw new Error('Pretty route directory not mounted');
+  await page.goBack({waitUntil:'domcontentloaded'});
+  await page.getByRole('heading',{name:'Chart workspaces'}).waitFor();
   await page.getByRole('button',{name:'Markets',exact:true}).first().click();
   await page.getByRole('heading',{name:'Live crypto & India index charts'}).waitFor();
   await page.waitForFunction(()=>document.querySelectorAll('.terminal-market-embedded canvas').length>0,
     null,{timeout:14000});
-  if(new URL(page.url()).pathname!=='/qsyn/terminal')
+  if(new URL(page.url()).pathname!=='/qsyn/terminal/markets')
     throw new Error('Market view escaped unified React terminal');
   const mobile=await browser.newPage({viewport:{width:390,height:844}});
   mobile.on('pageerror',e=>browserErrors.push(e.message));

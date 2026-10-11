@@ -173,32 +173,54 @@ if ($route === '/qsyn/api/v1/studio/market' || $route === '/qsyn/api/v1/studio/b
     }
 }
 
-// Canonical unified React terminal is the sole UI. Old bookmarked HTML pages
-// remain as non-cacheable navigation aliases only. JSON endpoints are routed
-// above/below this block unchanged, with the same server-side security.
-$legacyWorkspace = [
-    '/qsyn/studio' => 'strategy', '/qsyn/studio/' => 'strategy',
-    '/qsyn/admin/rust' => 'operations', '/qsyn/admin/rust/' => 'operations',
-    '/qsyn/legacy-chart' => 'diagnostics', '/qsyn/legacy-chart/' => 'diagnostics',
-];
-if (isset($legacyWorkspace[$route])) {
-    if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'GET'
-        && ($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'HEAD') {
-        header('Allow: GET, HEAD');
-        respond(['error' => 'method_not_allowed'], 405);
+// Central terminal route management: one reviewed JSON registry consumed by
+// PHP and React. This block handles only UI navigation, not any protected API.
+if (str_starts_with($route, '/qsyn/terminal') || in_array($route, [
+    '/qsyn/studio','/qsyn/studio/',
+    '/qsyn/admin/rust','/qsyn/admin/rust/',
+    '/qsyn/legacy-chart','/qsyn/legacy-chart/',
+], true)) {
+    $routingSource = dirname(__DIR__) . '/src/TerminalRoutes.php';
+    if (!is_file($routingSource)) {
+        $routingSource = dirname(__DIR__, 2) . '/private_html/qsyn/app/src/TerminalRoutes.php';
     }
-    header('Cache-Control: private, no-store, max-age=0');
-    header('Pragma: no-cache');
-    header('X-Robots-Tag: noindex, nofollow');
-    header('Location: /qsyn/terminal?view=' . $legacyWorkspace[$route], true, 302);
-    exit;
+    $manifest = __DIR__ . '/terminal-routes.json';
+    if (!is_file($routingSource) || !is_file($manifest)) {
+        respond(['error' => 'terminal_routing_unavailable'], 503);
+    }
+    require_once $routingSource;
+    try {
+        $routes = new \QSYN\Routing\TerminalRoutes($manifest);
+    } catch (\RuntimeException) {
+        respond(['error' => 'terminal_routing_unavailable'], 503);
+    }
+    if ($routes->isAlias($route) || $routes->isTerminalRequest($route)) {
+        $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
+        if ($method !== 'GET' && $method !== 'HEAD') {
+            header('Allow: GET, HEAD');
+            respond(['error' => 'method_not_allowed'], 405);
+        }
+        $legacyView = $_GET['view'] ?? null;
+        $target = $routes->target($route, is_string($legacyView) ? $legacyView : null);
+        if ($target !== null) {
+            header('Cache-Control: private, no-store, max-age=0');
+            header('Pragma: no-cache');
+            header('X-Robots-Tag: noindex, nofollow');
+            header('Location: ' . $target, true, 302);
+            exit;
+        }
+        if (!$routes->isValidPath($route)) {
+            respond(['error' => 'terminal_route_not_found'], 404);
+        }
+    }
 }
 
 // Chart-first public homepage and canonical terminal share the same React
 // shell. This renders in place at /qsyn/ (no redirect or URL change), with
 // simulated candles and the existing disabled broker / OMS actions.
 // Legacy HTML entrypoints now redirect into terminal workspaces.
-if (in_array($route, ['/', '/qsyn', '/qsyn/', '/qsyn/terminal', '/qsyn/terminal/'], true)) {
+if (in_array($route, ['/', '/qsyn', '/qsyn/'], true)
+    || (isset($routes) && $routes->isValidPath($route))) {
     if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'GET') {
         header('Allow: GET');
         respond(['error' => 'method_not_allowed'], 405);

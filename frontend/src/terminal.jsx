@@ -13,7 +13,7 @@ import {
   Activity, BookOpen, CandlestickChart, ChartColumnIncreasing, ChevronDown,
   ClipboardList, Compass, FlaskConical, Gauge, Layers, LayoutDashboard,
   LockKeyhole, Menu, Moon, PanelLeftClose, PanelLeftOpen, Search,
-  Settings, ShieldAlert, Sun, Wallet, Wrench, X, Plus, Save, Columns2, Trash2,
+  Settings, ShieldAlert, Sun, Wallet, Wrench, X, Plus, Save, Columns2, Trash2, Route,
 } from 'lucide-react';
 import { createWidget, createChartGrid } from 'openalgo-charts/widget';
 import { QsynMarketsFeed } from './qsyn-markets-feed.js';
@@ -32,9 +32,10 @@ import './terminal.css';
 import { DashboardCockpit } from './dashboard.jsx';
 import {DiagnosticsWorkspace,BrokersWorkspace,OperationsWorkspace} from './terminal-unified.jsx';
 import {StrategyWorkspace} from './terminal-strategy.jsx';
+import {RouteManagementWorkspace} from './terminal-route-management.jsx';
+import {terminalHref,terminalViewForLocation,defaultTerminalView,terminalRoutes} from './terminal-routes.js';
 
-const BASE = '/qsyn/terminal';
-const VIEWS = new Set(['dashboard','markets','trading','strategy','workspaces','brokers','diagnostics','operations','tools','private-live']);
+const VIEWS = new Set(terminalRoutes.map(route=>route.view));
 const sections = [
   { label: 'Dashboard', view: 'dashboard', icon: LayoutDashboard },
   { label: 'Markets', view: 'markets', icon: CandlestickChart },
@@ -44,6 +45,7 @@ const sections = [
   { label: 'Brokers', view: 'brokers', icon: Wallet },
   { label: 'Diagnostics', view: 'diagnostics', icon: Activity },
   { label: 'Operations', view: 'operations', icon: Settings },
+  { label: 'Routes', view: 'routes', icon: Route },
   { label: 'Tools', view: 'tools', icon: Wrench },
 ];
 const mobileSections=sections.filter(s=>['markets','trading','strategy','diagnostics'].includes(s.view));
@@ -53,9 +55,7 @@ const unavailable = [
   { label: 'Broker accounts', icon: Wallet },
 ];
 function routeView() {
-  const url = new URL(window.location.href);
-  const proposed = url.searchParams.get('view');
-  return VIEWS.has(proposed) ? proposed : 'trading';
+  return terminalViewForLocation(window.location.pathname,window.location.search) ?? defaultTerminalView;
 }
 function currentTheme() {
   try {
@@ -552,10 +552,10 @@ function Dashboard({ capabilities, openView }) {
       <div className="terminal-overview">
         <StatusBox capabilities={capabilities} />
         <section className="terminal-surface"><div className="terminal-card-head"><h2>Quick access</h2><Compass size={17}/></div>
-          <a className="terminal-quick" href={BASE + '?view=trading'}>Trading charts <CandlestickChart size={18}/></a>
+          <a className="terminal-quick" href={terminalHref('trading')}>Trading charts <CandlestickChart size={18}/></a>
           <a className="terminal-quick" href="/qsyn/studio">Synthetic Studio <Layers size={18}/></a>
-          <a className="terminal-quick" href={BASE + '?view=tools'}>Tools & integrations <Wrench size={18}/></a>
-        <a className="terminal-quick" href={BASE + '?view=private-live'}>Private authorized CE/PE charts <LockKeyhole size={18}/></a>
+          <a className="terminal-quick" href={terminalHref('tools')}>Tools & integrations <Wrench size={18}/></a>
+        <a className="terminal-quick" href={terminalHref('private-live')}>Private authorized CE/PE charts <LockKeyhole size={18}/></a>
         </section>
       </div>
       <section className="terminal-surface">
@@ -618,7 +618,10 @@ function App() {
   const current = useMemo(() => sections.find(s => s.view === view) || sections[1], [view]);
   function openView(next) {
     if (!VIEWS.has(next)) return;
-    window.history.pushState(null, '', BASE + '?view=' + next);
+    const target=terminalHref(next);
+    if(!target) return;
+    if(window.location.pathname!==target || window.location.search)
+      window.history.pushState(null, '', target);
     setView(next);
     setSidebar(false);
   }
@@ -687,6 +690,7 @@ function App() {
       {view === 'brokers' && <BrokersWorkspace openView={openView}/>}
       {view === 'diagnostics' && <DiagnosticsWorkspace/>}
       {view === 'operations' && <OperationsWorkspace/>}
+      {view === 'routes' && <RouteManagementWorkspace openView={openView}/>} 
       {view === 'trading' && <div className="terminal-page">
         <header className="terminal-title"><div><p className="terminal-eyebrow">MARKET WORKSPACE</p><h1>Trading charts</h1>
           <p>OpenAlgo Charts 2.6.0 with QSYN's existing simulated PHP data adapter.</p></div></header>

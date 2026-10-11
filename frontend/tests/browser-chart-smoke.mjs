@@ -36,11 +36,11 @@ try{
   ];
   for(const [old,view,heading] of checks){
     const res=await page.request.get(origin+old,{maxRedirects:0});
-    if(res.status()!==302||res.headers().location!=='/qsyn/terminal?view='+view||
+    if(res.status()!==302||res.headers().location!=='/qsyn/terminal/'+view||
       !String(res.headers()['cache-control']||'').includes('no-store'))
       throw Error('Retired URL leaked old HTML: '+old+' '+res.status());
     const destination=await page.goto(origin+old,{waitUntil:'domcontentloaded',timeout:25000});
-    if(destination.status()!==200||!page.url().endsWith('/qsyn/terminal?view='+view))
+    if(destination.status()!==200||!page.url().endsWith('/qsyn/terminal/'+view))
       throw Error('Retired URL escaped React terminal: '+old);
     await page.getByRole('heading',{name:heading,exact:true}).waitFor({timeout:15000});
     if(await page.locator('iframe').count())throw Error('Embedded old dashboard iframe');
@@ -49,7 +49,7 @@ try{
   // The PHP -S test router rewrites direct documents through index.php.
   // Inspect the physical fallback shim independently for Cloudways deployments.
   const shim=await readFile(resolve(root,'apps/web-php/public/admin-rust.php'),'utf8');
-  if(!shim.includes("Location: /qsyn/terminal?view=operations") ||
+  if(!shim.includes("Location: /qsyn/terminal/operations") ||
       !shim.includes("no-store") || shim.includes('<!doctype html>'))
     throw Error('Physical admin-rust.php was not retired');
   const state=await page.request.get(origin+'/qsyn/api/v1/admin/rust/state');

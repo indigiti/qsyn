@@ -1,0 +1,87 @@
+{
+  "schema": "QSYN-TERMINAL-ROUTES/1",
+  "base": "/qsyn/terminal",
+  "defaultView": "trading",
+  "routes": [
+    {
+      "view": "dashboard",
+      "slug": "dashboard",
+      "label": "Dashboard",
+      "access": "public-demo"
+    },
+    {
+      "view": "markets",
+      "slug": "markets",
+      "label": "Markets",
+      "access": "public-readonly"
+    },
+    {
+      "view": "trading",
+      "slug": "trading",
+      "label": "Trading",
+      "access": "public-demo"
+    },
+    {
+      "view": "strategy",
+      "slug": "strategy",
+      "label": "Strategy Studio",
+      "access": "public-demo"
+    },
+    {
+      "view": "workspaces",
+      "slug": "workspaces",
+      "label": "Workspaces",
+      "access": "mixed-account-gated"
+    },
+    {
+      "view": "brokers",
+      "slug": "brokers",
+      "label": "Brokers",
+      "access": "account-gated"
+    },
+    {
+      "view": "diagnostics",
+      "slug": "diagnostics",
+      "label": "Diagnostics",
+      "access": "public-readonly"
+    },
+    {
+      "view": "operations",
+      "slug": "operations",
+      "label": "Operations",
+      "access": "admin-gated"
+    },
+    {
+      "view": "routes",
+      "slug": "routes",
+      "label": "Route Management",
+      "access": "public-readonly"
+    },
+    {
+      "view": "tools",
+      "slug": "tools",
+      "label": "Tools",
+      "access": "public-demo"
+    },
+    {
+      "view": "private-live",
+      "slug": "private-live",
+      "label": "Private CE/PE",
+      "access": "account-gated"
+    }
+  ],
+  "aliases": [
+    {
+      "path": "/qsyn/studio",
+      "view": "strategy"
+    },
+    {
+      "path": "/qsyn/admin/rust",
+      "view": "operations"
+    },
+    {
+      "path": "/qsyn/legacy-chart",
+      "view": "diagnostics"
+    }
+  ]
+}
