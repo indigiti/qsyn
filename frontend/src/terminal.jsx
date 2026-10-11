@@ -21,7 +21,7 @@ import { cryptoDefault, CRYPTO_MARKETS } from './crypto-catalog.js';
 import { nativeCryptoWatchlists, noSyntheticQuotes } from './native-crypto-watchlists.js';
 import 'openalgo-charts/indicators';
 import { QsynWorkspaceFeed } from './terminal-feed.js';
-import { publicNativeWorkspaceStore } from './native-workspaces.js';
+import { publicNativeWorkspaceStore, cryptoNativeWorkspaceStore } from './native-workspaces.js';
 import { PrivateAuthorizedChartFeed, validatePrivateChartScope } from './private-live-chart.js';
 import { checkPrivateWorkspace, savePrivateWorkspace } from './terminal-file-sync.js';
 import {
@@ -135,7 +135,7 @@ function HomepageChart({ theme }) {
   const [selection,setSelection]=useState(cryptoDefault);
   const [message,setMessage]=useState('Connecting public exchange candles…');
   const [preset,setPreset]=useState('1x1');
-  const nativeWorkspaces=useMemo(()=>publicNativeWorkspaceStore(),[]);
+  const nativeWorkspaces=useMemo(()=>cryptoNativeWorkspaceStore(),[]);
   const nativeWatchlists=useMemo(()=>nativeCryptoWatchlists(),[]);
   useEffect(()=>{
     if(!host.current)return;
