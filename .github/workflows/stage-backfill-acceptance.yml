@@ -11,6 +11,14 @@ on:
         options:
           - '1600'
           - '15016'
+      runner_mode:
+        description: 'GitHub-hosted (diagnose WAF) or dedicated trusted self-hosted fixed-egress runner'
+        required: true
+        default: 'github-hosted'
+        type: choice
+        options:
+          - 'github-hosted'
+          - 'trusted-self-hosted'
 
 permissions:
   contents: read
@@ -18,8 +26,11 @@ permissions:
 jobs:
   verify-stage:
     name: Verify deployed stage history
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
+    # Dispatch only from reviewed main. A dedicated private Linux x64 runner
+    # is optional and must be assigned the qsyn-stage-acceptance label.
+    if: github.ref == 'refs/heads/main'
+    runs-on: ${{ inputs.runner_mode == 'trusted-self-hosted' && fromJSON('["self-hosted","linux","x64","qsyn-stage-acceptance"]') || 'ubuntu-latest' }}
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -41,10 +52,16 @@ jobs:
             exit 1
           }
           cat stage-backfill-report.json
-      - name: Install test-only Playwright Chromium
-        run: |
-          npm install --no-save --no-audit --no-fund playwright@1.55.0
-          npx playwright install --with-deps chromium
+      - name: Install test-only Playwright
+        run: npm install --no-save --no-audit --no-fund playwright@1.55.0
+      - name: Install Chromium system dependencies on disposable GitHub-hosted runner
+        if: inputs.runner_mode == 'github-hosted'
+        run: npx playwright install --with-deps chromium
+      - name: Install Chromium browser on dedicated trusted runner
+        # System Chromium dependencies MUST be preinstalled by the runner operator.
+        # No sudo or OS package changes should occur in a production environment.
+        if: inputs.runner_mode == 'trusted-self-hosted'
+        run: npx playwright install chromium
       - name: Verify deployed React chart actually auto-loads 1600 candles
         id: chart
         continue-on-error: true
