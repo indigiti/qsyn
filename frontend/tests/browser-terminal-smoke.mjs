@@ -181,10 +181,10 @@ try {
   mobile.on('pageerror',e=>browserErrors.push(e.message));
   await mobile.goto(origin+'/qsyn/',{waitUntil:'domcontentloaded'});
   await mobile.waitForFunction(()=>document.querySelectorAll('.qsyn-home-chart canvas').length>0);
-  const mobileChartTop=await mobile.locator('.qsyn-home-chart .terminal-chart-host')
+  const mobileChartTop=await mobile.locator('.qsyn-home-chart .qsyn-crypto-grid')
     .evaluate(node=>node.getBoundingClientRect().top);
   if(mobileChartTop>8)throw new Error('Mobile chart is not at top of page');
-  const mobileChartHeight=await mobile.locator('.qsyn-home-chart .terminal-chart-host')
+  const mobileChartHeight=await mobile.locator('.qsyn-home-chart .qsyn-crypto-grid')
     .evaluate(node=>node.getBoundingClientRect().height);
   if(mobileChartHeight<830)throw new Error('Mobile chart should fill screen: '+mobileChartHeight);
   if(await mobile.locator('.qsyn-home-chart .terminal-footnote').filter({visible:true}).count())
