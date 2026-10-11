@@ -9,7 +9,8 @@ Scope: existing QSYN admin terminal, PHP password session, Upstox profile check 
 3. Opaque Upstox failure: live profile verification now returns enumerated codes for missing/unreadable token, account mismatch, upstream 401/403 token expiry, provider downtime, invalid response and verified active account. Results never contain provider identity, bearer tokens or raw API errors.
 4. Administrator diagnostics: authenticated GET /qsyn/api/v1/admin/diagnostics/report provides schema QSYN-ADMIN-DIAGNOSTICS/1, request ID, timestamp, secure session state, private app/token-file presence, packaged Rust worker check and explicit "not verified" for Upstox licensing and the live feed. The endpoint never calls Upstox or starts a process.
 5. Frontend error JSON: Upstox verify/setup/begin now gives client progress, a bounded 15-second timeout, HTTP status, request ID, enum code, elapsed milliseconds, and Copy safe JSON. It never includes OAuth URLs, token, CSRF, passwords or private paths. Diagnostics workspace offers Run secure audit and Copy diagnostic JSON.
-6. Browser regression tests check that a valid session remains on the terminal when an admin-state request receives an injected HTTP 503, and that the protected diagnostics endpoint is available to the logged-in administrator.
+6. Misleading broker status: the Upstox selector previously declared OAuth inactive even when a token was stored and verified. It now distinguishes OAuth from the inactive index feed. The Refresh broker status button now reloads native Upstox state when Upstox is selected instead of refreshing only the unrelated public broker catalog.
+7. Browser regression tests check that a valid session remains on the terminal when an admin-state request receives an injected HTTP 503, and that the protected diagnostics endpoint is available to the logged-in administrator.
 
 ## Testing staged deployment
 
