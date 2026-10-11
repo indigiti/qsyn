@@ -210,6 +210,24 @@ impl IndexWorkerSettings {
 fn retry_delay(attempt: u32) -> Duration {
     Duration::from_secs((1u64 << attempt.min(5)).min(30))
 }
+
+/// Budget consecutive unsuccessful private sessions, not total sessions.
+/// Real persisted quotes prove progress; a quiet/stale provider does not.
+/// External BOD, OAuth, rights and private file checks remain independent.
+fn next_failure_count(previous: u32, persisted: u64, max_failures: u32) -> io::Result<u32> {
+    if max_failures == 0 {
+        return Err(denied());
+    }
+    if persisted > 0 {
+        return Ok(0);
+    }
+    let failures = previous.checked_add(1).ok_or_else(denied)?;
+    if failures >= max_failures {
+        return Err(denied());
+    }
+    Ok(failures)
+}
+
 pub async fn run(settings: &IndexWorkerSettings) -> io::Result<()> {
     let client = reqwest::Client::builder()
         .https_only(true)
@@ -218,20 +236,23 @@ pub async fn run(settings: &IndexWorkerSettings) -> io::Result<()> {
         .timeout(Duration::from_secs(12))
         .build()
         .map_err(|_| denied())?;
-    let mut attempts = 0;
-    while attempts < settings.max_attempts {
+    let mut consecutive_failures = 0u32;
+    let mut session_number = 0u64;
+    // Reuse the decoder across one-use WSS URLs, retaining last exchange
+    // timestamps while clearing MARKET_INFO on each new socket handshake.
+    let mut decoder = UpstoxV3IndexDecoder::new(settings.plan(), epoch_ms()?)?;
+    loop {
         let now = epoch_ms()?;
-        // Hard stop whenever current operator approval, private session,
-        // WAL or chart rights are absent or revoked.
+        // Validate on EVERY session rotation; a successful old connection is
+        // never evidence that today's mapping or broker rights still apply.
         settings.validate(now)?;
         let session = settings.session()?;
-        attempts += 1;
-        match authorize_next(&client, &session.access_token).await {
+        session_number = session_number.checked_add(1).ok_or_else(denied)?;
+        let persisted = match authorize_next(&client, &session.access_token).await {
             Ok(one_use_url) => {
                 let mut wal =
                     PrivatePersistentIngest::open(&settings.wal_root, settings.approval(), now)?;
-                let mut decoder = UpstoxV3IndexDecoder::new(settings.plan(), now)?;
-                let guid = format!("qsynidx-{}-{}", std::process::id(), attempts);
+                let guid = format!("qsynidx-{}-{}", std::process::id(), session_number);
                 let observed = observe_one_use_index_session_with_sink(
                     &one_use_url,
                     &mut decoder,
@@ -244,23 +265,30 @@ pub async fn run(settings: &IndexWorkerSettings) -> io::Result<()> {
                     )),
                 )
                 .await;
-                if let Err(error) = observed {
-                    if error.kind() == io::ErrorKind::PermissionDenied {
+                match observed {
+                    Ok(report) => report.persisted_quotes,
+                    Err(error) if error.kind() == io::ErrorKind::PermissionDenied => {
                         return Err(denied());
                     }
-                    // Timeout and upstream closure may reconnect using a NEW URL.
+                    // Transient timeout/closed socket counts against a bounded
+                    // retry budget and always requires a NEW one-use URL.
+                    Err(_) => 0,
                 }
             }
             Err(error) if error.kind() == io::ErrorKind::PermissionDenied => {
                 return Err(denied());
             }
-            Err(_) => {}
+            Err(_) => 0,
+        };
+        consecutive_failures =
+            next_failure_count(consecutive_failures, persisted, settings.max_attempts)?;
+        if consecutive_failures > 0 {
+            sleep(retry_delay(consecutive_failures)).await;
         }
-        if attempts < settings.max_attempts {
-            sleep(retry_delay(attempts)).await;
-        }
+        // After real persisted data, rotate immediately to a new signed WSS
+        // session rather than exiting after a total max_attempts threshold.
+        // Every fresh cycle rechecks current private rights/BOD/expiry.
     }
-    Err(denied())
 }
 #[cfg(test)]
 mod tests {
@@ -339,6 +367,24 @@ mod tests {
         assert!(mapping_matches(&settings, now).is_err());
         let _ = std::fs::remove_file(&path);
         let _ = std::fs::remove_dir(&folder);
+    }
+
+    #[test]
+    fn licensed_progress_renews_sessions_but_repeated_failures_stop() {
+        // Hundreds of successful bounded sessions must not exhaust a total
+        // attempt counter. A revoked/unavailable provider never runs forever.
+        let mut failures = 0u32;
+        for _ in 0..500 {
+            failures = next_failure_count(failures, 2, 3).unwrap();
+            assert_eq!(failures, 0);
+        }
+        assert_eq!(next_failure_count(0, 0, 3).unwrap(), 1);
+        assert_eq!(next_failure_count(1, 0, 3).unwrap(), 2);
+        assert!(next_failure_count(2, 0, 3).is_err());
+        assert_eq!(next_failure_count(2, 1, 3).unwrap(), 0);
+        assert!(next_failure_count(0, 0, 0).is_err());
+        assert!(next_failure_count(u32::MAX, 0, u32::MAX).is_err());
+        assert_eq!(retry_delay(4), Duration::from_secs(16));
     }
 
     #[test]
