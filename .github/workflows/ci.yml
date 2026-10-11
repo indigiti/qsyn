@@ -232,8 +232,9 @@ jobs:
         working-directory: frontend
       - name: Check stage acceptance probe against 1600- and 15016-candle fixtures
         run: |
-          node --test ops/verify-public-backfill.test.mjs
+          node --test ops/verify-public-backfill.test.mjs ops/probe-stage-access.test.mjs
           node --check ops/verify-stage-chart.mjs
+          node --check ops/probe-stage-access.mjs
       - name: Verify provider-backed automatic max history, native paging and polling safety
         run: node tests/crypto-backfill.test.mjs
         working-directory: frontend
