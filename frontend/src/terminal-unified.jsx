@@ -210,7 +210,7 @@ async function openAlgoAdminPost(operation, account_id, csrf){
   return json;
 }
 const NATIVE_UPSTOX_API='/qsyn/api/v1/admin/upstox/';
-function NativeUpstoxPanel(){
+function NativeUpstoxPanel({refreshTick=0}){
   const [status,setStatus]=useState(null),[busy,setBusy]=useState(false);
   const [profileCheck,setProfileCheck]=useState(null);
   const [lastDiagnostic,setLastDiagnostic]=useState(null);
@@ -227,7 +227,7 @@ function NativeUpstoxPanel(){
         :data.configured?'Upstox app configured. Authorize using your Upstox login.':'Set up your Upstox Developer App before authorizing.');
     }catch{setStatus(null);setNotice('Native Upstox setup is unavailable; check the QSYN administrator session and private runtime.');}
   },[]);
-  useEffect(()=>{void load();},[load]);
+  useEffect(()=>{void load();},[load,refreshTick]);
   async function action(operation,payload){
     if(!status?.csrf||busy)return;
     setBusy(true);
@@ -348,6 +348,7 @@ function NativeUpstoxPanel(){
 }
 export function BrokersWorkspace({openView}){
   const [catalog,setCatalog]=useState(null),[admin,setAdmin]=useState(null);
+  const [nativeRefreshTick,setNativeRefreshTick]=useState(0);
   const [inventory,setInventory]=useState(null),[selected,setSelected]=useState('upstox');
   const [message,setMessage]=useState('No production broker session verified');
   const [statuses,setStatuses]=useState({}),[loginTarget,setLoginTarget]=useState(null);
@@ -464,9 +465,9 @@ export function BrokersWorkspace({openView}){
         </button>)}
       </div>
       {!catalog&&<p>Broker catalog is temporarily unavailable.</p>}
-      <p role="status" className="qt-message">{selected==='upstox'?'Native Upstox OAuth and index data subscription are not activated; no OpenAlgo API key is required.':message}</p>
+      <p role="status" className="qt-message">{selected==='upstox'?'Native Upstox uses direct OAuth and Rust. Check current OAuth below; live licensed index subscriptions are not activated.':message}</p>
       <button className="terminal-action terminal-secondary-action" disabled={busy}
-        onClick={()=>void refresh(new AbortController().signal)}>
+        onClick={()=>selected==='upstox' ? setNativeRefreshTick(v=>v+1) : void refresh(new AbortController().signal)}>
         <RefreshCw size={16}/> Refresh broker status
       </button>
     </section>
@@ -475,7 +476,7 @@ export function BrokersWorkspace({openView}){
       <p>Connect directly to Upstox. Its Market Data Feed V3 is decoded by the Rust streaming
         engine and distributed to authorized React index charts. No OpenAlgo application key,
         OpenAlgo Python runtime, or trading connection is required.</p>
-      <NativeUpstoxPanel/>
+      <NativeUpstoxPanel refreshTick={nativeRefreshTick}/>
       <p className="terminal-footnote">Native Rust index subscriptions and licensed candle backfill
         are not activated until current instrument keys and exchange data entitlement are verified.</p>
       <button type="button" className="terminal-action terminal-secondary-action"
