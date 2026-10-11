@@ -18,6 +18,7 @@ import {
 import { createWidget, createChartGrid } from 'openalgo-charts/widget';
 import { QsynCryptoFeed } from './crypto-feed.js';
 import { cryptoDefault, CRYPTO_MARKETS } from './crypto-catalog.js';
+import { nativeCryptoWatchlists, noSyntheticQuotes } from './native-crypto-watchlists.js';
 import 'openalgo-charts/indicators';
 import { QsynWorkspaceFeed } from './terminal-feed.js';
 import { publicNativeWorkspaceStore } from './native-workspaces.js';
@@ -135,6 +136,7 @@ function HomepageChart({ theme }) {
   const [message,setMessage]=useState('Connecting public exchange candles…');
   const [preset,setPreset]=useState('1x1');
   const nativeWorkspaces=useMemo(()=>publicNativeWorkspaceStore(),[]);
+  const nativeWatchlists=useMemo(()=>nativeCryptoWatchlists(),[]);
   useEffect(()=>{
     if(!host.current)return;
     let active=true;
@@ -144,12 +146,13 @@ function HomepageChart({ theme }) {
       interval:'1m',intervals:['1m','5m','15m','1h','1d'],
       theme,branding:false,panels:true,toolbar:true,bottombar:true,
       preset,workspaces:nativeWorkspaces||undefined,
+      ...(nativeWatchlists?{watchlist:{store:nativeWatchlists,quotes:noSyntheticQuotes}}:{}),
       links:{crosshair:true},navigation:{defaultVisibleBars:120,mousePan:'horizontal'},
     });
     gridRef.current=grid;
     grid.ready.catch(()=>{if(active)setMessage('Public market feed unavailable · no demo fallback');});
     return ()=>{active=false;gridRef.current=null;grid.destroy();feed.destroy();};
-  },[theme,nativeWorkspaces]);
+  },[theme,nativeWorkspaces,nativeWatchlists]);
   function choose(next) {
     if(!next)return;
     setSelection(next);
