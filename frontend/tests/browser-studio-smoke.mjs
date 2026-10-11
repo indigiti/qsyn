@@ -1,6 +1,6 @@
 // Unified React strategy regression: no independent /qsyn/studio HTML.
 // All prices here remain simulated and order execution is disabled.
-import {spawn} from 'node:child_process';
+import {spawn,execFileSync} from 'node:child_process';
 import {mkdir,copyFile,rm,readFile} from 'node:fs/promises';
 import {createServer} from 'node:net';
 import {resolve} from 'node:path';
@@ -17,8 +17,10 @@ try{
   for(const ext of ['js','css'])
     await copyFile(resolve(root,'frontend/dist/terminal.'+ext),resolve(assets,'terminal.'+ext));
   const port=await freePort(),origin='http://127.0.0.1:'+port;
+  const adminPassword='ci-terminal-studio-admin-password-123456';
+  const adminHash=execFileSync('php',['-r','echo password_hash($argv[1], PASSWORD_DEFAULT);',adminPassword],{encoding:'utf8'}).trim();
   php=spawn('php',['-S','127.0.0.1:'+port,'-t','apps/web-php/public','apps/web-php/dev-router.php'],
-    {cwd:root,stdio:['ignore','pipe','pipe'],env:{...process.env,QSYN_ALLOW_HTTP_TEST:'1',
+    {cwd:root,stdio:['ignore','pipe','pipe'],env:{...process.env,QSYN_ALLOW_HTTP_TEST:'1',QSYN_CONTROL_ENABLED:'1',QSYN_ADMIN_PASSWORD_HASH:adminHash,
       QSYN_IDENTITY_ENABLED:'0',QSYN_MOCK_ACCOUNTS_ENABLED:'0'}});
   for(let i=0;i<60;i++){
     try{if((await fetch(origin+'/qsyn/api/v1/health')).ok)break;}catch{}
@@ -29,6 +31,15 @@ try{
   const errors=[],orders=[];
   page.on('pageerror',e=>errors.push(e.message));
   page.on('request',r=>{if(/\/api\/v1\/(placeorder|modifyorder|cancelorder)/.test(r.url()))orders.push(r.url());});
+  for(const path of ['/qsyn/studio','/qsyn/studio/']){
+    const blocked=await page.request.get(origin+path,{maxRedirects:0});
+    if(blocked.status()!==303 || blocked.headers().location!=='/qsyn/terminal/login')
+      throw Error('Anonymous Studio bypassed admin sign-in');
+  }
+  await page.goto(origin+'/qsyn/studio/',{waitUntil:'domcontentloaded'});
+  await page.getByLabel('QSYN administrator password').fill(adminPassword);
+  await page.getByRole('button',{name:'Unlock terminal'}).click();
+  await page.getByRole('heading',{name:'Trading charts'}).waitFor();
   for(const path of ['/qsyn/studio','/qsyn/studio/']){
     const res=await page.request.get(origin+path,{maxRedirects:0});
     if(res.status()!==302||res.headers().location!=='/qsyn/terminal/strategy'||
