@@ -27,6 +27,9 @@ jobs:
           php -l apps/web-php/public/index.php
           php -l apps/web-php/src/TerminalRoutes.php
           php apps/web-php/tests/TerminalRoutesTest.php
+          php -l apps/web-php/src/TerminalAdminGate.php
+          php -l apps/web-php/public/terminal-login.php
+          python3 apps/web-php/tests/TerminalAdminGateHttpSmoke.py
           php -l apps/web-php/public/terminal.php
           php -l apps/web-php/src/RustProbe.php
           php -l apps/web-php/src/RustStreamProbe.php
