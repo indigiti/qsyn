@@ -72,26 +72,74 @@ try{
   assert.equal(wickRequiredBars([{indicatorId:WICK_SCIENCE_ID,
     settings:()=>({setupTf:'5',samples:100})}],'1m'),516);
   assert.equal(wickRequiredBars(studies,'15m'),0);
-  const callbacks=new Map();
-  let reloads=0,requests=0;
+  // Integration contract: for an unchanged instrument OpenAlgo's
+  // widget.reload() only calls controller.refresh() (tail repair).
+  // Wick's maximum must invoke a FULL native controller.load() with a wide
+  // historical window, not a 300-candle refresh.
+  const callbacks=new Map(),subscribers=new Set(),loads=[];
+  let status='loading', retained=Array.from({length:1600},()=>({time:now})),refreshes=0;
+  const request={exchange:'BINANCE:spot',symbol:'BTCUSDT',interval:'1m',
+    from:now-1600*60,to:now+60};
+  const controller={
+    getState:()=>({status,request,bars:retained}),
+    bars:()=>retained,
+    subscribe:callback=>{subscribers.add(callback);return ()=>subscribers.delete(callback);},
+    load:loadRequest=>{
+      loads.push(loadRequest);
+      status='loading';
+      for(const callback of [...subscribers])callback();
+      return Promise.resolve([]);
+    },
+    refresh:()=>{refreshes++;return Promise.resolve([])},
+  };
+  const settingsLive={setupTf:'15',samples:1000};
+  const studiesLive=[{indicatorId:WICK_SCIENCE_ID,settings:()=>settingsLive}];
   const widget={
     isDestroyed:false,chart:{
-      indicators:()=>studies,
+      indicators:()=>studiesLive,
       on:(name,handler)=>{callbacks.set(name,handler);
         return ()=>callbacks.delete(name);},
     },
+    dataController:controller,
     interval:()=> '1m',exchange:()=> 'BINANCE:spot',symbol:()=> 'BTCUSDT',
-    reload:()=>{reloads++;return Promise.resolve();},
+    reload:()=>{refreshes++;return Promise.resolve();},
   };
-  const stub={setHistoryTarget:()=>{requests++;return requests===1;}};
+  const requested=[];
+  const stub={setHistoryTarget:(exchange,symbol,interval,bars)=>{
+    requested.push({exchange,symbol,interval,bars});return true;
+  }};
   const stop=observeWickScienceBackfill(widget,stub);
-  await Promise.resolve();await Promise.resolve();
-  assert.equal(reloads,1);
+  assert.equal(loads.length,0,'must not abort the initial native load');
+  status='ready';
+  for(const callback of [...subscribers])callback();
+  assert.equal(loads.length,1);
+  assert.equal(refreshes,0,'native tail refresh cannot supply older history');
+  assert.equal(requested.length,1);
+  assert.equal(requested[0].bars,MAX_AUTO_BACKFILL_BARS);
+  assert.equal(loads[0].countBack,MAX_AUTO_BACKFILL_BARS);
+  assert.equal(loads[0].noCache,false);
+  assert.equal(loads[0].exchange,'BINANCE:spot');
+  assert.equal(loads[0].interval,'1m');
+  assert.ok(loads[0].from<=now-(MAX_AUTO_BACKFILL_BARS+2)*60);
+  assert.ok(loads[0].to>=now);
+  assert.equal(loads[0].timeoutMs,undefined);
   callbacks.get('objects:change')();
-  await Promise.resolve();
-  assert.equal(reloads,1);
+  assert.equal(loads.length,1,'one attempt per instrument/settings target');
+  status='ready';
+  retained=Array.from({length:MAX_AUTO_BACKFILL_BARS},()=>({time:now}));
+  for(const callback of [...subscribers])callback();
+  assert.equal(loads.length,1,'do not retry a completed full load');
+
+  // Existing default 5m/100-sample study needs <=1600 candles. No full
+  // network reread should occur when its history is already in the chart.
+  settingsLive.setupTf='5';settingsLive.samples=100;
+  retained=Array.from({length:1600},()=>({time:now}));
+  callbacks.get('objects:change')();
+  assert.equal(loads.length,1);
   stop();
   assert.equal(callbacks.size,0);
+  assert.equal(subscribers.size,0);
+  widget.isDestroyed=true;
   console.log('QSYN provider historical paging, auto max, live tail and indicator demand: PASS');
 }finally{
   globalThis.fetch=original;
