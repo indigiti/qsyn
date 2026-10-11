@@ -327,7 +327,15 @@ try {
 
   // The actual failure occurred on a direct pretty-URL reload after the
   // account was already configured. Keep the mock while testing deep-link.
-  await page.goto(origin+'/qsyn/terminal/brokers',{waitUntil:'domcontentloaded'});
+  const brokerResponse=await page.goto(origin+'/qsyn/terminal/brokers',{waitUntil:'domcontentloaded'});
+  if(brokerResponse.status()!==200)
+    throw new Error('Protected Brokers HTML returned '+brokerResponse.status());
+  const brokerHtml=await brokerResponse.text();
+  if(/<script\\b(?![^>]*\\bsrc\\s*=)[^>]*>/i.test(brokerHtml))
+    throw new Error('QSYN Brokers HTML includes an inline script prohibited by its CSP');
+  if(!String(brokerResponse.headers()['content-security-policy']||'')
+      .includes("script-src 'self'"))
+    throw new Error('Brokers HTML lost its strict script-src CSP');
   await page.getByRole('heading',{name:'Accounts & authorizations'}).waitFor();
   await page.getByRole('button',{name:'Discover index instrument keys'}).waitFor({state:'visible'});
   if(browserErrors.length)
