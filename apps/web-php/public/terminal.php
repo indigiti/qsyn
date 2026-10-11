@@ -32,12 +32,14 @@ if (!in_array($requestedPath, ['/', '/qsyn', '/qsyn/'], true)) {
 }
 // Defense in depth for installations that expose this physical PHP shell
 // directly: apply the same strict HTML transport/CSP as the canonical router.
+// The canonical router provides a fresh nonce; direct shell calls create one.
+$qsynCspNonce = $qsynCspNonce ?? base64_encode(random_bytes(18));
 header('Content-Type: text/html; charset=utf-8');
-header('Cache-Control: no-store, no-transform');
+header('Cache-Control: no-store');
 header('X-Frame-Options: DENY');
 header('X-Robots-Tag: noindex, nofollow');
 header('Content-Security-Policy: default-src ' . "'self'" .
-    '; script-src ' . "'self'" . '; style-src ' . "'self' 'unsafe-inline'" .
+    '; script-src ' . "'self' 'nonce-" . $qsynCspNonce . "'" . '; style-src ' . "'self' 'unsafe-inline'" .
     '; connect-src ' . "'self'" . '; img-src ' . "'self' data:" .
     '; frame-ancestors ' . "'none'" . ';');
 $js = __DIR__ . '/assets/terminal.js';
@@ -59,6 +61,6 @@ $cssVersion = (string) (@filemtime($css) ?: '0');
     <p style="padding:24px;font:14px system-ui">QSYN trading terminal · loading simulated workspace…</p>
   </div>
   <noscript>JavaScript is required for this chart terminal.</noscript>
-  <script src="/qsyn/assets/terminal.js?v=<?= rawurlencode($jsVersion) ?>" defer></script>
+  <script nonce="<?= htmlspecialchars($qsynCspNonce, ENT_QUOTES, 'UTF-8') ?>" src="/qsyn/assets/terminal.js?v=<?= rawurlencode($jsVersion) ?>" defer></script>
 </body>
 </html>
