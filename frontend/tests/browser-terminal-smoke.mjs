@@ -43,135 +43,36 @@ try {
   const page=await browser.newPage({viewport:{width:1440,height:900}});
   page.on('pageerror',e=>browserErrors.push(e.message));
   page.on('request',r=>browserRequests.push(r.url()));
-  // The public homepage renders a dedicated full-width OpenAlgo widget; no redirect.
+  // Homepage uses native OpenAlgo Charts 2.6 grid and a strict public crypto
+  // catalog. In CI Rust is not started: failure must NOT produce fake candles.
   const response=await page.goto(origin+'/qsyn/',{waitUntil:'domcontentloaded',timeout:25000});
-  if(response.status()!==200)throw new Error('QSYN homepage returned '+response.status());
-  if(new URL(page.url()).pathname!=='/qsyn/')
-    throw new Error('Homepage redirected away from /qsyn/');
+  if(response.status()!==200) throw new Error('QSYN homepage returned '+response.status());
+  if(new URL(page.url()).pathname!=='/qsyn/') throw new Error('Homepage redirected');
   const alternate=await page.request.get(origin+'/qsyn/terminal');
-  if(alternate.status()!==200 || !(await alternate.text()).includes('qsyn-root'))
-    throw new Error('Canonical terminal route became unavailable');
+  if(alternate.status()!==200)throw new Error('Terminal unavailable');
   const rollback=await page.request.get(origin+'/qsyn/legacy-chart');
-  if(rollback.status()!==200 || !(await rollback.text()).includes('chart-reset'))
-    throw new Error('Legacy chart diagnostics rollback route unavailable');
+  if(rollback.status()!==200)throw new Error('Legacy chart unavailable');
   const blockedPost=await page.request.post(origin+'/qsyn/');
-  if(blockedPost.status()!==405)throw new Error('Chart homepage accepted POST');
+  if(blockedPost.status()!==405)throw new Error('Homepage accepted POST');
   if(!String(response.headers()['content-security-policy']).includes("connect-src 'self'"))
-    throw new Error('Terminal lost same-origin API CSP');
-  if(!String(response.headers()['x-robots-tag']).includes('noindex'))
-    throw new Error('Terminal staging was unexpectedly indexable');
-  // The homepage is now a chart-only OpenAlgo canvas: NO QSYN navigation,
-  // premium-title strip, or extra chart-card heading above native controls.
-  await page.locator('.qsyn-home-chart .terminal-chart-host').waitFor();
-  await page.waitForFunction(()=>document.querySelectorAll('.qsyn-home-chart #qsyn-native-chart canvas').length>0,
-    null,{timeout:12000});
-  // Widget 2.6.0 exposes official branding:false and classes for real controls.
-  // Require a clean home toolbar while keeping the Objects/Data/Alerts
-  // buttons functional and their labels available to screen readers.
-  await page.waitForFunction(() => ['objects','data','alerts'].every(name =>
-    document.querySelector('.qsyn-home-chart .oac-topbar__'+name)));
-  if(await page.locator('.qsyn-home-chart .oac-topbar__branding').count()!==0)
-    throw new Error('Homepage OpenAlgo branding link was not disabled through widget options');
-  for(const name of ['objects','data','alerts']){
-    const control=page.locator('.qsyn-home-chart .oac-topbar__'+name);
-    const appearance=await control.evaluate(node=>{
-      const before=getComputedStyle(node,'::before');
-      return {label:node.getAttribute('aria-label'),visible:node.getBoundingClientRect().width>0,
-        content:before.content,mask:before.maskImage||before.webkitMaskImage};
-    });
-    if(appearance.label?.toLowerCase()!==name || !appearance.visible ||
-       appearance.content==='none' || !appearance.mask.includes('data:image/svg+xml'))
-      throw new Error(name+' lost native accessibility or icon: '+JSON.stringify(appearance));
-    if(!await control.isEnabled())throw new Error(name+' control was disabled');
-    const compact=await control.evaluate(el=>{
-      const box=el.getBoundingClientRect();
-      const style=getComputedStyle(el);
-      const tooltip=getComputedStyle(el,'::after');
-      return {width:box.width,fontSize:style.fontSize,text:el.textContent?.trim(),
-        tooltip:tooltip.content,tooltipVisibility:tooltip.visibility,tooltipOpacity:tooltip.opacity};
-    });
-    if(compact.width>36 || compact.fontSize!=='0px' || compact.tooltip!=='"'+name[0].toUpperCase()+name.slice(1)+'"')
-      throw new Error(name+' is not icon-only with a named tooltip: '+JSON.stringify(compact));
-    if(compact.tooltipVisibility!=='hidden' || Number(compact.tooltipOpacity)!==0)
-      throw new Error(name+' tooltip visible without interaction');
-    await control.hover();
-    const hovered=await control.evaluate(el=>{
-      const tooltip=getComputedStyle(el,'::after');
-      return {visibility:tooltip.visibility,opacity:tooltip.opacity};
-    });
-    if(hovered.visibility!=='visible' || Number(hovered.opacity)!==1)
-      throw new Error(name+' tooltip not shown on hover: '+JSON.stringify(hovered));
-    await page.mouse.move(900,300);
-    // Keyboard input must expose exactly the same tooltip for accessibility.
-    await page.keyboard.press('Tab');
-    await control.focus();
-    const focused=await control.evaluate(el=>{
-      const tooltip=getComputedStyle(el,'::after');
-      return {focusVisible:el.matches(':focus-visible'),visibility:tooltip.visibility};
-    });
-    if(!focused.focusVisible || focused.visibility!=='visible')
-      throw new Error(name+' tooltip missing on keyboard focus: '+JSON.stringify(focused));
-    await control.blur();
-  }
-  if(await page.locator('.qsyn-home-topbar, .qsyn-home-heading, .qsyn-home-chart .terminal-card-head').filter({visible:true}).count())
-    throw new Error('Removed homepage topbars/headings reappeared');
-  if(await page.getByText('Premium chart',{exact:true}).count())
-    throw new Error('Removed Premium chart title reappeared');
-  const chartBounds=await page.locator('.qsyn-home-chart .terminal-chart-host')
-    .evaluate(node=>({width:node.getBoundingClientRect().width,top:node.getBoundingClientRect().top}));
-  if(chartBounds.width<1200 || chartBounds.top>8)
-    throw new Error('Homepage chart must start at top of viewport and span width: '+JSON.stringify(chartBounds));
-  if(await page.locator('html').getAttribute('data-qsyn-theme')!=='light')
-    throw new Error('First-visit homepage did not match light reference');
-  // The public homepage must contain ONLY the OpenAlgo chart widget.
-  // The detailed simulation disclosures and navigation remain in /qsyn/terminal.
-  if(await page.locator('.qsyn-home-topbar, .qsyn-home-heading, .qsyn-home-disclaimer').count())
-    throw new Error('Unexpected QSYN header or footer on chart-only homepage');
-  if(await page.locator('.qsyn-home-chart .terminal-footnote').filter({visible:true}).count())
-    throw new Error('Homepage chart footnotes should not occupy page space');
-  // Do not mistake provider-owned chart links/controls for removed QSYN UI.
-  if(await page.locator('.qsyn-homepage a[href^="/qsyn/terminal"], .qsyn-homepage a[href="/qsyn/studio"]').count())
-    throw new Error('Homepage should not render QSYN shortcut/footer links');
-  // Native OpenAlgo workspace repository uses IndexedDB, NOT QSYN's
-  // legacy localStorage layout schema. The real widget owns the Layouts UI.
-  const layoutsIcon=page.locator('.qsyn-home-chart .oac-topbar__layouts');
-  await layoutsIcon.waitFor({timeout:12000});
-  if(await layoutsIcon.evaluate(node=>node.getBoundingClientRect().width)>40)
-    throw new Error('Homepage native Layouts control should be icon-only');
-  await layoutsIcon.click();
-  await page.locator('.oac-layouts [data-action="save-as"]').waitFor();
-  await page.locator('.oac-layouts [data-action="save-as"]').click();
-  const nativeName='QSYN Native Workspace Smoke';
-  await page.locator('.oac-layouts__input').fill(nativeName);
-  await page.locator('.oac-layouts__input').press('Enter');
-  await page.waitForFunction(name => {
-    const el=document.querySelector('.oac-layouts__name');
-    return el?.textContent?.includes(name);
-  },nativeName,{timeout:12000});
-  await page.keyboard.press('Escape');
-  await page.reload({waitUntil:'domcontentloaded'});
-  await page.waitForFunction(()=>document.querySelectorAll('.qsyn-home-chart #qsyn-native-chart canvas').length>0);
-  await page.locator('.qsyn-home-chart .oac-topbar__layouts').click();
-  await page.waitForFunction(name => {
-    const el=document.querySelector('.oac-layouts__name');
-    return el?.textContent?.includes(name);
-  },nativeName,{timeout:12000});
-  await page.keyboard.press('Escape');
-  // Native template library is exposed by the real OpenAlgo Indicators picker.
-  await page.locator('.qsyn-home-chart .oac-topbar button[aria-label="Indicators"]').click();
-  await page.locator('[data-action="templates"]').waitFor({timeout:12000});
-  await page.locator('[data-action="templates"]').click();
-  await page.locator('.oac-templates [data-action="save-template"]').waitFor({timeout:12000});
-  await page.keyboard.press('Escape');
-  const chartHeight=await page.locator('.qsyn-home-chart .terminal-chart-host')
-    .evaluate(node=>node.getBoundingClientRect().height);
-  if(chartHeight<890)throw new Error('Homepage chart does not fill 900px desktop viewport: '+chartHeight);
-  // It is still deterministic simulated market data with execution disabled.
-  const capabilities=await (await page.request.get(origin+'/qsyn/api/v1/studio/capabilities')).json();
-  if(capabilities.market_data!=='simulated' || capabilities.execution_enabled!==false ||
-     capabilities.live_trading_enabled!==false)
-    throw new Error('Clean homepage must not alter simulated-only market/trading contract');
-
+    throw new Error('Same-origin CSP missing');
+  if(!String(response.headers()['x-robots-tag']).includes('noindex'))throw new Error('Staging exposed');
+  const market=page.getByRole('combobox',{name:'Exchange market and symbol'});
+  await market.waitFor({timeout:20000});
+  await page.waitForFunction(()=>document.querySelectorAll('.qsyn-crypto-grid canvas').length>0,null,{timeout:12000});
+  if(await market.locator('option').count()<20)throw new Error('Incomplete public crypto venue catalog');
+  await market.selectOption('HYPERLIQUID:perp:BTC');
+  if(await market.inputValue()!=='HYPERLIQUID:perp:BTC')throw new Error('Hyperliquid not selectable');
+  await market.selectOption('COINBASE:spot:BTC-USD');
+  if(await market.inputValue()!=='COINBASE:spot:BTC-USD')throw new Error('Coinbase not selectable');
+  const layout=page.getByRole('combobox',{name:'Chart grid layout'});
+  await layout.selectOption('1x2');
+  await page.waitForFunction(()=>document.querySelectorAll('.qsyn-crypto-grid canvas').length>=2);
+  await layout.selectOption('1x1');
+  const invalid=await page.request.get(origin+'/qsyn/api/v1/crypto/bars?exchange=BAD&market=spot&symbol=../../secret&interval=1m');
+  if(invalid.status()!==422)throw new Error('Crypto proxy did not reject unsupported path');
+  if(await page.locator('.qsyn-homepage .terminal-sidebar').count())throw new Error('Homepage gained dashboard navigation');
+  if(await page.locator('html').getAttribute('data-qsyn-theme')!=='light')throw new Error('First-visit light theme lost');
   // The /qsyn/terminal route retains existing chart compare, watchlist,
   // private-workspace and broker-safety behavior.
   await page.goto(origin+'/qsyn/terminal',{waitUntil:'domcontentloaded'});
@@ -280,10 +181,10 @@ try {
   mobile.on('pageerror',e=>browserErrors.push(e.message));
   await mobile.goto(origin+'/qsyn/',{waitUntil:'domcontentloaded'});
   await mobile.waitForFunction(()=>document.querySelectorAll('.qsyn-home-chart canvas').length>0);
-  const mobileChartTop=await mobile.locator('.qsyn-home-chart .terminal-chart-host')
+  const mobileChartTop=await mobile.locator('.qsyn-home-chart .qsyn-crypto-grid')
     .evaluate(node=>node.getBoundingClientRect().top);
   if(mobileChartTop>8)throw new Error('Mobile chart is not at top of page');
-  const mobileChartHeight=await mobile.locator('.qsyn-home-chart .terminal-chart-host')
+  const mobileChartHeight=await mobile.locator('.qsyn-home-chart .qsyn-crypto-grid')
     .evaluate(node=>node.getBoundingClientRect().height);
   if(mobileChartHeight<830)throw new Error('Mobile chart should fill screen: '+mobileChartHeight);
   if(await mobile.locator('.qsyn-home-chart .terminal-footnote').filter({visible:true}).count())

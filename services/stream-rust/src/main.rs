@@ -1,5 +1,6 @@
 mod binary_activation;
 mod process_control;
+mod crypto_public;
 
 use axum::{
     extract::ws::{Message, WebSocket, WebSocketUpgrade},
@@ -96,7 +97,8 @@ async fn run_service() -> Result<(), Box<dyn std::error::Error>> {
     binary_activation::start();
     let app = Router::new()
         .route("/health", get(health))
-        .route("/ws/demo", get(demo_ws));
+        .route("/ws/demo", get(demo_ws))
+        .merge(crypto_public::router());
     println!("QSYN Rust foundation listening on {bind}");
     axum::serve(listener, app).await?;
     Ok(())
