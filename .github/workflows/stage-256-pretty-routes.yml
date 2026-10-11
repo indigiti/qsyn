@@ -1,0 +1,90 @@
+name: QSYN Stage 256 Pretty Routes Acceptance
+on:
+  push:
+    branches: [probe/unified-terminal-stage-246]
+permissions:
+  contents: read
+jobs:
+  routing:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Verify deployed URLs, immutable homepage and guarded APIs
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json,re,urllib.request,urllib.error,hashlib
+          BASE='https://stage.digiti.in'
+          class NoRedirect(urllib.request.HTTPRedirectHandler):
+              def redirect_request(self,req,fp,code,msg,headers,newurl):
+                  return None
+          opener=urllib.request.build_opener(NoRedirect())
+          count=0
+          def check(path,code=200,location=None,ctype=None,method='GET',cache_control=False):
+              global count
+              req=urllib.request.Request(BASE+path,method=method,headers={
+                  'User-Agent':'QSYN-Stage-256-Routing/1','Accept':'text/html,application/json',
+                  'Cache-Control':'no-cache'})
+              try:
+                  with opener.open(req,timeout=20) as response:
+                      status=response.status;headers=response.headers;body=response.read(2500000)
+              except urllib.error.HTTPError as e:
+                  status=e.code;headers=e.headers;body=e.read(2500000)
+              entry={'path':path,'status':status,'location':headers.get('Location'),
+                     'cache':headers.get('Cache-Control'),'age':headers.get('Age'),
+                     'x-cache':headers.get('X-Cache'),'bytes':len(body)}
+              print('ROUTE',json.dumps(entry))
+              assert status==code,(path,status,code,body[:160])
+              if location is not None:assert headers.get('Location')==location,(path,headers.get('Location'))
+              if ctype is not None:assert ctype in headers.get('Content-Type',''),(path,headers.get('Content-Type'))
+              if cache_control:assert 'no-store' in headers.get('Cache-Control',''),(path,headers.get('Cache-Control'))
+              count+=1
+              return body,headers
+          views=['dashboard','markets','trading','strategy','workspaces','brokers',
+                 'diagnostics','operations','routes','tools','private-live']
+          for view in views:
+              body,headers=check('/qsyn/terminal/'+view,200,ctype='text/html',cache_control=True)
+              assert 'id="qsyn-root"' in body.decode('utf-8','replace'),('missing React root',view)
+          for source,target in [
+              ('/qsyn/terminal','/qsyn/terminal/trading'),
+              ('/qsyn/terminal/','/qsyn/terminal/trading'),
+              ('/qsyn/terminal?view=markets','/qsyn/terminal/markets'),
+              ('/qsyn/terminal/?view=operations','/qsyn/terminal/operations'),
+              ('/qsyn/studio/','/qsyn/terminal/strategy'),
+              ('/qsyn/admin/rust','/qsyn/terminal/operations'),
+              ('/qsyn/legacy-chart','/qsyn/terminal/diagnostics'),
+              ('/qsyn/terminal/markets/','/qsyn/terminal/markets')]:
+              check(source,302,location=target,cache_control=True)
+          check('/qsyn/terminal/not-a-page',404)
+          check('/qsyn/terminal/markets/nested',404)
+          check('/qsyn/terminal/markets',405,method='POST')
+          check('/qsyn/studio/',405,method='POST')
+          check('/qsyn/api/v1/admin/rust/action',401,method='POST')
+          # The previous clean chart homepage must still be its own page.
+          main,headers=check('/qsyn/?qsyn_release_check=256',200,ctype='text/html')
+          assert 'id="qsyn-root"' in main.decode('utf-8','replace'),'homepage root missing'
+          assert 'terminal-sidebar' not in main.decode('utf-8','replace'),'unexpected homepage sidebar'
+          original,headers=check('/qsyn/',200,ctype='text/html')
+          print('HOMEPAGE_HASH',hashlib.sha256(main).hexdigest()[:12],
+                hashlib.sha256(original).hexdigest()[:12],
+                'AGE',headers.get('Age'),'X_CACHE',headers.get('X-Cache'))
+          state,_=check('/qsyn/api/v1/admin/rust/state',200,ctype='application/json')
+          auth=json.loads(state)
+          assert auth.get('authenticated') is False,'anonymous admin access'
+          index,_=check('/qsyn/api/v1/india/indexes',200,ctype='application/json')
+          data=json.loads(index)
+          assert data.get('schema')=='QSYN-INDIA-INDEX-CATALOG/1' and len(data.get('indexes',[]))==6
+          check('/qsyn/api/v1/india/bars?exchange=NSE_INDEX&symbol=NIFTY&interval=1m&limit=5',503)
+          crypto,_=check('/qsyn/api/v1/crypto/health?exchange=BINANCE&market=spot&symbol=BTCUSDT&interval=1m&limit=5',200,ctype='application/json')
+          feed=json.loads(crypto)
+          assert feed.get('schema')=='QSYN-PUBLIC-CRYPTO-HEALTH/1'
+          print('CRYPTO_STATE',json.dumps({'state':feed.get('feed',{}).get('state'),'fresh':feed.get('feed',{}).get('fresh')}))
+          # Ensure React bundle actually includes route-management view.
+          html=main.decode('utf-8','replace')
+          match=re.search(r'src="(/qsyn/assets/terminal[.]js[^"]*)"',html)
+          assert match,'missing versioned chart bundle'
+          script,_=check(match.group(1),200)
+          assert b'Route management' in script and b'/qsyn/terminal/routes' in script,'old terminal bundle still delivered'
+          print('ACCEPTANCE_SUMMARY',json.dumps({'tested':count,'passed':count,'views':len(views),
+            'staging_commit_expected':'63f1e5b19268','browsers_tested':False}))
+          PY
