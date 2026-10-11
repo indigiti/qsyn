@@ -411,6 +411,34 @@ if ($route === '/qsyn/api/v1/terminal/workspace') {
     respond($payload, $status);
 }
 
+// Explicitly enabled, authenticated single-operator NSE/BSE index viewer.
+// Separate from mock identity, public market data and broker OAuth. A short
+// viewer grant still REQUIRES independently provisioned current private rights.
+if (in_array($route, [
+    '/qsyn/api/v1/admin/upstox/private-chart-access',
+    '/qsyn/api/v1/admin/upstox/private-chart-grant',
+], true)) {
+    $src = dirname(__DIR__) . '/src';
+    if (!is_file($src . '/OperatorIndexChartGrantApi.php')) {
+        $src = dirname(__DIR__, 2) . '/private_html/qsyn/app/src';
+    }
+    foreach (['RustAdmin', 'OperatorIndexChartGrantApi'] as $module) {
+        if (!is_file($src . '/' . $module . '.php')) {
+            respond(['error'=>'private_operator_chart_module_unavailable'], 503);
+        }
+        require_once $src . '/' . $module . '.php';
+    }
+    header('Cache-Control: private, no-store');
+    header('Pragma: no-cache');
+    header('X-Robots-Tag: noindex, nofollow');
+    [$status, $payload] = \QSYN\MarketData\OperatorIndexChartGrantApi::dispatch(
+        $_SERVER,
+        str_ends_with($route, 'private-chart-access') ? 'access' : 'grant'
+    );
+    if ($status === 405) header('Allow: ' . (str_ends_with($route, 'private-chart-access') ? 'GET' : 'POST'));
+    respond($payload, $status);
+}
+
 // Dev/private ONLY: issue a 30-second instrument-scoped chart WSS grant.
 // The rights file and Rust private chart server remain operator provisioned.
 // No open public chart websocket or broker session is configured by this route.
