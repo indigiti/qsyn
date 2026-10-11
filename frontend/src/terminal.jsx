@@ -25,6 +25,7 @@ import {
   storeBrowserWorkspace, saveNamedLayout, normalizeWorkspace,
 } from './terminal-workspace.js';
 import './terminal.css';
+import { DashboardCockpit } from './dashboard.jsx';
 
 const BASE = '/qsyn/terminal';
 const VIEWS = new Set(['dashboard', 'trading', 'tools', 'private-live']);
@@ -547,7 +548,7 @@ function App() {
     <main id="terminal-main" className="terminal-main">
       <div className="terminal-alert" role="note"><ShieldAlert size={17}/>
         <span>{view === 'private-live' ? <><b>Restricted market data.</b> No feed is assumed connected; licensed account login and WSS proxy required. No orders.</> : <><b>Simulation workspace.</b> No live market data, connected broker or executable orders.</>}</span></div>
-      {view === 'dashboard' && <Dashboard capabilities={capabilities} openView={openView}/>}
+      {view === 'dashboard' && <DashboardCockpit capabilities={capabilities} openView={openView} theme={theme} ChartPanel={ChartPanel}/>}
       {view === 'trading' && <div className="terminal-page">
         <header className="terminal-title"><div><p className="terminal-eyebrow">MARKET WORKSPACE</p><h1>Trading charts</h1>
           <p>OpenAlgo Charts 2.6.0 with QSYN's existing simulated PHP data adapter.</p></div></header>
