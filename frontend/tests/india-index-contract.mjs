@@ -25,6 +25,25 @@ assert(all.some(x=>x.exchange==='BSE_INDEX:index' && x.symbol==='SENSEX'));
 assert.equal((await feed.searchSymbols({query:'bank nifty'}))[0].symbol,'BANKNIFTY');
 
 const originalFetch=globalThis.fetch;
+let cancellationCount=0;
+try {
+  globalThis.fetch=async ()=>{
+    cancellationCount++;
+    const err=new Error('The user aborted a request.');
+    err.name='AbortError';
+    throw err;
+  };
+  const abortFeed=new QsynMarketsFeed(()=>{},{indexAccessApproved:true});
+  assert.deepEqual(await abortFeed.getBars({
+    exchange:'NSE_INDEX:index',symbol:'NIFTY',interval:'1m'
+  }),[],'index abort must settle without an unhandled promise');
+  assert.deepEqual(await abortFeed.getBars({
+    exchange:'BINANCE:spot',symbol:'BTCUSDT',interval:'1m'
+  }),[],'crypto abort must settle without an unhandled promise');
+  assert.equal(cancellationCount,2);
+  abortFeed.destroy();
+} finally {globalThis.fetch=originalFetch;}
+
 let calls=0;
 try{
   globalThis.fetch=async url=>{
