@@ -1,4 +1,5 @@
 name: QSYN Seven Venue Live Acceptance
+# Post-deployment acceptance: QSYN #231, main 3400750ae0da.
 
 on:
   push:
