@@ -184,6 +184,7 @@ async fn load(req:&Request)->Result<Vec<Bar>,()> {
     if req.exchange=="KRAKEN" && json["error"].as_array().is_some_and(|v|!v.is_empty()) {return Err(());}
     let bars=parse_rows(req,&json)?;
     if bars.is_empty() {return Err(());}
+    stream::rest_completed(req,&bars).await;
     let mut guard=cache().lock().await;
     if guard.len()>128 {guard.retain(|_,(when,_)|when.elapsed()<Duration::from_secs(30));}
     guard.insert(cache_key,(Instant::now(),bars.clone()));
@@ -202,6 +203,18 @@ fn overlay(bars:&mut Vec<Bar>,live:Option<Bar>,limit:usize){
     }
     if bars.len()>limit {bars.drain(..bars.len()-limit);}
 }
+async fn health(Query(req):Query<Request>)->Response {
+    if !valid(&req) {
+        return (StatusCode::UNPROCESSABLE_ENTITY,Json(json!({"error":"unsupported_crypto_instrument"}))).into_response();
+    }
+    (StatusCode::OK,Json(json!({
+        "schema":"QSYN-PUBLIC-CRYPTO-HEALTH/1",
+        "exchange":req.exchange,"market":req.market,"symbol":req.symbol,
+        "interval":req.interval,"source":"exchange_public",
+        "asof_ms":epoch_ms(),"trading_enabled":false,
+        "feed":stream::health(&req).await
+    }))).into_response()
+}
 async fn bars(Query(req):Query<Request>)->Response {
     if !valid(&req) {return (StatusCode::UNPROCESSABLE_ENTITY,Json(json!({"error":"unsupported_crypto_instrument"}))).into_response();}
     stream::ensure(&req).await;
@@ -217,7 +230,9 @@ async fn bars(Query(req):Query<Request>)->Response {
     }
 }
 pub fn router()->Router {
-    Router::new().route("/api/v1/crypto/bars",get(bars))
+    Router::new()
+        .route("/api/v1/crypto/bars",get(bars))
+        .route("/api/v1/crypto/health",get(health))
 }
 #[cfg(test)]
 mod tests {
