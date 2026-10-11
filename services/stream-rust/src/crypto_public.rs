@@ -53,7 +53,7 @@ fn timestamp(v: &Value, ms: bool) -> Option<u64> {
 }
 fn bar(time:u64, open:f64, high:f64, low:f64, close:f64, volume:f64, step:u64) -> Option<Bar> {
     let now=epoch_ms()/1000;
-    if time < 1_500_000_000 || time > now.saturating_add(step) || time%step!=0 ||
+    if time < 1_500_000_000 || time > now.saturating_add(step) || !time.is_multiple_of(step) ||
         open<=0.0 || high<=0.0 || low<=0.0 || close<=0.0 || volume<0.0 ||
         ![open,high,low,close,volume].iter().all(|v|v.is_finite()) ||
         high < open.max(close) || low > open.min(close) || low>high { return None; }
