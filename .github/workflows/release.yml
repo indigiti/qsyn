@@ -89,6 +89,8 @@ jobs:
           php apps/web-php/tests/NativeUpstoxIndexDiscoveryTest.php
           php -l apps/web-php/src/NativeAdminDiagnostics.php
           python3 apps/web-php/tests/NativeAdminDiagnosticsHttpSmoke.py
+          php -l apps/web-php/src/OperatorIndexChartGrantApi.php
+          python3 apps/web-php/tests/OperatorIndexChartGrantHttpSmoke.py
           php -l apps/web-php/src/SimulatedOptionsStudio.php
           php -l apps/web-php/public/studio.php
           php apps/web-php/tests/SimulatedOptionsStudioTest.php
@@ -216,6 +218,7 @@ jobs:
           cp apps/web-php/src/FileTerminalWorkspaceRepository.php staging/private/app/src/FileTerminalWorkspaceRepository.php
           cp apps/web-php/src/TerminalWorkspaceApi.php staging/private/app/src/TerminalWorkspaceApi.php
           cp apps/web-php/src/PrivateChartGrantApi.php staging/private/app/src/PrivateChartGrantApi.php
+          cp apps/web-php/src/OperatorIndexChartGrantApi.php staging/private/app/src/OperatorIndexChartGrantApi.php
           cp apps/web-php/src/UpstoxOperatorOAuth.php staging/private/app/src/UpstoxOperatorOAuth.php
           cp apps/web-php/src/NativeUpstoxWebApi.php staging/private/app/src/NativeUpstoxWebApi.php
           cp apps/web-php/src/NativeUpstoxProfileVerifier.php staging/private/app/src/NativeUpstoxProfileVerifier.php
@@ -332,6 +335,8 @@ jobs:
           test -s staging/private/app/src/FileTerminalWorkspaceRepository.php
           test -s staging/private/app/src/TerminalWorkspaceApi.php
           test -s staging/private/app/src/PrivateChartGrantApi.php
+          test -s staging/private/app/src/OperatorIndexChartGrantApi.php
+          php -l staging/private/app/src/OperatorIndexChartGrantApi.php
           test -s staging/private/app/src/UpstoxOperatorOAuth.php
           test -s staging/private/app/src/NativeUpstoxWebApi.php
           test -s staging/private/app/src/NativeUpstoxProfileVerifier.php
@@ -446,6 +451,8 @@ jobs:
           test -s verified-release/private/app/src/FileTerminalWorkspaceRepository.php
           test -s verified-release/private/app/src/TerminalWorkspaceApi.php
           test -s verified-release/private/app/src/PrivateChartGrantApi.php
+          test -s verified-release/private/app/src/OperatorIndexChartGrantApi.php
+          php -l verified-release/private/app/src/OperatorIndexChartGrantApi.php
           test -s verified-release/private/app/src/UpstoxOperatorOAuth.php
           test -s verified-release/private/app/src/NativeUpstoxWebApi.php
           test -s verified-release/private/app/src/NativeUpstoxProfileVerifier.php
