@@ -382,7 +382,7 @@ async fn worker(req:Request) {
 mod tests {
     use super::*;
     fn req(exchange:&str,market:&str,symbol:&str)->Request {
-        Request{exchange:exchange.into(),market:market.into(),symbol:symbol.into(),interval:"1m".into(),limit:Some(200)}
+        Request{exchange:exchange.into(),market:market.into(),symbol:symbol.into(),interval:"1m".into(),limit:Some(200),before:None}
     }
     #[test] fn native_provider_candle_events_are_normalized() {
         let t=1_696_982_400_000_u64;
