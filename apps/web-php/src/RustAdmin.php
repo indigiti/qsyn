@@ -152,6 +152,28 @@ final class RustAdmin
             || $localTest;
     }
 
+    /**
+     * CSRF for the unauthenticated terminal password form only.
+     * Separate from the privileged, post-login administrator CSRF token.
+     */
+    public static function terminalLoginCsrf(): string
+    {
+        if (session_status() !== PHP_SESSION_ACTIVE) {
+            throw new \RuntimeException('admin_session_required');
+        }
+        if (!isset($_SESSION['qsyn_terminal_login_csrf'])) {
+            $_SESSION['qsyn_terminal_login_csrf'] = bin2hex(random_bytes(32));
+        }
+        return (string) $_SESSION['qsyn_terminal_login_csrf'];
+    }
+
+    public static function verifyTerminalLoginCsrf(string $token): bool
+    {
+        return strlen($token) === 64
+            && isset($_SESSION['qsyn_terminal_login_csrf'])
+            && hash_equals((string) $_SESSION['qsyn_terminal_login_csrf'], $token);
+    }
+
     public static function attempt(string $password): bool
     {
         if (!self::configured()) {
