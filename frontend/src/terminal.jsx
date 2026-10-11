@@ -15,7 +15,8 @@ import {
   LockKeyhole, LogOut, Menu, Moon, PanelLeftClose, PanelLeftOpen, Search,
   Settings, ShieldAlert, Sun, Wallet, Wrench, X, Plus, Save, Columns2, Trash2, Route,
 } from 'lucide-react';
-import { createWidget, createChartGrid } from 'openalgo-charts/widget';
+import { createWidget, createChartGrid, mountIndicatorSettings } from 'openalgo-charts/widget';
+import {bindIndicatorLegendSettings} from './indicator-legend-settings.js';
 import { observeChartCancellations } from './chart-cancellation.js';
 import { QsynMarketsFeed } from './qsyn-markets-feed.js';
 import {MAX_AUTO_BACKFILL_BARS,INITIAL_BACKFILL_BARS} from './crypto-feed.js';
@@ -80,6 +81,7 @@ function ChartPanel({ pane, theme, savedState, revision, onMount, hideBranding =
     let alive = true;
     const feed = new QsynWorkspaceFeed(text => { if (alive) setMessage(text); });
     let widget = null;
+    let stopLegendSettings=()=>{};
     setProblem('');
     try {
       widget = createWidget(host.current, {
@@ -91,6 +93,7 @@ function ChartPanel({ pane, theme, savedState, revision, onMount, hideBranding =
         ...(nativeWorkspaces ? { workspaces: nativeWorkspaces, ...(nativeLayouts ? {} : { layouts: false }) } : {}),
         navigation: { defaultVisibleBars: 95, mousePan: 'horizontal' },
       });
+      stopLegendSettings=bindIndicatorLegendSettings(widget,mountIndicatorSettings);
       onMount(pane.id, widget);
       widget.ready.then(() => {
         if (!alive) return;
@@ -108,6 +111,7 @@ function ChartPanel({ pane, theme, savedState, revision, onMount, hideBranding =
     return () => {
       alive = false;
       onMount(pane.id, null);
+      stopLegendSettings();
       try { widget?.destroy(); } catch {}
       feed.destroy();
     };
@@ -198,6 +202,21 @@ function HomepageChart({ theme, embedded = false }) {
     };
     const observer=new MutationObserver(syncToolbar);
     observer.observe(host.current,{childList:true,subtree:true});
+    // A canvas study-gear emits indicatorSettings but OpenAlgo 2.6.0 does
+    // not itself turn that event into its native indicator-settings dialog.
+    // Bind each grid cell, including non-active cells in multi-chart layouts.
+    const legendStops=new Map();
+    const syncLegendSettings=()=>{
+      if(!active)return;
+      const widgets=new Set(grid.cells().map(cell=>cell.widget).filter(Boolean));
+      for(const [widget,stop] of legendStops){
+        if(!widgets.has(widget)){stop();legendStops.delete(widget);}
+      }
+      for(const widget of widgets){
+        if(!legendStops.has(widget))legendStops.set(widget,
+          bindIndicatorLegendSettings(widget,mountIndicatorSettings));
+      }
+    };
     let seenWidget=null,stopWick=()=>{};
     const syncWick=()=>{
       if(!active)return;
@@ -207,7 +226,7 @@ function HomepageChart({ theme, embedded = false }) {
       seenWidget=widget;
       stopWick=observeWickScienceBackfill(widget,feed);
     };
-    const updateGrid=()=>{syncToolbar();syncWick();};
+    const updateGrid=()=>{syncToolbar();syncLegendSettings();syncWick();};
     const offActive=grid.on('active',updateGrid);
     const offLayout=grid.on('layout',updateGrid);
     window.addEventListener('resize',syncToolbar);
@@ -217,7 +236,9 @@ function HomepageChart({ theme, embedded = false }) {
     });
     updateGrid();
     return ()=>{
-      active=false;stopWick();observer.disconnect();offActive?.();offLayout?.();
+      active=false;stopWick();
+      for(const stop of legendStops.values())stop();legendStops.clear();
+      observer.disconnect();offActive?.();offLayout?.();
       window.removeEventListener('resize',syncToolbar);
       host.current?.removeEventListener('scroll',syncToolbar,true);
       slot?.remove();
@@ -477,16 +498,19 @@ function PrivateMarketPanel({ account, instrument, label }) {
     if (!host) return;
     const feed = new PrivateAuthorizedChartFeed(account, instrument, setStatus);
     let widget;
+    let stopLegendSettings=()=>{};
     try {
       widget = createWidget(host, {
         feed, symbol:instrument, exchange:'UPSTOX_PRIVATE', interval:'1m',
         intervals:['1m'], theme:'dark', persist:false, panels:true,
       });
+      stopLegendSettings=bindIndicatorLegendSettings(widget,mountIndicatorSettings);
       widget.ready.catch(() => setStatus('Private chart widget unavailable. No demo data substituted.'));
     } catch {
       setStatus('Private chart widget unavailable. No demo data substituted.');
     }
     return () => {
+      stopLegendSettings();
       feed.destroy();
       try { widget?.destroy(); } catch {}
     };
