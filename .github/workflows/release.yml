@@ -72,6 +72,8 @@ jobs:
           python3 apps/web-php/tests/PrivateIngressProbeTest.py
           python3 -m py_compile apps/web-php/tests/PrivateBaselineProbe.py apps/web-php/tests/PrivateBaselineProbeTest.py
           python3 apps/web-php/tests/PrivateBaselineProbeTest.py
+          php -l apps/web-php/src/IndiaIndexCatalog.php
+          php apps/web-php/tests/IndiaIndexCatalogTest.php
           php -l apps/web-php/src/SimulatedOptionsStudio.php
           php -l apps/web-php/public/studio.php
           php apps/web-php/tests/SimulatedOptionsStudioTest.php
@@ -120,6 +122,7 @@ jobs:
         run: |
           npm install --no-audit --no-fund
           npm run build
+          node tests/india-index-contract.mjs
       - name: Stage DigiOps-compatible release
         shell: bash
         run: |
@@ -143,6 +146,7 @@ jobs:
           cp frontend/dist/studio.js staging/public/assets/studio.js
           cp apps/web-php/public/assets/studio.css staging/public/assets/studio.css
           cp apps/web-php/public/studio.php staging/public/studio.php
+          cp apps/web-php/src/IndiaIndexCatalog.php staging/private/app/src/IndiaIndexCatalog.php
           cp apps/web-php/src/SimulatedOptionsStudio.php staging/private/app/src/SimulatedOptionsStudio.php
           cp apps/web-php/src/StudioAnalytics.php staging/private/app/src/StudioAnalytics.php
           cp apps/web-php/src/OpenAlgoLocalProbe.php staging/private/app/src/OpenAlgoLocalProbe.php

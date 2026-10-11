@@ -16,7 +16,7 @@ import {
   Settings, ShieldAlert, Sun, Wallet, Wrench, X, Plus, Save, Columns2, Trash2,
 } from 'lucide-react';
 import { createWidget, createChartGrid } from 'openalgo-charts/widget';
-import { QsynCryptoFeed } from './crypto-feed.js';
+import { QsynMarketsFeed } from './qsyn-markets-feed.js';
 import { cryptoDefault } from './crypto-catalog.js';
 import { nativeCryptoWatchlists, noSyntheticQuotes } from './native-crypto-watchlists.js';
 import 'openalgo-charts/indicators';
@@ -142,7 +142,7 @@ function HomepageChart({ theme }) {
   useEffect(()=>{
     if(!host.current)return;
     let active=true;
-    const feed=new QsynCryptoFeed(s=>{if(active)setMessage(s);});
+    const feed=new QsynMarketsFeed(s=>{if(active)setMessage(s);});
     const grid=createChartGrid(host.current,{
       feed,symbol:cryptoDefault.symbol,
       exchange:cryptoDefault.exchange+':'+cryptoDefault.market,
@@ -194,10 +194,11 @@ function HomepageChart({ theme }) {
       grid.destroy();feed.destroy();
     };
   },[theme,nativeWorkspaces,nativeWatchlists]);
-  return <main className="qsyn-homepage" aria-label="QSYN public crypto charts">
+  return <main className="qsyn-homepage" aria-label="QSYN crypto and India index charts">
     <div className="qsyn-home-chart">
       <div className="qsyn-crypto-grid" ref={host}/>
       <span className="qsyn-screenreader-status" role="status" aria-live="polite">{message}</span>
+      {message.startsWith("India index ·") && <p className="qsyn-india-entitlement-note">{message}</p>}
     </div>
   </main>;
 }

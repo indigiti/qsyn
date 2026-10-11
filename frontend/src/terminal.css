@@ -290,3 +290,17 @@ button:focus-visible,a:focus-visible{outline:2px solid var(--q-accent);outline-o
  .qsyn-homepage .oac-topbar{max-width:100%;overflow-x:auto;overflow-y:hidden;scrollbar-width:none}
  .qsyn-homepage .oac-topbar::-webkit-scrollbar{display:none}
 }
+
+/* Only appears when an unlicensed India index is deliberately selected.
+   Leave the normal crypto homepage as a clean, edge-to-edge chart. */
+.qsyn-india-entitlement-note{
+  position:absolute;z-index:55;left:50%;top:72px;
+  transform:translateX(-50%);
+  max-width:min(92vw,510px);
+  padding:9px 14px;margin:0;
+  border-radius:7px;
+  border:1px solid rgba(148,163,184,.65);
+  background:rgba(15,23,42,.93);color:#fff;
+  text-align:center;font-size:12px;line-height:1.45;
+  pointer-events:none;
+}
