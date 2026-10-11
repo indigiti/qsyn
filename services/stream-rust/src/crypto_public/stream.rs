@@ -114,19 +114,19 @@ pub(super) async fn rest_completed(req: &Request, bars: &[Bar]) {
         slot.last_rest_missing_bars=missing;
     }
 }
-fn telemetry(req: &Request, slot: Option<&Slot>) -> Value {
+fn telemetry(_req: &Request, slot: Option<&Slot>) -> Value {
     let now=epoch_ms();
     let Some(s)=slot else {
         return json!({"state":"not_started","feed_transport":"rest","reconnect_count":0,
             "websocket_candle_updates":0,"last_exchange_candle_sec":null,
             "last_websocket_update_ms":null,"websocket_lag_seconds":null,
             "last_connection_ms":null,"last_disconnection_ms":null,
-            "rest_successes":0,"rest_recoveries":0,
+            "rest_successes":0,"rest_refreshes_after_reconnect":0,
             "last_rest_ms":null,"history_gap_events":null,"missing_history_bars":null,
             "fresh":false});
     };
     let fresh=s.connected && s.last_at.is_some_and(|t|t.elapsed()<Duration::from_secs(20));
-    let state=if fresh {"websocket"} else {"reconnecting"};
+    let state=if fresh {"websocket"} else if s.connected {"stale"} else {"reconnecting"};
     json!({
         "state":state,
         "feed_transport":if fresh {"websocket"}else{"rest"},
@@ -139,7 +139,7 @@ fn telemetry(req: &Request, slot: Option<&Slot>) -> Value {
         "last_connection_ms":s.last_connection_ms,
         "last_disconnection_ms":s.last_disconnection_ms,
         "rest_successes":s.rest_successes,
-        "rest_recoveries":s.rest_recoveries,
+        "rest_refreshes_after_reconnect":s.rest_recoveries,
         "last_rest_ms":s.last_rest_ms,
         "history_gap_events":if s.last_rest_ms.is_some(){Some(s.last_rest_gap_count)}else{None},
         "missing_history_bars":if s.last_rest_ms.is_some(){Some(s.last_rest_missing_bars)}else{None}
@@ -380,7 +380,7 @@ mod tests {
             updates:0,last_update_ms:None,last_connection_ms:Some(1),
             last_disconnection_ms:None,last_rest_ms:None,rest_successes:0,
             rest_recoveries:0,last_rest_gap_count:0,last_rest_missing_bars:0};
-        assert_eq!(telemetry(&req,Some(&no_candle))["state"],"reconnecting");
+        assert_eq!(telemetry(&req,Some(&no_candle))["state"],"stale");
         let fresh=Slot{connected:true,last:Some(Bar{time:1_696_982_400,open:1.0,
             high:2.0,low:0.5,close:1.0,volume:4.0}),
             last_at:Some(Instant::now()),last_update_ms:Some(epoch_ms()),
