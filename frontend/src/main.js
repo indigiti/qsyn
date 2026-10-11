@@ -1,5 +1,7 @@
 import { createWidget } from 'openalgo-charts/widget';
 import 'openalgo-charts/indicators';
+import {registerWickScience} from './wick-science-indicator.js';
+registerWickScience();
 import { QsynDemoFeed } from './rust-demo-feed.js';
 
 const root = document.getElementById('terminal');
