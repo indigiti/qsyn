@@ -226,10 +226,22 @@ fn parse_candle(req:&Request,v:&Value)->Option<Bar> {
                 number(&c[5])?,number(&c[7])?,60)
         }
         "BITGET" => {
+            // Bitget UTA v3 pushes candle objects, unlike the older v2
+            // array-based candle channel. Enforce the actual market scope.
+            let expected=if req.market=="perp" {"usdt-futures"} else {"spot"};
             if v.pointer("/arg/topic")?.as_str()?!="kline" ||
                v.pointer("/arg/symbol")?.as_str()?!=req.symbol ||
-               v.pointer("/arg/interval")?.as_str()?!="1m"{return None;}
-            row(req,v.get("data")?.as_array()?.last()?,true,[0,1,2,3,4,5])
+               v.pointer("/arg/interval")?.as_str()?!="1m" ||
+               v.pointer("/arg/instType")?.as_str()?!=expected {return None;}
+            let c=v.get("data")?.as_array()?.last()?;
+            if c.is_object() {
+                bar(timestamp(&c["start"],true)?,number(&c["open"])?,
+                    number(&c["high"])?,number(&c["low"])?,
+                    number(&c["close"])?,number(&c["volume"])?,60)
+            } else {
+                // Graceful handling for providers still emitting classic arrays.
+                row(req,c,true,[0,1,2,3,4,5])
+            }
         }
         "HYPERLIQUID" => {
             if v["channel"]!="candle" {return None;}
@@ -355,8 +367,13 @@ mod tests {
         assert_eq!(parse_candle(&req("BYBIT","perp","BTCUSDT"),&by),Some(b.clone()));
         let ok=json!({"arg":{"channel":"candle1m","instId":"BTC-USDT"},"data":[[t.to_string(),"100","110","90","105","12"]]});
         assert_eq!(parse_candle(&req("OKX","spot","BTC-USDT"),&ok),Some(b.clone()));
-        let bit=json!({"arg":{"topic":"kline","symbol":"BTCUSDT","interval":"1m"},"data":[[t.to_string(),"100","110","90","105","12"]]});
+        let bit=json!({"arg":{"instType":"spot","topic":"kline","symbol":"BTCUSDT","interval":"1m"},
+            "data":[{"start":t.to_string(),"open":"100","high":"110","low":"90","close":"105","volume":"12"}]});
         assert_eq!(parse_candle(&req("BITGET","spot","BTCUSDT"),&bit),Some(b.clone()));
+        assert_eq!(parse_candle(&req("BITGET","perp","BTCUSDT"),&bit),None);
+        let bit_array=json!({"arg":{"instType":"spot","topic":"kline","symbol":"BTCUSDT","interval":"1m"},
+            "data":[[t.to_string(),"100","110","90","105","12"]]});
+        assert_eq!(parse_candle(&req("BITGET","spot","BTCUSDT"),&bit_array),Some(b.clone()));
         let hl=json!({"channel":"candle","data":{"s":"BTC","i":"1m","t":t,"o":"100","h":"110","l":"90","c":"105","v":"12"}});
         assert_eq!(parse_candle(&req("HYPERLIQUID","perp","BTC"),&hl),Some(b));
         assert_eq!(parse_candle(&req("BINANCE","spot","ETHUSDT"),&bin),None);

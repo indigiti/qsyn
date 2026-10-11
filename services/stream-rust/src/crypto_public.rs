@@ -199,7 +199,12 @@ async fn invalidate(req:&Request) {
 fn overlay(bars:&mut Vec<Bar>,live:Option<Bar>,limit:usize){
     if let (Some(last),Some(bar))=(bars.last(),live) {
         if bar.time==last.time {bars.pop(); bars.push(bar);}
-        else if bar.time>last.time && bar.time-last.time<=60 {bars.push(bar);}
+        else if bar.time>last.time && bar.time-last.time<=600 {
+            // Some exchanges expose forming WebSocket candles before their
+            // REST candles catch up. Display the real newer candle with a
+            // visible timestamp gap; never synthesize intermediate OHLCV.
+            bars.push(bar);
+        }
     }
     if bars.len()>limit {bars.drain(..bars.len()-limit);}
 }
@@ -268,4 +273,21 @@ mod tests {
         assert!(parse_rows(&req,&json!([[1_696_982_400_000u64,"100","91","90","105","12"]])).is_err());
         assert!(parse_rows(&req,&json!([[1_696_982_400_000u64,"NaN","110","90","105","12"]])).is_err());
     }
+    #[test]
+    fn live_candle_advances_when_coinbase_rest_history_lags() {
+        let base=Bar{time:1_696_982_400,open:100.0,high:102.0,low:99.0,close:101.0,volume:1.0};
+        let next=Bar{time:base.time+180,open:102.0,high:104.0,low:101.0,close:103.0,volume:2.0};
+        let mut history=vec![base.clone()];
+        overlay(&mut history,Some(next.clone()),300);
+        assert_eq!(history.len(),2); // no fabricated middle candles
+        assert_eq!(history[0],base);
+        assert_eq!(history[1],next);
+        overlay(&mut history,Some(next.clone()),300);
+        assert_eq!(history.len(),2); // idempotent forming candle replacement
+        let too_stale=Bar{time:base.time+1800,..next};
+        let mut old=vec![base];
+        overlay(&mut old,Some(too_stale),300);
+        assert_eq!(old.len(),1); // fail closed on extremely stale REST history
+    }
+
 }
