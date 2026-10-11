@@ -64,10 +64,13 @@ final class PrivateChartGrantApi
      */
     private static function validInstrument(mixed $value): bool
     {
-        return self::ident($value) || (
-            is_string($value) && strlen($value) <= 128
-            && preg_match('/^(?:NSE_INDEX|BSE_INDEX)\\|[A-Za-z0-9][A-Za-z0-9 ._-]{0,99}$/D', $value) === 1
-        );
+        if (!is_string($value)) return false;
+        if (str_starts_with($value, 'NSE_INDEX|')
+            || str_starts_with($value, 'BSE_INDEX|')) {
+            return strlen($value) <= 128
+                && preg_match('/^(?:NSE_INDEX|BSE_INDEX)\\|[A-Za-z0-9][A-Za-z0-9 ._-]{0,99}$/D', $value) === 1;
+        }
+        return self::ident($value);
     }
 
     private static function validRights(string $root, array $principal, string $account, string $instrument, int $now): ?array
