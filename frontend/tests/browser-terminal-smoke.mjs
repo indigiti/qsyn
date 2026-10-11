@@ -65,6 +65,25 @@ try {
   await page.locator('.qsyn-home-chart .terminal-chart-host').waitFor();
   await page.waitForFunction(()=>document.querySelectorAll('.qsyn-home-chart #qsyn-native-chart canvas').length>0,
     null,{timeout:12000});
+  // Widget 2.6.0 exposes official branding:false and classes for real controls.
+  // Require a clean home toolbar while keeping the Objects/Data/Alerts
+  // buttons functional and their labels available to screen readers.
+  await page.waitForFunction(() => ['objects','data','alerts'].every(name =>
+    document.querySelector('.qsyn-home-chart .oac-topbar__'+name)));
+  if(await page.locator('.qsyn-home-chart .oac-topbar__branding').count()!==0)
+    throw new Error('Homepage OpenAlgo branding link was not disabled through widget options');
+  for(const name of ['objects','data','alerts']){
+    const control=page.locator('.qsyn-home-chart .oac-topbar__'+name);
+    const appearance=await control.evaluate(node=>{
+      const before=getComputedStyle(node,'::before');
+      return {label:node.getAttribute('aria-label'),visible:node.getBoundingClientRect().width>0,
+        content:before.content,mask:before.maskImage||before.webkitMaskImage};
+    });
+    if(appearance.label?.toLowerCase()!==name || !appearance.visible ||
+       appearance.content==='none' || !appearance.mask.includes('data:image/svg+xml'))
+      throw new Error(name+' lost native accessibility or icon: '+JSON.stringify(appearance));
+    if(!await control.isEnabled())throw new Error(name+' control was disabled');
+  }
   if(await page.locator('.qsyn-home-topbar, .qsyn-home-heading, .qsyn-home-chart .terminal-card-head').filter({visible:true}).count())
     throw new Error('Removed homepage topbars/headings reappeared');
   if(await page.getByText('Premium chart',{exact:true}).count())

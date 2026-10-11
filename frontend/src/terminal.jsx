@@ -53,7 +53,7 @@ function currentTheme() {
   // explicit light/dark preference and the original terminal defaults.
   return ['/qsyn/', '/qsyn', '/'].includes(window.location.pathname) ? 'light' : 'dark';
 }
-function ChartPanel({ pane, theme, savedState, revision, onMount }) {
+function ChartPanel({ pane, theme, savedState, revision, onMount, hideBranding = false }) {
   const host = useRef(null);
   const [message, setMessage] = useState('Loading simulated candles…');
   const [problem, setProblem] = useState('');
@@ -67,6 +67,9 @@ function ChartPanel({ pane, theme, savedState, revision, onMount }) {
       widget = createWidget(host.current, {
         feed, symbol: pane.symbol, exchange: 'QSYN', interval: '1m',
         intervals: ['1m'], theme, persist: false, panels: true,
+        // Apache-2.0 library supports host-owned branding. Restrict removal
+        // of its visible link to the chart-only homepage.
+        ...(hideBranding ? { branding: false } : {}),
         navigation: { defaultVisibleBars: 95, mousePan: 'horizontal' },
       });
       onMount(pane.id, widget);
@@ -89,7 +92,7 @@ function ChartPanel({ pane, theme, savedState, revision, onMount }) {
       try { widget?.destroy(); } catch {}
       feed.destroy();
     };
-  }, [pane.id, pane.symbol, theme, revision, onMount]);
+  }, [pane.id, pane.symbol, theme, revision, onMount, hideBranding]);
   const definition = instrumentFor(pane.symbol);
   return (
     <section className="terminal-chart-card" aria-label={pane.id === 'primary' ? 'Primary candlestick chart' : 'Comparison candlestick chart'}>
@@ -125,7 +128,7 @@ function HomepageChart({ theme }) {
   return <main className="qsyn-homepage" aria-label="QSYN simulated chart homepage">
     <div className="qsyn-home-chart">
       <ChartPanel pane={HOME_PANE} theme={theme} savedState={null}
-        revision={0} onMount={ignoreHomepageWidget}/>
+        revision={0} onMount={ignoreHomepageWidget} hideBranding/>
     </div>
   </main>;
 }
