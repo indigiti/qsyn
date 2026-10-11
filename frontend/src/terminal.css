@@ -281,3 +281,12 @@ button:focus-visible,a:focus-visible{outline:2px solid var(--q-accent);outline-o
   position:absolute;width:1px;height:1px;padding:0;margin:-1px;
   overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0
 }
+
+/* On compact screens the OpenAlgo toolbar scrolls within the chart, never the
+   document. The floated native grid actions are clamped to the viewport. */
+@media(max-width:700px){
+ .qsyn-homepage{width:100%;max-width:100vw;overflow-x:clip}
+ .qsyn-homepage .qsyn-crypto-grid,.qsyn-homepage .oac-grid{max-width:100%;overflow-x:clip}
+ .qsyn-homepage .oac-topbar{max-width:100%;overflow-x:auto;overflow-y:hidden;scrollbar-width:none}
+ .qsyn-homepage .oac-topbar::-webkit-scrollbar{display:none}
+}
