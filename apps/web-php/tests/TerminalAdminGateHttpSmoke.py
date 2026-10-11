@@ -56,7 +56,7 @@ def run():
             await_server(origin)
             guest, cookiejar = browser()
             status, home, headers = page(guest, origin, "/qsyn/")
-            assert status == 200 and 'id="qsyn-root"' in home
+            assert status == 200 and 'id="qsyn-root"' in home, (status, repr(home[:700]), dict(headers))
             assert "/qsyn/assets/terminal.js" in home
             for path in [
                 "/qsyn/terminal", "/qsyn/terminal/",
