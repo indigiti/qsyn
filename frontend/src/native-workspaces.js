@@ -32,3 +32,20 @@ export function publicNativeWorkspaceStore() {
     return null;
   }
 }
+
+
+let cryptoStorage = null;
+let cryptoRepository = null;
+/** Separate public crypto charts from QSYN's simulated chart workspaces. */
+export function cryptoNativeWorkspaceStore() {
+  if (typeof window === 'undefined') return null;
+  if (cryptoRepository) return cryptoRepository;
+  let db;
+  try { db = window.indexedDB; } catch { return null; }
+  if (!db) return null;
+  try {
+    if (!cryptoStorage) cryptoStorage = createIndexedDbWorkspaceStorage(db, 'qsyn-public-crypto-openalgo-v1');
+    cryptoRepository = new WorkspaceRepository(cryptoStorage, 'qsyn-public-crypto-charts-v1');
+    return cryptoRepository;
+  } catch { return null; }
+}
