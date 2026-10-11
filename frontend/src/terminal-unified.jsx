@@ -248,11 +248,11 @@ export function BrokersWorkspace({openView}){
     finally{setBusy(false);}
   }
   return <div className="terminal-page qt-unified">
-    <PanelTitle eyebrow="BROKER CONNECTIONS · OPENALGO" title="Accounts & authorizations"
-      description="Select your broker, sign in to QSYN Operations as administrator, then open its approved OpenAlgo login and check the read-only session."/>
+    <PanelTitle eyebrow="BROKER CONNECTIONS · RUST DATA" title="Accounts & authorizations"
+      description="Native Upstox V3 index market data uses the QSYN Rust WebSocket engine. Other broker plugins remain separately gated."/>
     <div className="qt-summary">
       <section className="terminal-surface"><Wallet size={19}/><span>Configured accounts</span>
-        <strong>{hasAdmin?(inventory?.accounts?.length??'Not provisioned'):'Restricted'}</strong></section>
+        <strong>{selected==='upstox'?'OAuth pending':(hasAdmin?(inventory?.accounts?.length??'Not provisioned'):'Restricted')}</strong></section>
       <section className="terminal-surface"><LockKeyhole size={19}/><span>Exchange display rights</span>
         <strong>Not verified</strong></section>
       <section className="terminal-surface"><ShieldCheck size={19}/><span>QSYN order execution</span>
@@ -268,14 +268,32 @@ export function BrokersWorkspace({openView}){
         </button>)}
       </div>
       {!catalog&&<p>Broker catalog is temporarily unavailable.</p>}
-      <p role="status" className="qt-message">{message}</p>
+      <p role="status" className="qt-message">{selected==='upstox'?'Native Upstox OAuth and index data subscription are not activated; no OpenAlgo API key is required.':message}</p>
       <button className="terminal-action terminal-secondary-action" disabled={busy}
         onClick={()=>void refresh(new AbortController().signal)}>
         <RefreshCw size={16}/> Refresh broker status
       </button>
     </section>
-    <section className="terminal-surface">
-      <div className="terminal-card-head"><h2>{BROKER_LABELS[selected]||selected} · web connection</h2>
+    {selected==='upstox'&&<section className="terminal-surface">
+      <div className="terminal-card-head"><h2>Native Upstox → QSYN Rust V3</h2><ShieldCheck size={18}/></div>
+      <p>Upstox provides the authenticated market-data feed; the Rust V3 worker
+        decodes binary Protobuf, validates instrument updates and fans out
+        authorized index data to the React charts. OpenAlgo Charts provides the
+        chart UI only. No OpenAlgo application API key or Python service is required.</p>
+      <div className="qt-summary">
+        <div><strong>Upstox OAuth</strong><p>Not verified · native web consent pending</p></div>
+        <div><strong>Rust feed worker</strong><p>Not activated for live index instruments</p></div>
+        <div><strong>NSE/BSE chart rights</strong><p>Not verified · live data blocked</p></div>
+      </div>
+      <p className="terminal-footnote">The existing Rust V3 receiver has private CE/PE code, but
+        index instrument subscriptions, licensed historical candles, browser chart
+        grants and supervised Cloudways deployment still require acceptance.
+        No orders and no simulated prices substituted for Upstox.</p>
+      <button type="button" className="terminal-action terminal-secondary-action"
+        onClick={()=>openView('private-live')}>View Rust chart readiness</button>
+    </section>}
+    {selected!=='upstox'&&<section className="terminal-surface">
+      <div className="terminal-card-head"><h2>{BROKER_LABELS[selected]||selected} · optional OpenAlgo integration</h2>
         <LockKeyhole size={18}/></div>
       {!hasAdmin&&<div>
         <p>Use your existing QSYN administrator login to access private broker connections. No terminal commands are needed to check a provisioned session.</p>
@@ -353,7 +371,7 @@ export function BrokersWorkspace({openView}){
         <button className="terminal-action terminal-secondary-action" onClick={()=>openView('diagnostics')}>
           Feed diagnostics</button>
       </div>
-    </section>
+    </section>}
     <section className="terminal-surface"><h2>NSE / BSE index catalog</h2>
       <div className="qt-market-tags">{INDIA_INDEX_MARKETS.map(x=><span key={x.id}>
         {x.name} · {x.exchange==='BSE_INDEX'?'BSE':'NSE'}</span>)}</div>
