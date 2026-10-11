@@ -218,6 +218,9 @@ jobs:
       - name: Verify India index native discovery and strict license gates
         run: node tests/india-index-contract.mjs
         working-directory: frontend
+      - name: Confirm chart-cancellation guard never masks app errors
+        run: node tests/chart-cancellation-contract.mjs
+        working-directory: frontend
       - name: Verify Wick Science MFE indicator state machine and signal safety
         run: node tests/wick-science.test.mjs
         working-directory: frontend

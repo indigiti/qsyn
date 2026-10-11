@@ -16,6 +16,7 @@ import {
   Settings, ShieldAlert, Sun, Wallet, Wrench, X, Plus, Save, Columns2, Trash2, Route,
 } from 'lucide-react';
 import { createWidget, createChartGrid } from 'openalgo-charts/widget';
+import { observeChartCancellations } from './chart-cancellation.js';
 import { QsynMarketsFeed } from './qsyn-markets-feed.js';
 import { cryptoDefault } from './crypto-catalog.js';
 import { nativeCryptoWatchlists, noSyntheticQuotes } from './native-crypto-watchlists.js';
@@ -153,6 +154,9 @@ function HomepageChart({ theme, embedded = false }) {
   useEffect(()=>{
     if(!host.current)return;
     let active=true;
+    // Upstream ChartGrid can reject an obsolete internal load when it cancels
+    // a refresh or changes interval; a known AbortError is not an app fault.
+    const stopAbortObservation=observeChartCancellations(window);
     const feed=new QsynMarketsFeed(s=>{if(active)setMessage(s);});
     const grid=createChartGrid(host.current,{
       feed,symbol:cryptoDefault.symbol,
@@ -203,6 +207,8 @@ function HomepageChart({ theme, embedded = false }) {
       host.current?.removeEventListener('scroll',syncToolbar,true);
       slot?.remove();
       grid.destroy();feed.destroy();
+      // Let chart teardown's settled canceled tasks flush before uninstall.
+      queueMicrotask(stopAbortObservation);
     };
   },[theme,nativeWorkspaces,nativeWatchlists]);
   return <main className={embedded ? 'qsyn-homepage terminal-market-embedded' : 'qsyn-homepage'} aria-label="QSYN crypto and India index charts">

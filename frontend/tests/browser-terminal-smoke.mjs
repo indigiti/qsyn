@@ -50,6 +50,16 @@ try {
   // catalog. In CI Rust is not started: failure must NOT produce fake candles.
   const response=await page.goto(origin+'/qsyn/',{waitUntil:'domcontentloaded',timeout:25000});
   if(response.status()!==200) throw new Error('QSYN homepage returned '+response.status());
+  // PHP's public chart template must never include inline scripts: CSP
+  // script-src 'self' is deliberately strict, so host-injected inline script
+  // blocks should be diagnosed outside the QSYN bundle, not whitelisted.
+  const firstHtml=await response.text();
+  const inlineScript=/<script\\b(?![^>]*\\bsrc\\s*=)[^>]*>/i;
+  if(inlineScript.test(firstHtml))
+    throw new Error('QSYN homepage emitted an inline script prohibited by its own CSP');
+  if(!String(response.headers()['content-security-policy']||'').includes("script-src 'self'"))
+    throw new Error('QSYN homepage CSP script policy unexpectedly weakened');
+
   if(new URL(page.url()).pathname!=='/qsyn/') throw new Error('Homepage redirected');
   const alternate=await page.request.get(origin+'/qsyn/terminal',{maxRedirects:0});
   if(alternate.status()!==303 || alternate.headers().location!=='/qsyn/terminal/login')
