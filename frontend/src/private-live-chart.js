@@ -76,12 +76,47 @@ export class PrivateAuthorizedChartFeed {
   async getBars(request) {
     if (this.ended || request.symbol !== this.instrument ||
         request.exchange !== 'UPSTOX_PRIVATE' || request.interval !== '1m') return [];
-    // The existing private history reader serves NSE_FO archives, not index
-    // candles. Never request that endpoint or fill missing index history with
-    // synthetic prices. The independently authorized WSS remains available.
+    // Separate per-instrument private index reader. This endpoint is gated by
+    // a new short-lived PHP grant AND the current Rust index worker BOD/rights
+    // file; the public /india/bars route is never queried.
     if (isIndexInstrumentKey(this.instrument)) {
-      this.onState('Index history not provisioned; authorized live subscription only.');
-      return [];
+      try {
+        const grant = await fetchPrivateChartGrant(
+          this.fetcher, this.account, this.instrument, request.signal);
+        if (this.ended || request.signal?.aborted) return [];
+        const response = await this.fetcher('/qsyn/private-chart/index-history', {
+          method:'GET', credentials:'same-origin', cache:'no-store', signal:request.signal,
+          headers:{Accept:'application/json', Authorization:'Bearer '+grant.ticket},
+        });
+        if (!response.ok) throw Error('Private index history not provisioned');
+        const data = await response.json();
+        if (data.schema !== 'QSYN-UPSTOX-PRIVATE-INDEX-HISTORY/1' ||
+            data.source !== 'licensed_private_index_history' ||
+            data.account !== this.account || data.instrument !== this.instrument ||
+            data.exchange !== 'UPSTOX_PRIVATE' || data.interval !== '1m' ||
+            data.trading_enabled !== false ||
+            data.public_redistribution_allowed !== false ||
+            !Array.isArray(data.bars) || data.bars.length > 1200)
+          throw Error('Unapproved private index history source');
+        let prev = 0;
+        for (const bar of data.bars) {
+          if (!Number.isSafeInteger(bar.time) || bar.time <= prev ||
+              bar.time % 60 !== 0 || bar.time > Math.floor(Date.now()/1000) ||
+              !['open','high','low','close'].every(k=>Number.isFinite(bar[k]) && bar[k]>0) ||
+              bar.low > Math.min(bar.open,bar.close) ||
+              bar.high < Math.max(bar.open,bar.close))
+            throw Error('Invalid private index OHLC');
+          prev = bar.time;
+        }
+        this.onState(data.bars.length
+          ? 'Licensed historical index candles loaded (coverage not certified).'
+          : 'No approved historical index candles imported yet.');
+        return this.ended || request.signal?.aborted ? [] : data.bars;
+      } catch {
+        if (!this.ended && !request.signal?.aborted)
+          this.onState('Index history unavailable; no simulated fallback.');
+        return [];
+      }
     }
     // History uses a SECOND short-lived, instrument-scoped PHP grant: neither
     // an Upstox token nor a signed grant is kept in browser storage or URL.
