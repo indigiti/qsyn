@@ -6,6 +6,8 @@ from pathlib import Path
 import re
 import subprocess
 import tempfile
+import urllib.request
+import urllib.error
 from urllib.parse import urlsplit, parse_qs
 from IdentityHttpSmoke import await_server, client, open_port, php_server, request
 
