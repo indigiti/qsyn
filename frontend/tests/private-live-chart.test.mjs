@@ -153,3 +153,114 @@ test('foreign, duplicate or malformed account history is rejected without demo f
   assert.ok(statuses.at(-1).includes('no demo'));
   feed.destroy();
 });
+
+test('private Upstox index WSS renews before the 30s grant expires and stops on revocation', async () => {
+  const sockets=[], timers=[], paths=[], statuses=[];
+  let grantNumber=0, expiry=0, deny=false;
+  const schedule=(cb,ms)=>{
+    const timer={cb,ms,active:true};timers.push(timer);return timer;
+  };
+  const cancel=timer=>{timer.active=false;};
+  const fetcher=async (path,options)=>{
+    paths.push({path,options});
+    if(path==='/qsyn/api/v1/auth/state')return {ok:true,json:async()=>({
+      authenticated:true,csrf,profile:'mock-only',
+    })};
+    assert.equal(path,'/qsyn/api/v1/terminal/private-chart-grant');
+    if(deny)return {ok:false,status:403};
+    grantNumber++;
+    expiry=Date.now()+30_000;
+    return {ok:true,json:async()=>({
+      schema:'QSYN-PRIVATE-CHART-GRANT-RESPONSE/1',
+      account_id:account,instrument:'NSE_INDEX|Nifty 50',
+      transport:'operator_private_wss_only',trading_enabled:false,
+      public_redistribution_allowed:false,ticket:'private-ticket-'+grantNumber,
+      expires_ms:expiry,
+    })};
+  };
+  const socketFactory=url=>{
+    assert.equal(url,'wss://qsyn.test/qsyn/private-chart/ws');
+    const socket={
+      sent:[],closed:false,
+      send(message){this.sent.push(JSON.parse(message));},
+      close(){this.closed=true;},
+      message(obj){this.onmessage?.({data:JSON.stringify(obj)});},
+    };
+    sockets.push(socket);
+    return socket;
+  };
+  const instrument='NSE_INDEX|Nifty 50';
+  const feed=new PrivateAuthorizedChartFeed(account,instrument,x=>statuses.push(x),{
+    fetcher,socketFactory,location:{protocol:'https:',host:'qsyn.test'},
+    schedule,cancel,
+  });
+  const stop=feed.subscribeBars({exchange:'UPSTOX_PRIVATE',symbol:instrument,interval:'1m'},
+    ()=>{});
+  const flush=()=>new Promise(resolve=>setImmediate(resolve));
+  await flush();
+  assert.equal(sockets.length,1);
+  sockets[0].onopen();
+  assert.deepEqual(sockets[0].sent,[{action:'authenticate',token:'private-ticket-1'}]);
+  sockets[0].message({type:'authentication_success',
+    source:'licensed_private_chart',expires_ms:expiry});
+  const refresh=timers.find(t=>t.active);
+  assert.ok(refresh && refresh.ms >= 1000 && refresh.ms <= 20000);
+  refresh.active=false;refresh.cb();
+  await flush();
+  assert.equal(sockets[0].closed,true,'expired socket must be rotated');
+  const reconnect=timers.find(t=>t.active);
+  assert.equal(reconnect.ms,0);
+  reconnect.active=false;reconnect.cb();
+  await flush();
+  assert.equal(sockets.length,2);
+  sockets[1].onopen();
+  assert.deepEqual(sockets[1].sent,[{action:'authenticate',token:'private-ticket-2'}]);
+  sockets[1].message({type:'authentication_success',
+    source:'licensed_private_chart',expires_ms:expiry});
+  // Next renewal gets 403 and stops; no retry against revoked rights.
+  deny=true;
+  const refresh2=timers.find(t=>t.active);
+  refresh2.active=false;refresh2.cb();
+  const reconnect2=timers.find(t=>t.active);
+  assert.equal(reconnect2.ms,0);
+  reconnect2.active=false;reconnect2.cb();
+  await flush();
+  assert.equal(feed.session,null,'revoked entitlement must end the subscription');
+  assert.equal(timers.filter(t=>t.active).length,0);
+  assert.ok(statuses.some(x=>x.includes('revoked')));
+  assert.equal(paths.some(x=>x.path.includes('/studio')),false);
+  assert.equal(paths.some(x=>x.path.includes('private-ticket-')),false);
+  stop();
+  feed.destroy();
+});
+
+test('private WSS disconnect retries are bounded and cleanup cancels timers', async () => {
+  const sockets=[],timers=[];
+  const instrument='BSE_INDEX|SENSEX';
+  const fetcher=async path=>path.endsWith('/auth/state')
+    ? {ok:true,json:async()=>({authenticated:true,csrf,profile:'mock-only'})}
+    : {ok:true,json:async()=>({
+      schema:'QSYN-PRIVATE-CHART-GRANT-RESPONSE/1',account_id:account,
+      instrument,transport:'operator_private_wss_only',
+      trading_enabled:false,public_redistribution_allowed:false,
+      ticket:'private-sensex-ticket',expires_ms:Date.now()+30_000,
+    })};
+  const feed=new PrivateAuthorizedChartFeed(account,instrument,()=>{},{
+    fetcher,location:{protocol:'https:',host:'qsyn.test'},
+    socketFactory:()=>{const socket={close(){},send(){}};sockets.push(socket);return socket;},
+    schedule:(cb,ms)=>{const t={cb,ms,active:true};timers.push(t);return t;},
+    cancel:t=>{t.active=false;},
+  });
+  feed.subscribeBars({exchange:'UPSTOX_PRIVATE',symbol:instrument,interval:'1m'},()=>{});
+  const flush=()=>new Promise(resolve=>setImmediate(resolve));
+  await flush();
+  for(let i=0;i<6;i++){
+    sockets.at(-1).onclose();
+    const timer=timers.find(x=>x.active);
+    if(i===5){ assert.equal(timer,undefined);break; }
+    assert.ok(timer && timer.ms<=16000 && timer.ms>=1000);
+    timer.active=false;timer.cb();await flush();
+  }
+  assert.equal(feed.session,null,'max reconnect failures must fail closed');
+  feed.destroy();
+});

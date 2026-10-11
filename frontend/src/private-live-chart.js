@@ -39,7 +39,11 @@ export async function fetchPrivateChartGrant(fetcher, account, instrument, signa
     headers: {'Content-Type':'application/json', 'X-CSRF-Token':identity.csrf},
     body: JSON.stringify({account_id: account, instrument}),
   });
-  if (!response.ok) throw new Error('Current private display entitlement denied.');
+  if (!response.ok) {
+    const error = new Error('Current private display entitlement denied.');
+    error.status = response.status;
+    throw error;
+  }
   const result = await response.json();
   if (result.schema !== 'QSYN-PRIVATE-CHART-GRANT-RESPONSE/1'
       || result.account_id !== account || result.instrument !== instrument
@@ -63,6 +67,8 @@ export class PrivateAuthorizedChartFeed {
     this.fetcher = deps.fetcher || fetch;
     this.socketFactory = deps.socketFactory || (url => new WebSocket(url));
     this.location = deps.location || location;
+    this.schedule = deps.schedule || ((callback, ms) => setTimeout(callback, ms));
+    this.cancel = deps.cancel || (handle => clearTimeout(handle));
     this.session = null;
     this.ended = false;
     this.sockets = new Set();
@@ -126,52 +132,120 @@ export class PrivateAuthorizedChartFeed {
     const controller = new AbortController();
     const builder = new CandleBuilder({intervalSec:60, volumeMode:'ltq-sum',
       lateTickPolicy:'dropOlderThanPrevBar'});
-    const session = { controller, socket:null, closed:false, lastTimestamp:0 };
+    const session = {
+      controller, socket:null, closed:false, lastTimestamp:0,
+      reconnectTimer:null, refreshTimer:null, retries:0,
+    };
     this.session = session;
+    const active = () => !session.closed && !this.ended &&
+      this.session === session && !controller.signal.aborted;
+    const clearTimers = () => {
+      for (const key of ['reconnectTimer','refreshTimer']) {
+        if (session[key] !== null) this.cancel(session[key]);
+        session[key] = null;
+      }
+    };
+    const discardSocket = () => {
+      const old = session.socket;
+      session.socket = null;
+      if (!old) return;
+      // A deliberately rotated socket must never schedule a second retry.
+      old.onopen = old.onmessage = old.onclose = old.onerror = null;
+      this.sockets.delete(old);
+      try { old.close(1000); } catch {}
+    };
+    const backoff = () => Math.min(16000, 1000 * 2 ** Math.min(session.retries, 4));
+    const retry = (message, renew = false) => {
+      if (!active()) return;
+      clearTimers();
+      discardSocket();
+      if (!renew && ++session.retries > 5) {
+        this.onState('Private chart stopped after repeated connection failures; no simulated fallback.');
+        this.stopSubscription();
+        return;
+      }
+      this.onState(message);
+      session.reconnectTimer = this.schedule(() => {
+        session.reconnectTimer = null;
+        if (active()) void start();
+      }, renew ? 0 : backoff());
+    };
     const start = async () => {
+      if (!active()) return;
       try {
+        // A new short-lived grant is mandatory for EVERY reconnection. It is
+        // never retained in localStorage, URL parameters or diagnostic logs.
         const grant = await fetchPrivateChartGrant(
           this.fetcher, this.account, this.instrument, controller.signal);
-        if (session.closed || this.ended) return;
-        // Fixed same-origin location; NEVER use an URL from the auth payload.
+        if (!active()) return;
         const scheme = this.location.protocol === 'https:' ? 'wss:' : 'ws:';
         const url = scheme+'//'+this.location.host+'/qsyn/private-chart/ws';
         const socket = this.socketFactory(url);
         session.socket = socket;
         this.sockets.add(socket);
         socket.onopen = () => {
-          if (session.closed) return;
-          socket.send(JSON.stringify({action:'authenticate', token:grant.ticket}));
+          if (active() && session.socket === socket &&
+              grant.expires_ms > Date.now() + 1000) {
+            socket.send(JSON.stringify({action:'authenticate', token:grant.ticket}));
+          } else if (active() && session.socket === socket) {
+            retry('Private chart ticket expired before connection; renewing.');
+          }
         };
-        socket.onmessage = (event) => {
-          if (session.closed) return;
+        socket.onmessage = event => {
+          if (!active() || session.socket !== socket) return;
           let item;
           try { item = JSON.parse(event.data); } catch { return; }
           if (item.type === 'authentication_success') {
-            if (item.source !== 'licensed_private_chart') { this.stopSubscription(); return; }
-            this.onState('Private authorized chart connected; history pending licensed backfill.');
+            if (item.source !== 'licensed_private_chart' ||
+                item.expires_ms !== grant.expires_ms ||
+                !Number.isSafeInteger(item.expires_ms) ||
+                item.expires_ms <= Date.now() + 5000) {
+              this.stopSubscription();
+              return;
+            }
+            session.retries = 0;
+            // Rust revalidates the ticket every second and disconnects at
+            // expiry. Rotate with a *new* PHP grant well before that deadline.
+            const refreshMs = Math.min(20000, item.expires_ms - Date.now() - 5000);
+            clearTimers();
+            session.refreshTimer = this.schedule(() => {
+              session.refreshTimer = null;
+              retry('Renewing private chart authorization…', true);
+            }, Math.max(1000, refreshMs));
+            this.onState('Private authorized chart connected · session renews automatically.');
             return;
           }
           if (item.schema !== TICK_SCHEMA || item.source !== 'private_verified_ltp'
               || item.account !== this.account || item.instrument !== this.instrument
               || !Number.isSafeInteger(item.time_ms) || !Number.isFinite(item.price)
-              || item.price <= 0 || item.time_ms <= session.lastTimestamp
-              || item.time_ms > Date.now() + 2000 || Date.now()-item.time_ms > 5000) {
-            this.stopSubscription(); return;
+              || item.price <= 0 || item.time_ms > Date.now() + 2000 ||
+              Date.now() - item.time_ms > 5000) {
+            this.stopSubscription();
+            return;
           }
+          // Provider snapshots and reconnects can replay the last exchange
+          // timestamp. Ignore duplicates without clearing chart state.
+          if (item.time_ms <= session.lastTimestamp) return;
           session.lastTimestamp = item.time_ms;
           const update = builder.onTick({time:Math.floor(item.time_ms/1000),
             price:item.price, ltq:0});
           if (update) onBar(update.bar, {provisional:update.provisional===true});
         };
-        socket.onclose = () => {
-          if (!session.closed) this.onState('Private live chart disconnected. No fallback to simulated prices.');
-        };
+        socket.onclose = () => retry(
+          'Private chart connection closed; requesting fresh authorization.');
         socket.onerror = () => {
-          if (!session.closed) this.onState('Private WSS gateway unavailable or not authorized.');
+          if (active()) this.onState('Private WSS gateway error; retrying securely.');
+          // onclose handles reconnection; never create overlapping sockets.
         };
-      } catch (_error) {
-        if (!session.closed) this.onState('Private chart authorization unavailable.');
+      } catch (error) {
+        if (!active()) return;
+        // A denied/revoked chart grant may not be retried indefinitely.
+        if ([401, 403].includes(error?.status)) {
+          this.onState('Private chart authorization revoked or denied.');
+          this.stopSubscription();
+        } else {
+          retry('Private chart temporarily unavailable; retrying authorization.');
+        }
       }
     };
     void start();
@@ -182,6 +256,10 @@ export class PrivateAuthorizedChartFeed {
     if (!session) return;
     session.closed = true;
     session.controller.abort();
+    for (const key of ['reconnectTimer','refreshTimer']) {
+      if (session[key] !== null) this.cancel(session[key]);
+      session[key] = null;
+    }
     if (session.socket) {
       this.sockets.delete(session.socket);
       try { session.socket.close(1000); } catch {}
