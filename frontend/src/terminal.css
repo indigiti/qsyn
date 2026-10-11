@@ -148,55 +148,27 @@ button:focus-visible,a:focus-visible{outline:2px solid var(--q-accent);outline-o
 .terminal-private-chart-grid .terminal-chart-host{height:500px;min-height:380px}
 @media(max-width:980px){.terminal-private-chart-grid{grid-template-columns:1fr}}
 
-/* Full-width OpenAlgo Charts homepage: only /qsyn/ uses these styles.
-   Trading, dashboard, private charts, and legacy diagnostics are unchanged. */
-.qsyn-homepage{min-height:100dvh;background:var(--q-bg);color:var(--q-fg)}
-.qsyn-home-topbar{display:flex;align-items:center;justify-content:space-between;gap:20px;min-height:60px;padding:10px clamp(12px,2vw,32px);border-bottom:1px solid var(--q-line);background:var(--q-side)}
-.qsyn-home-brand{display:inline-flex;align-items:center;gap:10px;text-decoration:none;white-space:nowrap}
-.qsyn-home-brand strong{font-size:17px;letter-spacing:-.04em}
-.qsyn-home-brand small{font-size:10px;letter-spacing:.18em;font-weight:750;color:var(--q-muted)}
-.qsyn-home-links{display:flex;align-items:center;gap:clamp(12px,2.4vw,36px)}
-.qsyn-home-links a{font-size:12px;font-weight:650;text-decoration:none;color:var(--q-muted);white-space:nowrap}
-.qsyn-home-links a:hover,.qsyn-home-disclaimer a:hover{color:var(--q-accent)}
-.qsyn-home-utilities{display:flex;align-items:center;gap:12px}
-.qsyn-home-source{color:var(--q-sim);font-size:10px;font-weight:800;letter-spacing:.08em;border:1px solid color-mix(in srgb,var(--q-sim),transparent 65%);padding:6px 9px;border-radius:6px;white-space:nowrap}
-.qsyn-home-content{width:100%;max-width:none;padding:14px clamp(8px,1.4vw,24px) 22px;margin:0 auto}
-.qsyn-home-heading{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:0 5px 10px}
-.qsyn-home-heading h1{font-size:19px;letter-spacing:-.025em;margin:2px 0 0;font-weight:760}
-.qsyn-home-session{font-size:11px;font-weight:750;color:var(--q-muted);white-space:nowrap}
+/* Minimal chart-only homepage: native OpenAlgo toolbar begins at page top.
+   Do not change /qsyn/terminal, dashboard, or Studio layout. */
+.qsyn-homepage{min-height:100dvh;width:100%;background:var(--q-bg);color:var(--q-fg)}
 .qsyn-home-chart{width:100%;min-width:0}
-.qsyn-home-chart .terminal-chart-card{padding:7px 7px 8px;border-radius:8px}
-.qsyn-home-chart .terminal-card-head{margin:1px 6px 9px}
-.qsyn-home-chart .terminal-card-head h2{font-size:14px}
-.qsyn-home-chart .terminal-chart-host{height:calc(100dvh - 230px);min-height:500px;max-height:1100px;width:100%;border-radius:5px}
-.qsyn-home-chart .terminal-footnote{font-size:10px;margin:6px 5px 0}
-.qsyn-home-disclaimer{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:12px 5px 0;font-size:11px;color:var(--q-muted);line-height:1.55}
-.qsyn-home-disclaimer>svg{flex:none;color:var(--q-sim)}
-.qsyn-home-disclaimer a{display:inline-flex;align-items:center;gap:5px;margin-left:auto;color:var(--q-accent);text-decoration:none;font-weight:800;white-space:nowrap}
-.qsyn-home-disclaimer a svg{transform:rotate(-90deg)}
-@media(max-width:860px){
- .qsyn-home-topbar{gap:10px}
- .qsyn-home-links{gap:13px}
- .qsyn-home-links a{font-size:11px}
- .qsyn-home-brand small{display:none}
- .qsyn-home-source{font-size:9px}
- .qsyn-home-chart .terminal-chart-host{height:calc(100dvh - 235px);min-height:450px}
+.qsyn-home-chart .terminal-chart-card{background:transparent;border:0;padding:0;border-radius:0}
+.qsyn-home-chart .terminal-card-head{display:none}
+.qsyn-home-chart .terminal-chart-host{
+  width:100%;height:calc(100dvh - 100px);min-height:390px;
+  max-height:none;border:0;border-radius:0
 }
-@media(max-width:620px){
- .qsyn-home-topbar{flex-wrap:wrap;min-height:0;padding:7px 12px 0}
- .qsyn-home-brand .terminal-mark{width:29px;height:29px}
- .qsyn-home-utilities{margin-left:auto}
- .qsyn-home-links{width:100%;order:3;justify-content:space-between;gap:10px;padding:10px 0;border-top:1px solid var(--q-line)}
- .qsyn-home-content{padding:11px 6px 24px}
- .qsyn-home-heading{align-items:flex-start}
- .qsyn-home-heading h1{font-size:17px}
- .qsyn-home-session{font-size:9px;max-width:154px;text-align:right;white-space:normal}
- .qsyn-home-chart .terminal-chart-card{padding:4px}
- .qsyn-home-chart .terminal-chart-host{height:62dvh;min-height:390px}
- .qsyn-home-chart .terminal-card-head{gap:6px}
- .qsyn-home-chart .terminal-card-head h2{font-size:12px}
- .qsyn-home-chart .terminal-eyebrow{font-size:8px}
- .qsyn-home-chart .terminal-chip{font-size:8px}
- .qsyn-home-disclaimer{padding:0 5px}
- .qsyn-home-disclaimer a{margin-left:0}
+.qsyn-home-chart .terminal-footnote{font-size:10px;margin:5px 10px 0;color:var(--q-muted)}
+.qsyn-home-disclaimer{
+  display:flex;align-items:center;flex-wrap:wrap;gap:7px 14px;
+  margin:7px 10px 0;padding:4px 0 12px;
+  color:var(--q-muted);font-size:10px;line-height:1.55
+}
+.qsyn-home-disclaimer>svg{flex:none;color:var(--q-sim)}
+.qsyn-home-disclaimer a{color:var(--q-accent);text-decoration:none;font-weight:750;white-space:nowrap}
+.qsyn-home-disclaimer a:hover{text-decoration:underline}
+@media(max-width:700px){
+ .qsyn-home-chart .terminal-chart-host{height:calc(100dvh - 155px);min-height:350px}
+ .qsyn-home-chart .terminal-footnote{margin:6px 8px 0}
+ .qsyn-home-disclaimer{margin:8px 8px 0;padding-bottom:18px}
 }

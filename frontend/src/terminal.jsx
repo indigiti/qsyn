@@ -116,42 +116,25 @@ const ignoreHomepageWidget = () => {};
  * reference without removing any upstream chart controls. Its candles remain
  * explicitly simulated. Full workspace features remain at /qsyn/terminal.
  */
-function HomepageChart({ theme, onToggleTheme }) {
-  return <div className="qsyn-homepage">
-    <header className="qsyn-home-topbar">
-      <a className="qsyn-home-brand" href="/qsyn/" aria-label="QSYN chart homepage">
-        <span className="terminal-mark">Q</span><strong>QSYN</strong><small>CHARTS</small>
-      </a>
-      <nav className="qsyn-home-links" aria-label="QSYN homepage navigation">
-        <a href="/qsyn/terminal?view=dashboard">Dashboard</a>
-        <a href="/qsyn/terminal?view=trading">Trading workspace</a>
-        <a href="/qsyn/studio">Synthetic Studio</a>
-      </nav>
-      <div className="qsyn-home-utilities">
-        <span className="qsyn-home-source">SIMULATED DATA</span>
-        <button type="button" className="terminal-icon" aria-label="Toggle theme"
-          onClick={onToggleTheme}>
-          {theme === 'dark' ? <Sun size={18}/> : <Moon size={18}/>}
-        </button>
-      </div>
-    </header>
-    <main className="qsyn-home-content">
-      <div className="qsyn-home-heading">
-        <div><p className="terminal-eyebrow">QSYN / OPENALGO CHARTS</p>
-          <h1>Premium chart</h1></div>
-        <span className="qsyn-home-session">NIFTY ATM CE + PE · 1m · DEMO</span>
-      </div>
-      <div className="qsyn-home-chart">
-        <ChartPanel pane={HOME_PANE} theme={theme} savedState={null}
-          revision={0} onMount={ignoreHomepageWidget}/>
-      </div>
-      <p className="qsyn-home-disclaimer" role="note">
-        <ShieldAlert size={15}/>
-        Illustrative synthetic premium candles only. No exchange market data, connected broker, executable orders or real-money P&amp;L.
-        <a href="/qsyn/terminal?view=trading">Open full chart workspace <ChevronDown size={14}/></a>
-      </p>
-    </main>
-  </div>;
+/**
+ * The public landing page deliberately renders only the native OpenAlgo
+ * chart. Navigation and all trading workspaces still exist at /qsyn/terminal.
+ * Keep the simulated-data disclosure below the chart, outside its controls.
+ */
+function HomepageChart({ theme }) {
+  return <main className="qsyn-homepage" aria-label="QSYN simulated chart homepage">
+    <div className="qsyn-home-chart">
+      <ChartPanel pane={HOME_PANE} theme={theme} savedState={null}
+        revision={0} onMount={ignoreHomepageWidget}/>
+    </div>
+    <p className="qsyn-home-disclaimer" role="note">
+      <ShieldAlert size={15}/>
+      Illustrative synthetic premium candles only. No exchange market data, connected broker, executable orders or real-money P&amp;L.
+      <a href="/qsyn/terminal?view=trading">Trading workspace</a>
+      <a href="/qsyn/terminal?view=dashboard">Dashboard</a>
+      <a href="/qsyn/studio">Synthetic Studio</a>
+    </p>
+  </main>;
 }
 
 function browserStorage() {
@@ -576,7 +559,7 @@ function App() {
     </nav>;
   }
   if (['/', '/qsyn', '/qsyn/'].includes(window.location.pathname)) {
-    return <HomepageChart theme={theme} onToggleTheme={toggleTheme}/>;
+    return <HomepageChart theme={theme}/>;
   }
   return <div className="terminal-shell">
     <header className="terminal-topbar">

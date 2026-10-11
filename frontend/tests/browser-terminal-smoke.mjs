@@ -60,20 +60,25 @@ try {
     throw new Error('Terminal lost same-origin API CSP');
   if(!String(response.headers()['x-robots-tag']).includes('noindex'))
     throw new Error('Terminal staging was unexpectedly indexable');
-  // The homepage is a standalone full-width OpenAlgo widget, not the
-  // smaller trading workspace with sidebar controls.
-  await page.getByRole('heading',{name:'Premium chart'}).waitFor();
+  // The homepage is now a chart-only OpenAlgo canvas: NO QSYN navigation,
+  // premium-title strip, or extra chart-card heading above native controls.
+  await page.locator('.qsyn-home-chart .terminal-chart-host').waitFor();
   await page.waitForFunction(()=>document.querySelectorAll('.qsyn-home-chart #qsyn-native-chart canvas').length>0,
     null,{timeout:12000});
-  const homeWidth=await page.locator('.qsyn-home-chart .terminal-chart-host')
-    .evaluate(node=>node.getBoundingClientRect().width);
-  if(homeWidth<1200)throw new Error('OpenAlgo homepage chart is not full-width: '+homeWidth);
+  if(await page.locator('.qsyn-home-topbar, .qsyn-home-heading, .qsyn-home-chart .terminal-card-head').filter({visible:true}).count())
+    throw new Error('Removed homepage topbars/headings reappeared');
+  if(await page.getByText('Premium chart',{exact:true}).count())
+    throw new Error('Removed Premium chart title reappeared');
+  const chartBounds=await page.locator('.qsyn-home-chart .terminal-chart-host')
+    .evaluate(node=>({width:node.getBoundingClientRect().width,top:node.getBoundingClientRect().top}));
+  if(chartBounds.width<1200 || chartBounds.top>8)
+    throw new Error('Homepage chart must start at top of viewport and span width: '+JSON.stringify(chartBounds));
   if(await page.locator('html').getAttribute('data-qsyn-theme')!=='light')
     throw new Error('First-visit homepage did not match light reference');
   if(!(await page.getByRole('link',{name:'Dashboard',exact:true}).count()))
-    throw new Error('Premium dashboard is not reachable from homepage');
+    throw new Error('Dashboard link unavailable below homepage chart');
   if(!(await page.getByRole('link',{name:'Trading workspace',exact:true}).count()))
-    throw new Error('Full chart workspace is not reachable from homepage');
+    throw new Error('Full chart workspace link unavailable below homepage chart');
   const homeNote=await page.locator('.qsyn-home-disclaimer').innerText();
   if(!homeNote.includes('Illustrative synthetic premium')||!homeNote.includes('No exchange market data'))
     throw new Error('Full-width homepage lost simulated-source disclosure');
@@ -185,8 +190,10 @@ try {
   const mobile=await browser.newPage({viewport:{width:390,height:844}});
   mobile.on('pageerror',e=>browserErrors.push(e.message));
   await mobile.goto(origin+'/qsyn/',{waitUntil:'domcontentloaded'});
-  await mobile.getByRole('heading',{name:'Premium chart'}).waitFor();
   await mobile.waitForFunction(()=>document.querySelectorAll('.qsyn-home-chart canvas').length>0);
+  const mobileChartTop=await mobile.locator('.qsyn-home-chart .terminal-chart-host')
+    .evaluate(node=>node.getBoundingClientRect().top);
+  if(mobileChartTop>8)throw new Error('Mobile chart is not at top of page');
   if(await mobile.evaluate(()=>document.documentElement.scrollWidth>innerWidth+2))
     throw new Error('Full-width homepage overflows on mobile');
   await mobile.goto(origin+'/qsyn/terminal?view=tools',{waitUntil:'domcontentloaded'});
@@ -201,7 +208,7 @@ try {
   if(browserRequests.some(url=>/(\/api\/v1\/(placeorder|cancelorder|modifyorder)|\/auth\/login|\/socket\.io)/i.test(url)))
     throw new Error('Terminal unexpectedly requested broker, auth or order execution endpoints');
   if(browserErrors.length)throw new Error('Browser exceptions: '+JSON.stringify(browserErrors));
-  console.log('PASS: full-width /qsyn/ OpenAlgo homepage, legacy rollback, terminal, mobile, CSP and no order calls');
+  console.log('PASS: clean top-aligned /qsyn/ chart-only homepage, legacy rollback, terminal, mobile, CSP and no order calls');
 }finally{
   if(browser)await browser.close();
   if(server)server.kill('SIGTERM');
