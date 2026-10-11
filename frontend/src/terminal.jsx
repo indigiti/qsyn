@@ -490,13 +490,13 @@ function ChartWorkspace({ theme }) {
     </div>
   </div>;
 }
-function PrivateMarketPanel({ account, instrument, label }) {
+function PrivateMarketPanel({ account, instrument, label, authMode = 'private_test' }) {
   const ref = useRef(null);
   const [status, setStatus] = useState('Connecting private account authorization…');
   useEffect(() => {
     const host = ref.current;
     if (!host) return;
-    const feed = new PrivateAuthorizedChartFeed(account, instrument, setStatus);
+    const feed = new PrivateAuthorizedChartFeed(account, instrument, setStatus, {authMode});
     let widget;
     let stopLegendSettings=()=>{};
     try {
@@ -514,7 +514,7 @@ function PrivateMarketPanel({ account, instrument, label }) {
       feed.destroy();
       try { widget?.destroy(); } catch {}
     };
-  }, [account, instrument]);
+  }, [account, instrument, authMode]);
   return <section className="terminal-chart-card">
     <div className="terminal-card-head"><h2>{label} · <small>{instrument}</small></h2><span className="terminal-chip">PRIVATE ONLY</span></div>
     <div className="terminal-chart-host" ref={ref} aria-label={'Private '+label+' licensed candlestick chart'} />
@@ -533,12 +533,36 @@ function PrivateMarketWorkspace() {
   const [selected, setSelected] = useState(null);
   useEffect(() => {
     const controller = new AbortController();
-    fetch('/qsyn/api/v1/auth/state', {credentials:'same-origin',cache:'no-store',signal:controller.signal})
-      .then(r => r.ok ? r.json() : null)
-      .then(r => {
-        if (!controller.signal.aborted) setAccess(
-          r?.authenticated === true && r?.profile === 'mock-only' ? 'private_test' : 'locked');
-      }).catch(() => { if (!controller.signal.aborted) setAccess('locked'); });
+    (async () => {
+      const operator = await fetch('/qsyn/api/v1/admin/upstox/private-chart-access', {
+        credentials:'same-origin',cache:'no-store',signal:controller.signal,
+      });
+      if (operator.ok) {
+        const data = await operator.json();
+        if (data.schema === 'QSYN-PRIVATE-OPERATOR-CHART-ACCESS/1' &&
+            data.profile === 'operator-admin' && data.authenticated === true &&
+            data.trading_enabled === false &&
+            /^[A-Za-z0-9_.:-]{1,128}$/.test(data.account_id)) {
+          if (!controller.signal.aborted) {
+            setAccount(data.account_id);
+            setAccess('operator_admin');
+          }
+        } else if (!controller.signal.aborted) setAccess('locked');
+        return;
+      }
+      // Only absent/disabled operator routes may use the existing isolated
+      // development identity. Never downgrade denied operator credentials.
+      if (![404,503].includes(operator.status)) {
+        if (!controller.signal.aborted) setAccess('locked');
+        return;
+      }
+      const state = await fetch('/qsyn/api/v1/auth/state', {
+        credentials:'same-origin',cache:'no-store',signal:controller.signal,
+      });
+      const data = state.ok ? await state.json() : null;
+      if (!controller.signal.aborted) setAccess(
+        data?.authenticated === true && data?.profile === 'mock-only' ? 'private_test' : 'locked');
+    })().catch(() => { if (!controller.signal.aborted) setAccess('locked'); });
     return () => controller.abort();
   }, []);
   const supportedIndex = isIndexInstrumentKey(indexKey.trim()) &&
@@ -551,15 +575,16 @@ function PrivateMarketWorkspace() {
     </div></header>
     <section className="terminal-surface terminal-live-controls">
       {access === 'checking' && <p role="status">Checking private identity access…</p>}
-      {access === 'locked' && <p role="status">Unavailable. Requires an authenticated private development identity, verified Upstox entitlements, and an operator-provisioned WSS proxy. Simulation remains on the Trading tab.</p>}
-      {access === 'private_test' && <>
-        <p>Private test identity active. Enter only account, CE/PE or index keys approved in the private rights file. The grant issuer independently verifies access.</p>
+      {access === 'locked' && <p role="status">Unavailable. Requires a private operator or development identity, independently approved Upstox index rights and an authenticated WSS proxy. No demo candles or order execution.</p>}
+      {(access === 'private_test' || access === 'operator_admin') && <>
+        <p>{access === 'operator_admin' ? 'Operator administrator session active. Your account is server-bound. Only independently approved NSE/BSE index keys can receive private 30-second viewer grants.' : 'Private test identity active. Enter only account, CE/PE or index keys approved in the private rights file. The grant issuer independently verifies access.'}</p>
         <div className="terminal-layout-tools">
-          <label>Approved account alias<input aria-label="Approved account alias" value={account} maxLength={128} onChange={e => setAccount(e.target.value)}/></label>
+          <label>Approved account alias<input aria-label="Approved account alias" value={account} readOnly={access === 'operator_admin'} maxLength={128} onChange={e => setAccount(e.target.value)}/></label>
+          {access === 'private_test' && <>
           <label>CE instrument key<input aria-label="Private CE key" placeholder="NSE_FO|12345" value={ce} maxLength={32} onChange={e=>setCe(e.target.value)}/></label>
           <label>PE instrument key<input aria-label="Private PE key" placeholder="NSE_FO|12346" value={pe} maxLength={32} onChange={e=>setPe(e.target.value)}/></label>
           <button className="terminal-action" type="button" disabled={!supported}
-            onClick={() => setSelected({account:account.trim(), ce:ce.trim(), pe:pe.trim()})}>Connect authorized charts</button>
+            onClick={() => setSelected({account:account.trim(), ce:ce.trim(), pe:pe.trim()})}>Connect authorized charts</button></>}
           <label>Approved NSE/BSE index instrument key<input aria-label="Private index instrument key" placeholder="NSE_INDEX|Nifty 50" value={indexKey} maxLength={128} onChange={e=>setIndexKey(e.target.value)}/></label>
           <button className="terminal-action" type="button" disabled={!supportedIndex}
             onClick={() => setSelected({account:account.trim(),index:indexKey.trim()})}>Connect authorized index</button>
@@ -568,9 +593,9 @@ function PrivateMarketWorkspace() {
         <p className="terminal-footnote">No broker secret or Upstox OAuth token is entered in the browser. Chart grants expire after 30 seconds and require current server-side rights.</p>
       </>}
     </section>
-    {access === 'private_test' && selected && <div className="terminal-private-chart-grid">
+    {(access === 'private_test' || access === 'operator_admin') && selected && <div className="terminal-private-chart-grid">
       {selected.index ?
-        <PrivateMarketPanel key={selected.account + selected.index} account={selected.account} instrument={selected.index} label="Upstox index"/> : <>
+        <PrivateMarketPanel key={selected.account + selected.index} account={selected.account} instrument={selected.index} label="Upstox index" authMode={access === 'operator_admin' ? 'operator_admin' : 'private_test'}/> : <>
         <PrivateMarketPanel key={selected.account + selected.ce} account={selected.account} instrument={selected.ce} label="Call option (CE)"/>
         <PrivateMarketPanel key={selected.account + selected.pe} account={selected.account} instrument={selected.pe} label="Put option (PE)"/>
       </>}

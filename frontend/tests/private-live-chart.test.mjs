@@ -308,3 +308,60 @@ test('licensed private NIFTY index history requires a matching ticket and source
   assert.equal(requests.some(x=>x.url.includes('/india/bars')),false);
   feed.destroy();
 });
+
+
+test('operator-only index grant uses QSYN administrator session rather than mock identity', async () => {
+  const key='NSE_INDEX|Nifty 50';
+  const calls=[];
+  const fetcher=async (url, options)=>{
+    calls.push({url,options});
+    if(url==='/qsyn/api/v1/admin/upstox/private-chart-access')
+      return {ok:true,json:async()=>({
+        schema:'QSYN-PRIVATE-OPERATOR-CHART-ACCESS/1',
+        authenticated:true,profile:'operator-admin',trading_enabled:false,
+        account_id:account,csrf,
+      })};
+    if(url==='/qsyn/api/v1/admin/upstox/private-chart-grant')
+      return {ok:true,json:async()=>({
+        schema:'QSYN-PRIVATE-CHART-GRANT-RESPONSE/1',
+        account_id:account,instrument:key,
+        transport:'operator_private_wss_only',
+        trading_enabled:false,public_redistribution_allowed:false,
+        ticket,expires_ms:Date.now()+20000,
+      })};
+    throw Error('Unexpected mock identity or public endpoint');
+  };
+  const grant=await fetchPrivateChartGrant(fetcher,account,key,undefined,'operator_admin');
+  assert.equal(grant.ticket,ticket);
+  assert.deepEqual(calls.map(x=>x.url),[
+    '/qsyn/api/v1/admin/upstox/private-chart-access',
+    '/qsyn/api/v1/admin/upstox/private-chart-grant',
+  ]);
+  assert.equal(calls[1].options.headers['X-CSRF-Token'],csrf);
+  assert.deepEqual(JSON.parse(calls[1].options.body),{account_id:account,instrument:key});
+  await assert.rejects(
+    fetchPrivateChartGrant(fetcher,account,'NSE_FO|12345',undefined,'operator_admin'),
+    /Unsupported private chart identity scope/);
+  const foreign=async (url, options)=>url.endsWith('private-chart-access')
+    ? {ok:true,json:async()=>({schema:'QSYN-PRIVATE-OPERATOR-CHART-ACCESS/1',
+        authenticated:true,profile:'operator-admin',trading_enabled:false,
+        account_id:'FOREIGN',csrf})}
+    : fetcher(url,options);
+  await assert.rejects(fetchPrivateChartGrant(foreign,account,key,undefined,'operator_admin'),
+    /account mismatch/);
+  assert.throws(()=>new PrivateAuthorizedChartFeed(account,'NSE_FO|12345',()=>{},{
+    authMode:'operator_admin',location:{protocol:'https:',host:'qsyn.test'},
+  }),/Invalid private chart identity mode/);
+});
+
+test('operator grant 401 and 403 are terminal, with no fallback to mock identity', async () => {
+  const key='NSE_INDEX|Nifty 50';
+  const calls=[];
+  const fetcher=async (url)=>{
+    calls.push(url);
+    return {ok:false,status:401};
+  };
+  await assert.rejects(fetchPrivateChartGrant(fetcher,account,key,undefined,'operator_admin'),
+    error=>error.status===401);
+  assert.deepEqual(calls,['/qsyn/api/v1/admin/upstox/private-chart-access']);
+});

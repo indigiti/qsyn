@@ -57,6 +57,8 @@ jobs:
           python3 apps/web-php/tests/TerminalWorkspaceHttpSmoke.py
           php -l apps/web-php/src/PrivateChartGrantApi.php
           python3 apps/web-php/tests/PrivateChartGrantHttpSmoke.py
+          php -l apps/web-php/src/OperatorIndexChartGrantApi.php
+          python3 apps/web-php/tests/OperatorIndexChartGrantHttpSmoke.py
           php -l apps/web-php/src/UpstoxOperatorOAuth.php
           php -l apps/web-php/tools/upstox-oauth.php
           php apps/web-php/tests/UpstoxOperatorOAuthTest.php
