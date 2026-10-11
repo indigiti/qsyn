@@ -21,6 +21,8 @@ import { QsynMarketsFeed } from './qsyn-markets-feed.js';
 import { cryptoDefault } from './crypto-catalog.js';
 import { nativeCryptoWatchlists, noSyntheticQuotes } from './native-crypto-watchlists.js';
 import 'openalgo-charts/indicators';
+import {registerWickScience} from './wick-science-indicator.js';
+registerWickScience();
 import { QsynWorkspaceFeed } from './terminal-feed.js';
 import { publicNativeWorkspaceStore, cryptoNativeWorkspaceStore } from './native-workspaces.js';
 import { PrivateAuthorizedChartFeed, validatePrivateChartScope } from './private-live-chart.js';
