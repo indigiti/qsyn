@@ -459,4 +459,34 @@ mod tests {
         let _=next;
     }
 
+    #[tokio::test]
+    async fn reconnect_retains_real_recent_buckets_and_exposes_recovery_state() {
+        let req=req("COINBASE","spot","SOL-USD");
+        let k=key(&req);
+        let start=epoch_ms()/60_000*60-120;
+        let candle=|time:u64| Bar{time,open:100.0,high:100.0,low:100.0,close:100.0,volume:1.0};
+        let slot=Slot{connected:false,last:None,recent:VecDeque::new(),
+            last_at:None,reconnects:0,updates:0,last_update_ms:None,
+            last_connection_ms:None,last_disconnection_ms:None,
+            last_rest_ms:None,rest_successes:0,rest_recoveries:0,
+            last_rest_gap_count:0,last_rest_missing_bars:0};
+        slots().lock().await.insert(k.clone(),slot);
+        publish(&req,candle(start)).await;
+        assert_eq!(status(&req).await,"websocket");
+        disconnected(&req).await;
+        let offline=health(&req).await;
+        assert_eq!(offline["state"],"reconnecting");
+        assert_eq!(offline["reconnect_count"],1);
+        assert_eq!(recent(&req).await.len(),1);
+        publish(&req,candle(start+60)).await;
+        assert_eq!(status(&req).await,"websocket");
+        assert_eq!(recent(&req).await.len(),2);
+        assert_eq!(health(&req).await["reconnect_count"],1);
+        // Ignore replay of an earlier minute, including after reconnect.
+        publish(&req,candle(start)).await;
+        assert_eq!(recent(&req).await.len(),2);
+        assert_eq!(recent(&req).await.last().unwrap().time,start+60);
+        slots().lock().await.remove(&k);
+    }
+
 }
