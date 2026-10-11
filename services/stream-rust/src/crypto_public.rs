@@ -1,14 +1,15 @@
 //! Read-only public crypto OHLCV gateway. No API keys, trading, arbitrary URLs,
 //! private Upstox data or per-browser upstream credentials are accepted.
-//! Provider history is polled for the *latest authoritative forming candle*;
-//! this is NOT yet an exchange WebSocket/tick-by-tick feed.
+//! Provider OHLCV comes from validated exchange REST history and native
+//! public upstream WebSocket candles, with REST refresh on reconnect.
+mod stream;
 use axum::{extract::Query, http::StatusCode, response::{IntoResponse, Response}, routing::get, Json, Router};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::{collections::HashMap, sync::OnceLock, time::{Duration, Instant, SystemTime, UNIX_EPOCH}};
 use tokio::sync::Mutex;
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 struct Request {
     exchange: String, market: String, symbol: String, interval: String,
     limit: Option<usize>,
@@ -158,11 +159,16 @@ fn cache() -> &'static Cache {
     CACHE.get_or_init(||Mutex::new(HashMap::new()))
 }
 async fn load(req:&Request)->Result<Vec<Bar>,()> {
+    let live = stream::latest(req).await;
     let cache_key=format!("{}:{}:{}:{}:{}",req.exchange,req.market,req.symbol,req.interval,req.limit.unwrap_or(250));
     {
         let guard=cache().lock().await;
         if let Some((since,bars))=guard.get(&cache_key) {
-            if since.elapsed()<Duration::from_secs(4) {return Ok(bars.clone());}
+            if since.elapsed()<Duration::from_secs(if live.is_some() {60} else {4}) {
+                let mut merged=bars.clone();
+                overlay(&mut merged,live,req.limit.unwrap_or(250));
+                return Ok(merged);
+            }
         }
     }
     let (url,post)=source(req)?;
@@ -181,15 +187,30 @@ async fn load(req:&Request)->Result<Vec<Bar>,()> {
     let mut guard=cache().lock().await;
     if guard.len()>128 {guard.retain(|_,(when,_)|when.elapsed()<Duration::from_secs(30));}
     guard.insert(cache_key,(Instant::now(),bars.clone()));
-    Ok(bars)
+    let mut merged=bars;
+    overlay(&mut merged,live,req.limit.unwrap_or(250));
+    Ok(merged)
+}
+async fn invalidate(req:&Request) {
+    let prefix=format!("{}:{}:{}:{}:",req.exchange,req.market,req.symbol,req.interval);
+    cache().lock().await.retain(|key,_|!key.starts_with(&prefix));
+}
+fn overlay(bars:&mut Vec<Bar>,live:Option<Bar>,limit:usize){
+    if let (Some(last),Some(bar))=(bars.last(),live) {
+        if bar.time==last.time {bars.pop(); bars.push(bar);}
+        else if bar.time>last.time && bar.time-last.time<=60 {bars.push(bar);}
+    }
+    if bars.len()>limit {bars.drain(..bars.len()-limit);}
 }
 async fn bars(Query(req):Query<Request>)->Response {
     if !valid(&req) {return (StatusCode::UNPROCESSABLE_ENTITY,Json(json!({"error":"unsupported_crypto_instrument"}))).into_response();}
+    stream::ensure(&req).await;
     match load(&req).await {
         Ok(bars)=>(StatusCode::OK,Json(json!({
             "schema":"QSYN-PUBLIC-CRYPTO-BARS/1","source":"exchange_public",
             "exchange":req.exchange,"market":req.market,"symbol":req.symbol,
             "interval":req.interval,"bars":bars,"asof_ms":epoch_ms(),
+            "feed_transport":stream::status(&req).await,
             "trading_enabled":false
         }))).into_response(),
         Err(_)=>(StatusCode::BAD_GATEWAY,Json(json!({"error":"exchange_market_data_unavailable"}))).into_response()

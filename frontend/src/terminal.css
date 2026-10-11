@@ -247,12 +247,46 @@ button:focus-visible,a:focus-visible{outline:2px solid var(--q-accent);outline-o
 .qsyn-home-chart .oac-topbar__layouts .oac-glyph { flex:none; }
 
 
-/* Chart-first crypto homepage: native OpenAlgo grid and toolbar remain functional. */
+/* Keep OpenAlgo's menu-owning layout buttons in the native grid bar.
+   An in-flow, noninteractive slot beside Watchlist reserves the same row
+   space; a floated bar is aligned to the slot without moving click handlers. */
 .qsyn-homepage{position:relative;min-height:100dvh}
 .qsyn-homepage .qsyn-crypto-grid{width:100%;height:100dvh;min-height:420px}
-.qsyn-crypto-selector{position:absolute;top:7px;left:8px;z-index:35;display:flex;align-items:center;gap:6px;max-width:calc(100% - 16px)}
-.qsyn-crypto-selector select{max-width:260px;font:12px system-ui;color:var(--q-fg);background:var(--q-card);border:1px solid var(--q-line);border-radius:5px;padding:7px 9px;cursor:pointer}
-.qsyn-crypto-source{font:11px system-ui;color:var(--q-muted);background:var(--q-card);border-radius:4px;padding:6px 8px;max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-@media(max-width:850px){.qsyn-crypto-source{display:none}.qsyn-crypto-selector select{max-width:165px}}
-/* Leave sufficient room for exchange selection without hiding native toolbar actions. */
-.qsyn-homepage .oac-gridbar{padding-left:min(390px,40vw)}
+.qsyn-homepage .qsyn-grid-toolbar-slot{
+  display:inline-block;width:72px;min-width:72px;height:32px;flex:none;
+  pointer-events:none
+}
+.qsyn-homepage .oac-widget.oac-grid__bar{
+  position:absolute;z-index:65;left:0;top:0;
+  display:flex;align-items:center;gap:4px;
+  min-height:32px;height:32px;width:72px;
+  padding:0;border:0;background:transparent;overflow:visible;
+}
+.qsyn-homepage .oac-grid__bar:not([data-placed="true"]){visibility:hidden}
+.qsyn-homepage .oac-grid__bar > :not(.oac-grid__layout):not(.oac-grid__saved){display:none!important}
+.qsyn-homepage .oac-grid__bar .oac-grid__layout,
+.qsyn-homepage .oac-grid__bar .oac-grid__saved,
+.qsyn-homepage .oac-topbar__watchlist{
+  display:inline-flex;align-items:center;justify-content:center;
+  width:32px;min-width:32px;height:32px;flex:none;
+  padding:0;gap:0;font-size:0;position:relative
+}
+.qsyn-homepage .oac-grid__bar .oac-grid__bar-text,
+.qsyn-homepage .oac-grid__bar .oac-chev{display:none}
+.qsyn-homepage .oac-grid__bar .oac-glyph,
+.qsyn-homepage .oac-topbar__watchlist .oac-glyph{
+  display:inline-flex;flex:none;font-size:14px
+}
+.qsyn-screenreader-status{
+  position:absolute;width:1px;height:1px;padding:0;margin:-1px;
+  overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0
+}
+
+/* On compact screens the OpenAlgo toolbar scrolls within the chart, never the
+   document. The floated native grid actions are clamped to the viewport. */
+@media(max-width:700px){
+ .qsyn-homepage{width:100%;max-width:100vw;overflow-x:clip}
+ .qsyn-homepage .qsyn-crypto-grid,.qsyn-homepage .oac-grid{max-width:100%;overflow-x:clip}
+ .qsyn-homepage .oac-topbar{max-width:100%;overflow-x:auto;overflow-y:hidden;scrollbar-width:none}
+ .qsyn-homepage .oac-topbar::-webkit-scrollbar{display:none}
+}

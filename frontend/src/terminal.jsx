@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 import { createWidget, createChartGrid } from 'openalgo-charts/widget';
 import { QsynCryptoFeed } from './crypto-feed.js';
-import { cryptoDefault, CRYPTO_MARKETS } from './crypto-catalog.js';
+import { cryptoDefault } from './crypto-catalog.js';
 import { nativeCryptoWatchlists, noSyntheticQuotes } from './native-crypto-watchlists.js';
 import 'openalgo-charts/indicators';
 import { QsynWorkspaceFeed } from './terminal-feed.js';
@@ -129,12 +129,14 @@ const ignoreHomepageWidget = () => {};
  * chart. Navigation and all trading workspaces still exist at /qsyn/terminal.
  * Keep the simulated-data disclosure below the chart, outside its controls.
  */
+/**
+ * Single source of symbol selection: the native OpenAlgo symbol search and
+ * watchlist. Reuse native grid action buttons beside its Watchlist control,
+ * rather than duplicating exchange and layout dropdowns above the chart.
+ */
 function HomepageChart({ theme }) {
   const host=useRef(null);
-  const gridRef=useRef(null);
-  const [selection,setSelection]=useState(cryptoDefault);
   const [message,setMessage]=useState('Connecting public exchange candles…');
-  const [preset,setPreset]=useState('1x1');
   const nativeWorkspaces=useMemo(()=>cryptoNativeWorkspaceStore(),[]);
   const nativeWatchlists=useMemo(()=>nativeCryptoWatchlists(),[]);
   useEffect(()=>{
@@ -142,41 +144,61 @@ function HomepageChart({ theme }) {
     let active=true;
     const feed=new QsynCryptoFeed(s=>{if(active)setMessage(s);});
     const grid=createChartGrid(host.current,{
-      feed,symbol:selection.symbol,exchange:selection.exchange+':'+selection.market,
+      feed,symbol:cryptoDefault.symbol,
+      exchange:cryptoDefault.exchange+':'+cryptoDefault.market,
       interval:'1m',intervals:['1m','5m','15m','1h','1d'],
       theme,branding:false,panels:true,toolbar:true,bottombar:true,
-      preset,workspaces:nativeWorkspaces||undefined,
+      preset:'1x1',workspaces:nativeWorkspaces||undefined,
       ...(nativeWatchlists?{watchlist:{store:nativeWatchlists,quotes:noSyntheticQuotes}}:{}),
       links:{crosshair:true},navigation:{defaultVisibleBars:120,mousePan:'horizontal'},
     });
-    gridRef.current=grid;
-    grid.ready.catch(()=>{if(active)setMessage('Public market feed unavailable · no demo fallback');});
-    return ()=>{active=false;gridRef.current=null;grid.destroy();feed.destroy();};
+    // Keep OpenAlgo's buttons inside their OWN grid bar; reparenting them
+    // into a chart intercepts the grid's outside-click menu handling.
+    // Reserve one inline slot beside Watchlist and float the native bar onto it.
+    let slot=null;
+    const syncToolbar=()=>{
+      if(!active)return;
+      const root=host.current;
+      const bar=root?.querySelector('.oac-grid__bar');
+      const nativeWatchlist=grid.active()?.widget?.root?.querySelector('.oac-topbar__watchlist');
+      if(!bar || !nativeWatchlist || !bar.querySelector('.oac-grid__layout'))return;
+      const topbar=nativeWatchlist.parentElement;
+      if(!slot) {
+        slot=document.createElement('span');
+        slot.className='qsyn-grid-toolbar-slot';
+        slot.setAttribute('aria-hidden','true');
+      }
+      if(slot.parentElement!==topbar || slot.nextElementSibling!==nativeWatchlist)
+        topbar.insertBefore(slot,nativeWatchlist);
+      const gridRect=grid.root.getBoundingClientRect();
+      const position=slot.getBoundingClientRect();
+      bar.style.left=Math.max(0,Math.min(position.left-gridRect.left,gridRect.width-72))+'px';
+      bar.style.top=(position.top-gridRect.top)+'px';
+      bar.dataset.placed='true';
+    };
+    const observer=new MutationObserver(syncToolbar);
+    observer.observe(host.current,{childList:true,subtree:true});
+    const offActive=grid.on('active',syncToolbar);
+    const offLayout=grid.on('layout',syncToolbar);
+    window.addEventListener('resize',syncToolbar);
+    host.current.addEventListener('scroll',syncToolbar,true);
+    void grid.ready.then(syncToolbar).catch(()=>{
+      if(active)setMessage('Public market feed unavailable · no demo fallback');
+    });
+    syncToolbar();
+    return ()=>{
+      active=false;observer.disconnect();offActive?.();offLayout?.();
+      window.removeEventListener('resize',syncToolbar);
+      host.current?.removeEventListener('scroll',syncToolbar,true);
+      slot?.remove();
+      grid.destroy();feed.destroy();
+    };
   },[theme,nativeWorkspaces,nativeWatchlists]);
-  function choose(next) {
-    if(!next)return;
-    setSelection(next);
-    for(const cell of gridRef.current?.cells()||[]) {
-      cell.widget.setSymbol(next.symbol,next.exchange+':'+next.market);
-    }
-  }
-  function layout(value) {
-    setPreset(value);
-    gridRef.current?.setPreset(value);
-  }
   return <main className="qsyn-homepage" aria-label="QSYN public crypto charts">
-    <div className="qsyn-crypto-selector" role="group" aria-label="Public crypto market selector">
-      <select aria-label="Exchange market and symbol" value={selection.id}
-        onChange={e=>choose(CRYPTO_MARKETS.find(x=>x.id===e.target.value))}>
-        {CRYPTO_MARKETS.map(item=><option key={item.id} value={item.id}>{item.label}</option>)}
-      </select>
-      <select aria-label="Chart grid layout" value={preset} onChange={e=>layout(e.target.value)}>
-        <option value="1x1">1 chart</option><option value="1x2">2 charts</option>
-        <option value="2x2">4 charts</option><option value="2x3">6 charts</option>
-      </select>
-      <span role="status" className="qsyn-crypto-source">{message}</span>
+    <div className="qsyn-home-chart">
+      <div className="qsyn-crypto-grid" ref={host}/>
+      <span className="qsyn-screenreader-status" role="status" aria-live="polite">{message}</span>
     </div>
-    <div className="qsyn-home-chart"><div className="qsyn-crypto-grid" ref={host}/></div>
   </main>;
 }
 

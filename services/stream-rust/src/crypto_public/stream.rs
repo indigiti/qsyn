@@ -1,0 +1,282 @@
+//! On-demand public exchange WebSocket workers. Started once per allowlisted
+//! instrument on the first 1m history request, and kept alive by the Rust
+//! service even after the browser closes. Never runs an order or private API.
+//! Reconnects with bounded exponential backoff and refreshes REST bars after
+//! every disconnect. Browser clients still use the same-origin PHP bridge.
+use super::{bar, epoch_ms, number, timestamp, Bar, Request};
+use futures_util::{SinkExt, StreamExt};
+use serde_json::{json, Value};
+use std::{collections::HashMap, sync::OnceLock, time::{Duration, Instant}};
+use tokio::sync::Mutex;
+use tokio_tungstenite::{connect_async, tungstenite::Message};
+
+#[derive(Clone)]
+struct Slot {
+    connected: bool,
+    last: Option<Bar>,
+    last_at: Option<Instant>,
+    reconnects: u64,
+}
+type Slots = Mutex<HashMap<String, Slot>>;
+fn slots() -> &'static Slots {
+    static SLOTS: OnceLock<Slots> = OnceLock::new();
+    SLOTS.get_or_init(|| Mutex::new(HashMap::new()))
+}
+fn key(req: &Request) -> String {
+    format!("{}:{}:{}:{}", req.exchange, req.market, req.symbol, req.interval)
+}
+pub(super) async fn latest(req: &Request) -> Option<Bar> {
+    let guard = slots().lock().await;
+    let slot = guard.get(&key(req))?;
+    if slot.connected && slot.last_at.is_some_and(|t| t.elapsed() < Duration::from_secs(20)) {
+        slot.last.clone()
+    } else {
+        None
+    }
+}
+pub(super) async fn status(req: &Request) -> &'static str {
+    let guard = slots().lock().await;
+    match guard.get(&key(req)) {
+        None => "rest",
+        Some(s) if s.connected && s.last_at.is_some_and(|t| t.elapsed() < Duration::from_secs(20)) => "websocket",
+        Some(_) => "reconnecting",
+    }
+}
+pub(super) async fn ensure(req: &Request) {
+    if req.interval != "1m" { return; }
+    let k = key(req);
+    let mut guard = slots().lock().await;
+    if guard.contains_key(&k) { return; }
+    guard.insert(k, Slot {
+        connected: false, last: None, last_at: None, reconnects: 0,
+    });
+    let selected = req.clone();
+    tokio::spawn(async move { worker(selected).await });
+}
+async fn publish(req: &Request, next: Bar) {
+    let mut guard=slots().lock().await;
+    if let Some(slot)=guard.get_mut(&key(req)) {
+        if let Some(ref previous)=slot.last {
+            if next.time < previous.time { return; }
+        }
+        slot.last=Some(next);
+        slot.connected=true;
+        slot.last_at=Some(Instant::now());
+    }
+}
+async fn disconnected(req: &Request) {
+    if let Some(slot)=slots().lock().await.get_mut(&key(req)) {
+        slot.connected=false;
+        slot.last_at=None;
+        slot.last=None; // never reuse a bar from a dead source
+        slot.reconnects=slot.reconnects.saturating_add(1);
+    }
+}
+fn endpoint(req:&Request)->(String,Option<Value>) {
+    let symbol=&req.symbol;
+    let symbol_lower=symbol.to_ascii_lowercase();
+    match req.exchange.as_str() {
+        "BINANCE" => {
+            let host=if req.market=="perp" {"fstream.binance.com"}else{"data-stream.binance.vision"};
+            (format!("wss://{host}/ws/{symbol_lower}@kline_1m"),None)
+        }
+        "BYBIT" => (
+            format!("wss://stream.bybit.com/v5/public/{}",if req.market=="perp"{"linear"}else{"spot"}),
+            Some(json!({"op":"subscribe","args":[format!("kline.1.{symbol}")]}))
+        ),
+        "OKX" => ("wss://ws.okx.com/ws/v5/business".into(),
+            Some(json!({"op":"subscribe","args":[{"channel":"candle1m","instId":symbol}]}))),
+        "COINBASE" => ("wss://ws-feed.exchange.coinbase.com".into(),
+            Some(json!({"type":"subscribe","product_ids":[symbol],"channels":["matches","heartbeat"]}))),
+        "KRAKEN" => ("wss://ws.kraken.com".into(),
+            Some(json!({"event":"subscribe","pair":[kraken_pair(symbol)],"subscription":{"name":"ohlc","interval":1}}))),
+        "BITGET" => ("wss://ws.bitget.com/v3/ws/public".into(),
+            Some(json!({"op":"subscribe","args":[{"instType":if req.market=="perp"{"usdt-futures"}else{"spot"},
+                "topic":"kline","symbol":symbol,"interval":"1m"}]}))),
+        "HYPERLIQUID" => ("wss://api.hyperliquid.xyz/ws".into(),
+            Some(json!({"method":"subscribe","subscription":{"type":"candle","coin":symbol,"interval":"1m"}}))),
+        _ => (String::new(),None),
+    }
+}
+fn kraken_pair(symbol: &str) -> String {
+    match symbol { "XBTUSD"=>"XBT/USD", "ETHUSD"=>"ETH/USD", "SOLUSD"=>"SOL/USD",_=>"" }.into()
+}
+fn value_float(v:&Value)->Option<f64> {
+    if let Some(x)=v.as_str(){x.parse::<f64>().ok()}else{v.as_f64()}
+}
+fn row(req:&Request,arr:&Value,ms:bool,columns:[usize;6])->Option<Bar> {
+    let a=arr.as_array()?;
+    let max=columns.iter().copied().max()?;
+    if a.len()<=max{return None;}
+    bar(timestamp(&a[columns[0]],ms)?,number(&a[columns[1]])?,
+        number(&a[columns[2]])?,number(&a[columns[3]])?,
+        number(&a[columns[4]])?,number(&a[columns[5]])?,60)
+        .filter(|_| req.interval=="1m")
+}
+fn object_candle(data:&Value)->Option<Bar> {
+    bar(timestamp(&data["t"],true)?,number(&data["o"])?,
+        number(&data["h"])?,number(&data["l"])?,number(&data["c"])?,number(&data["v"])?,60)
+}
+fn parse_candle(req:&Request,v:&Value)->Option<Bar> {
+    match req.exchange.as_str(){
+        "BINANCE" => {
+            let k=v.pointer("/data/k").or_else(||v.get("k"))?;
+            if k["s"]!=req.symbol || k["i"]!="1m" {return None;}
+            object_candle(k)
+        }
+        "BYBIT" => {
+            if v["topic"]!=format!("kline.1.{}",req.symbol){return None;}
+            let c=v.get("data")?.as_array()?.last()?;
+            bar(timestamp(&c["start"],true)?,number(&c["open"])?,
+                number(&c["high"])?,number(&c["low"])?,number(&c["close"])?,number(&c["volume"])?,60)
+        }
+        "OKX" => {
+            if v.pointer("/arg/channel")?.as_str()?!="candle1m" ||
+               v.pointer("/arg/instId")?.as_str()?!=req.symbol{return None;}
+            row(req,v.get("data")?.as_array()?.last()?,true,[0,1,2,3,4,5])
+        }
+        "KRAKEN" => {
+            let a=v.as_array()?;
+            if a.len()<4 || a[3]!=kraken_pair(&req.symbol) || a[2]!="ohlc-1" {return None;}
+            let c=a[1].as_array()?;
+            if c.len()<8{return None;}
+            // V1 Kraken OHLC data[1] is the candle's fractional UNIX end
+            // time; subtract one second to resolve the current minute bucket.
+            let end=value_float(&c[1])?;
+            if !end.is_finite() || end<60.0{return None;}
+            let start=((end-1.0)/60.0).floor() as u64*60;
+            bar(start,number(&c[2])?,number(&c[3])?,number(&c[4])?,
+                number(&c[5])?,number(&c[7])?,60)
+        }
+        "BITGET" => {
+            if v.pointer("/arg/topic")?.as_str()?!="kline" ||
+               v.pointer("/arg/symbol")?.as_str()?!=req.symbol ||
+               v.pointer("/arg/interval")?.as_str()?!="1m"{return None;}
+            row(req,v.get("data")?.as_array()?.last()?,true,[0,1,2,3,4,5])
+        }
+        "HYPERLIQUID" => {
+            if v["channel"]!="candle" {return None;}
+            let data=v.get("data")?;
+            let c=if let Some(a)=data.as_array(){a.last()?}else{data};
+            if c["s"]!=req.symbol || c["i"]!="1m" {return None;}
+            object_candle(c)
+        }
+        _ => None,
+    }
+}
+#[derive(Default)]
+struct CoinbaseTrades {
+    // Trade-only candle volume is incomplete during first subscribed minute.
+    // Do not publish until the worker observes the next UTC minute.
+    latest: Option<Bar>,
+    warmup: bool,
+}
+impl CoinbaseTrades {
+    fn on_message(&mut self,req:&Request,v:&Value)->Option<Bar> {
+        if v["type"]!="match" || v["product_id"]!=req.symbol {return None;}
+        let price=number(&v["price"])?;
+        let volume=number(&v["size"])?;
+        let timestamp=chrono::DateTime::parse_from_rfc3339(v["time"].as_str()?).ok()?.timestamp();
+        let timestamp=u64::try_from(timestamp).ok()?;
+        let minute=timestamp/60*60;
+        if volume<=0.0 || price<=0.0 || minute>epoch_ms()/1000+60 {return None;}
+        match self.latest.take() {
+            Some(mut existing) if existing.time==minute => {
+                existing.high=existing.high.max(price);
+                existing.low=existing.low.min(price);
+                existing.close=price;
+                existing.volume+=volume;
+                self.latest=Some(existing.clone());
+                if self.warmup { None } else { Some(existing) }
+            }
+            Some(existing) if existing.time>minute => {
+                self.latest=Some(existing);
+                None
+            }
+            prior => {
+                let next=Bar{time:minute,open:price,high:price,low:price,close:price,volume};
+                // First observed bucket cannot have full-minute trade volume.
+                // Once time crosses into the next bucket with an uninterrupted
+                // subscription, subsequent trade accumulation is complete.
+                self.warmup=prior.is_none();
+                self.latest=Some(next.clone());
+                if self.warmup { None } else { Some(next) }
+            }
+        }
+    }
+}
+async fn worker(req:Request) {
+    let (url,subscribe)=endpoint(&req);
+    if url.is_empty(){return;}
+    let mut delay=1u64;
+    loop {
+        // Rebuild from REST on every connection and retry. Source timestamps
+        // and volumes come only from provider bars, never from quote close.
+        super::invalidate(&req).await;
+        let _=super::load(&req).await;
+        let result=tokio::time::timeout(Duration::from_secs(12),connect_async(&url)).await;
+        if let Ok(Ok((mut socket,_)))=result {
+            if let Some(body)=&subscribe {
+                if socket.send(Message::Text(body.to_string().into())).await.is_err() {
+                    disconnected(&req).await;
+                    tokio::time::sleep(Duration::from_secs(delay)).await;
+                    delay=(delay*2).min(60);
+                    continue;
+                }
+            }
+            delay=1;
+            let mut ping=tokio::time::interval(Duration::from_secs(20));
+            let mut coinbase=CoinbaseTrades::default();
+            loop {
+                tokio::select! {
+                    _=ping.tick()=>{
+                        let heartbeat=if req.exchange=="BYBIT"{Message::Text(json!({"op":"ping"}).to_string().into())}
+                            else if req.exchange=="OKX"||req.exchange=="BITGET"{Message::Text("ping".into())}
+                            else{Message::Ping(Vec::new().into())};
+                        if socket.send(heartbeat).await.is_err(){break;}
+                    }
+                    result=tokio::time::timeout(Duration::from_secs(75),socket.next())=>{
+                        let message=match result {Ok(Some(Ok(m)))=>m,_=>break};
+                        if let Message::Text(text)=message {
+                            if text.len()>262144 {break;}
+                            let Ok(value)=serde_json::from_str::<Value>(&text) else {continue};
+                            if value["event"]=="error" || value["type"]=="error" {break;}
+                            let parsed=if req.exchange=="COINBASE" {
+                                coinbase.on_message(&req,&value)
+                            }else{parse_candle(&req,&value)};
+                            if let Some(candle)=parsed{publish(&req,candle).await;}
+                        }else if let Message::Ping(payload)=message {
+                            if socket.send(Message::Pong(payload)).await.is_err(){break;}
+                        }else if message.is_close(){break;}
+                    }
+                }
+            }
+        }
+        disconnected(&req).await;
+        tokio::time::sleep(Duration::from_secs(delay)).await;
+        delay=(delay*2).min(60);
+    }
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+    fn req(exchange:&str,market:&str,symbol:&str)->Request {
+        Request{exchange:exchange.into(),market:market.into(),symbol:symbol.into(),interval:"1m".into(),limit:Some(200)}
+    }
+    #[test] fn native_provider_candle_events_are_normalized() {
+        let t=1_696_982_400_000_u64;
+        let k=json!({"s":"BTCUSDT","i":"1m","t":t,"o":"100","h":"110","l":"90","c":"105","v":"12"});
+        let bin=json!({"e":"kline","k":k});
+        let b=parse_candle(&req("BINANCE","spot","BTCUSDT"),&bin).unwrap();
+        assert_eq!((b.open,b.close,b.volume),(100.0,105.0,12.0));
+        let by=json!({"topic":"kline.1.BTCUSDT","data":[{"start":t,"open":"100","high":"110","low":"90","close":"105","volume":"12"}]});
+        assert_eq!(parse_candle(&req("BYBIT","perp","BTCUSDT"),&by),Some(b.clone()));
+        let ok=json!({"arg":{"channel":"candle1m","instId":"BTC-USDT"},"data":[[t.to_string(),"100","110","90","105","12"]]});
+        assert_eq!(parse_candle(&req("OKX","spot","BTC-USDT"),&ok),Some(b.clone()));
+        let bit=json!({"arg":{"topic":"kline","symbol":"BTCUSDT","interval":"1m"},"data":[[t.to_string(),"100","110","90","105","12"]]});
+        assert_eq!(parse_candle(&req("BITGET","spot","BTCUSDT"),&bit),Some(b.clone()));
+        let hl=json!({"channel":"candle","data":{"s":"BTC","i":"1m","t":t,"o":"100","h":"110","l":"90","c":"105","v":"12"}});
+        assert_eq!(parse_candle(&req("HYPERLIQUID","perp","BTC"),&hl),Some(b));
+        assert_eq!(parse_candle(&req("BINANCE","spot","ETHUSDT"),&bin),None);
+    }
+}

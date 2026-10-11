@@ -57,18 +57,34 @@ try {
   if(!String(response.headers()['content-security-policy']).includes("connect-src 'self'"))
     throw new Error('Same-origin CSP missing');
   if(!String(response.headers()['x-robots-tag']).includes('noindex'))throw new Error('Staging exposed');
-  const market=page.getByRole('combobox',{name:'Exchange market and symbol'});
-  await market.waitFor({timeout:20000});
+  // No QSYN-created selectors: OpenAlgo owns symbol search, grid layouts
+  // and watchlist. The native actions must be icon-only and colocated.
+  if(await page.locator('.qsyn-crypto-selector').count()!==0)
+    throw new Error('Duplicate homepage exchange and grid dropdowns remain');
   await page.waitForFunction(()=>document.querySelectorAll('.qsyn-crypto-grid canvas').length>0,null,{timeout:12000});
-  if(await market.locator('option').count()<20)throw new Error('Incomplete public crypto venue catalog');
-  await market.selectOption('HYPERLIQUID:perp:BTC');
-  if(await market.inputValue()!=='HYPERLIQUID:perp:BTC')throw new Error('Hyperliquid not selectable');
-  await market.selectOption('COINBASE:spot:BTC-USD');
-  if(await market.inputValue()!=='COINBASE:spot:BTC-USD')throw new Error('Coinbase not selectable');
-  const layout=page.getByRole('combobox',{name:'Chart grid layout'});
-  await layout.selectOption('1x2');
-  await page.waitForFunction(()=>document.querySelectorAll('.qsyn-crypto-grid canvas').length>=2);
-  await layout.selectOption('1x1');
+  await page.locator('.qsyn-home-chart .oac-sym input').first().waitFor({timeout:12000});
+  const arrange=page.locator('.qsyn-home-chart .oac-grid__bar .oac-grid__layout').first();
+  const saved=page.locator('.qsyn-home-chart .oac-grid__bar .oac-grid__saved').first();
+  const watchlist=page.locator('.qsyn-home-chart .oac-topbar .oac-topbar__watchlist').first();
+  await arrange.waitFor({state:'visible',timeout:15000});
+  await saved.waitFor({state:'visible',timeout:15000});
+  await watchlist.waitFor({state:'visible',timeout:15000});
+  const joined=await arrange.evaluate(el=>{
+    const a=el.getBoundingClientRect();
+    const s=el.parentElement.querySelector('.oac-grid__saved').getBoundingClientRect();
+    const w=document.querySelector('.qsyn-home-chart .oac-topbar__watchlist').getBoundingClientRect();
+    return {near:s.right<=w.left+4&&w.left-s.right<20,
+      sameRow:Math.abs(a.top-w.top)<5,
+      textVisible:getComputedStyle(el.querySelector('.oac-grid__bar-text')).display,
+      tooltip:el.getAttribute('aria-label')};
+  });
+  if(!joined.near || !joined.sameRow || joined.textVisible!=='none' || !joined.tooltip)
+    throw new Error('Native icon-only Layouts not beside Watchlist: '+JSON.stringify(joined));
+  await arrange.click();
+  await page.locator('.oac-grid__picker[role="menu"]').waitFor({timeout:12000});
+  await page.keyboard.press('Escape');
+  await watchlist.click();
+  await page.waitForFunction(()=>!!document.querySelector('.oac-watchlist, .oac-watchlist-panel, .oac-panel-dock'),null,{timeout:12000});
   const invalid=await page.request.get(origin+'/qsyn/api/v1/crypto/bars?exchange=BAD&market=spot&symbol=../../secret&interval=1m');
   if(invalid.status()!==422)throw new Error('Crypto proxy did not reject unsupported path');
   if(await page.locator('.qsyn-homepage .terminal-sidebar').count())throw new Error('Homepage gained dashboard navigation');
