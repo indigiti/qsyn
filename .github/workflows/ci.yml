@@ -25,6 +25,8 @@ jobs:
         run: |
           php -l apps/web-php/src/FileStore.php
           php -l apps/web-php/public/index.php
+          php -l apps/web-php/src/TerminalRoutes.php
+          php apps/web-php/tests/TerminalRoutesTest.php
           php -l apps/web-php/public/terminal.php
           php -l apps/web-php/src/RustProbe.php
           php -l apps/web-php/src/RustStreamProbe.php
@@ -129,9 +131,13 @@ jobs:
           curl --fail --silent http://127.0.0.1:18080/qsyn/api/v1/diagnostics/rust-stream | grep -q '"status":"offline"'
           curl --fail --silent http://127.0.0.1:18080/qsyn/api/v1/admin/rust/state | grep -q '"configured":false'
           test "$(curl --silent -o /dev/null -w '%{http_code}' http://127.0.0.1:18080/qsyn/admin/rust)" = 302
-          curl --silent -D - -o /dev/null http://127.0.0.1:18080/qsyn/admin/rust | grep -qi '^Location: /qsyn/terminal?view=operations'
-          curl --silent -D - -o /dev/null http://127.0.0.1:18080/qsyn/studio/ | grep -qi '^Location: /qsyn/terminal?view=strategy'
-          curl --silent -D - -o /dev/null http://127.0.0.1:18080/qsyn/legacy-chart | grep -qi '^Location: /qsyn/terminal?view=diagnostics'
+          curl --silent -D - -o /dev/null http://127.0.0.1:18080/qsyn/admin/rust | grep -qi '^Location: /qsyn/terminal/operations'
+          curl --silent -D - -o /dev/null http://127.0.0.1:18080/qsyn/studio/ | grep -qi '^Location: /qsyn/terminal/strategy'
+          curl --silent -D - -o /dev/null http://127.0.0.1:18080/qsyn/legacy-chart | grep -qi '^Location: /qsyn/terminal/diagnostics'
+          curl --fail --silent http://127.0.0.1:18080/qsyn/terminal/markets | grep -q 'id="qsyn-root"'
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:18080/qsyn/terminal/unknown)" = 404
+          test "$(curl -s -o /dev/null -w '%{http_code}' -X POST http://127.0.0.1:18080/qsyn/terminal/markets)" = 405
+          curl --silent -D - -o /dev/null 'http://127.0.0.1:18080/qsyn/terminal?view=dashboard' | grep -qi '^Location: /qsyn/terminal/dashboard'
           curl --fail --silent http://127.0.0.1:18080/qsyn/api/v1/india/indexes | grep -q 'QSYN-INDIA-INDEX-CATALOG/1'
           test "$(curl --silent -o /tmp/qsyn-india.json -w '%{http_code}' 'http://127.0.0.1:18080/qsyn/api/v1/india/bars?exchange=NSE_INDEX&symbol=NIFTY&interval=1m')" = 503
           grep -q 'india_index_feed_not_authorized' /tmp/qsyn-india.json
@@ -185,6 +191,9 @@ jobs:
       - run: node --check src/main.js
         working-directory: frontend
       - run: npm run build
+        working-directory: frontend
+      - name: Verify shared pretty URL registry
+        run: node tests/terminal-routes-contract.mjs
         working-directory: frontend
       - name: Verify India index native discovery and strict license gates
         run: node tests/india-index-contract.mjs
