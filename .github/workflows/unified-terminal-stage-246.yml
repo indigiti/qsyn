@@ -1,8 +1,6 @@
 name: QSYN #246 Live Terminal Acceptance
 
 on:
-  push:
-    branches: [probe/unified-terminal-stage-246]
   workflow_dispatch:
 
 permissions:
