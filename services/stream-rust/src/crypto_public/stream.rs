@@ -84,6 +84,8 @@ async fn publish(req: &Request, next: Bar) {
         }
         // Hold the last 32 distinct minutes so lagged Coinbase REST candles
         // can be reconciled against real observed trade-derived bars.
+        // A reconnect can replay older events: never reorder the ring.
+        if slot.recent.back().is_some_and(|b| b.time > next.time) {return;}
         if slot.recent.back().is_some_and(|b| b.time == next.time) {
             slot.recent.pop_back();
         }
