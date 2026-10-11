@@ -50,8 +50,25 @@ try {
   if(new URL(page.url()).pathname!=='/qsyn/') throw new Error('Homepage redirected');
   const alternate=await page.request.get(origin+'/qsyn/terminal');
   if(alternate.status()!==200)throw new Error('Terminal unavailable');
-  const rollback=await page.request.get(origin+'/qsyn/legacy-chart');
-  if(rollback.status()!==200)throw new Error('Legacy chart unavailable');
+  // The old dashboards must redirect into the same React terminal; no
+  // standalone legacy, strategy or administrator HTML may remain active.
+  for (const [old,view] of [
+    ['/qsyn/legacy-chart','diagnostics'],
+    ['/qsyn/legacy-chart/','diagnostics'],
+    ['/qsyn/admin/rust','operations'],
+    ['/qsyn/admin/rust/','operations'],
+    ['/qsyn/studio','strategy'],
+    ['/qsyn/studio/','strategy'],
+  ]) {
+    const retired=await page.request.get(origin+old,{maxRedirects:0});
+    if(retired.status()!==302||
+        retired.headers().location!=='/qsyn/terminal?view='+view||
+        !String(retired.headers()['cache-control']||'').includes('no-store'))
+      throw new Error('Standalone dashboard remains active or cacheable: '+old);
+    const invalidMethod=await page.request.post(origin+old,{maxRedirects:0});
+    if(invalidMethod.status()!==405)
+      throw new Error('Retired dashboard unexpectedly accepted POST: '+old);
+  }
   const blockedPost=await page.request.post(origin+'/qsyn/');
   if(blockedPost.status()!==405)throw new Error('Homepage accepted POST');
   if(!String(response.headers()['content-security-policy']).includes("connect-src 'self'"))

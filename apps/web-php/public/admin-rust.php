@@ -1,111 +1,18 @@
 <?php
-// HTML is uncacheable; version fixed same-origin admin scripts so an old
-// cached runtime-control client cannot survive a newer DigiOps deployment.
-$rustAdminVersion = (string)(@filemtime(__DIR__ . '/assets/rust-admin.js') ?: '0');
-$rustStreamTestVersion = (string)(@filemtime(__DIR__ . '/assets/rust-stream-test.js') ?: '0');
-$activationReadinessVersion = (string)(@filemtime(__DIR__ . '/assets/rust-activation-readiness.js') ?: '0');
-?>
-<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>QSYN — Rust Service Administration</title>
-<style>
-:root{color-scheme:dark}*{box-sizing:border-box}body{background:#0b111b;color:#e9f1ff;font:14px system-ui,sans-serif;margin:0}
-header{padding:18px max(20px,calc((100vw - 900px)/2));border-bottom:1px solid #303b4b;background:#0d1625;display:flex;align-items:center;gap:18px}
-a{color:#9bc6ff;text-decoration:none}main{max-width:900px;margin:35px auto;padding:0 22px}h1{font-size:24px}h2{font-size:16px;margin:0 0 8px}
-.card{border:1px solid #334155;border-radius:12px;background:#111c2d;padding:22px;margin:20px 0}
-.muted{color:#a5b9d0;line-height:1.6}.grid{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
-button{border:1px solid #4b8bd8;background:#235ca5;color:white;cursor:pointer;border-radius:7px;padding:11px 18px;font-weight:600}
-button:disabled{opacity:.45;cursor:not-allowed}button.danger{background:#732d36;border-color:#9a4d57}
-button.secondary{background:#243246;border-color:#44546e}
-input{background:#0c1625;border:1px solid #54647c;border-radius:7px;padding:12px;color:white;max-width:100%;min-width:260px}
-label{display:block;margin-bottom:10px;font-weight:600}code{color:#b6daff}.status{font-weight:700;color:#ffd28a}
-#feedback{min-height:24px;margin:15px 0;white-space:pre-wrap}[hidden]{display:none!important}
-.activation-item{display:grid;grid-template-columns:110px 180px 1fr;gap:9px;align-items:baseline;border-top:1px solid #304051;padding:11px 0}
-.activation-item strong{font-size:12px}
-.activation-item small{color:#a5b9d0;line-height:1.5}
-.activation-ok{color:#6cdaa7}
-.activation-pending{color:#ffd28a}
-@media(max-width:640px){.activation-item{grid-template-columns:1fr;gap:4px}}
-</style>
-</head>
-<body>
-<header><strong>QSYN · Admin</strong><a href="/qsyn/">← Back to charts</a></header>
-<main>
-<h1>Rust service control</h1>
-<p class="muted">Manage only the <code>qsyn-stream</code> service. Commands are restricted to an approved local service manager. This page does not provide shell access.</p>
-<section class="card" id="activation-readiness">
-  <h2>Rust activation readiness</h2>
-  <p class="muted">Read-only checks to prepare secure, web-only demo streaming. These do not restart processes, alter passwords or change market data.</p>
-  <div class="grid">
-    <button type="button" class="secondary" id="activation-refresh">Check activation</button>
-    <button type="button" class="secondary" id="activation-copy" disabled>Copy Cloudways request</button>
-  </div>
-  <p class="muted" id="activation-summary" role="status" aria-live="polite">Checking…</p>
-  <div id="activation-checks"></div>
-</section>
-<section class="card" id="admin-first-run" hidden>
-  <h2>Create QSYN administrator password — first-time setup</h2>
-  <p class="muted">QSYN has generated a one-time setup code in its private runtime directory. Read that code through your authorized Cloudways private file manager or SFTP, then create a strong password here. <strong>Never share the code in chat, GitHub, or a screenshot.</strong></p>
-  <p class="muted">Private file (not a URL): <code>private_html/qsyn/runtime/admin-setup-code.txt</code></p>
-  <form id="setup-form" autocomplete="off">
-    <label for="setup-code">Private one-time setup code</label>
-    <input type="password" id="setup-code" autocomplete="off" minlength="64" maxlength="64" required>
-    <label for="setup-password">New administrator password (20 characters minimum)</label>
-    <input type="password" id="setup-password" autocomplete="new-password" minlength="20" required>
-    <label for="setup-confirm">Confirm administrator password</label>
-    <input type="password" id="setup-confirm" autocomplete="new-password" minlength="20" required>
-    <div class="grid"><button type="submit" id="setup-button">Create administrator password</button></div>
-  </form>
-  <p class="muted">This is a single-use pairing process. After setup, QSYN disables this form, invalidates the code, and uses normal administrator sign-in.</p>
-</section>
-<section class="card" id="admin-login">
-  <h2>Administrator sign-in</h2>
-  <p class="muted" id="login-help">Checking whether administrator control is configured…</p>
-  <form id="login-form">
-    <label for="admin-password">Administrator password</label>
-    <div class="grid"><input type="password" id="admin-password" autocomplete="current-password" required><button type="submit" id="login-button">Sign in</button></div>
-  </form>
-</section>
-<section class="card" id="admin-panel" hidden>
-  <div class="grid" style="justify-content:space-between"><h2>Service: <code>qsyn-stream</code></h2><button type="button" id="logout" class="secondary">Sign out</button></div>
-  <p class="muted">Address: <code>127.0.0.1:10251</code> (localhost only)</p>
-  <p>Manager: <span class="status" id="manager-status">Checking…</span></p>
-  <div class="grid">
-    <button type="button" id="service-start" disabled>Start</button>
-    <button type="button" id="service-stop" class="danger" disabled>Stop</button>
-    <button type="button" id="service-restart" class="secondary" disabled>Restart</button>
-    <button type="button" id="service-refresh" class="secondary">Refresh status</button>
-  </div>
-  <p class="muted">If controls are unavailable, Cloudways must enable the approved restricted runtime: direct Rust mode or Supervisor. Starting a binary requires PHP execution permission and host support; without a watchdog it will not auto-restart after a crash or reboot.</p>
-</section>
-<section class="card" id="demo-config" hidden>
-  <h2>Demo feed control — no restart required</h2>
-  <p class="muted">Switch simulated WebSocket quotes on or off for new connections. This does not enable broker feeds or trading.</p>
-  <p>Rust demo feed: <span class="status" id="demo-mode">Checking…</span></p>
-  <div class="grid">
-    <button type="button" id="demo-enable" disabled>Enable demo stream</button>
-    <button type="button" class="secondary" id="demo-disable" disabled>Disable demo stream</button>
-  </div>
-  <p class="muted" id="demo-mode-help">Controls require an authenticated administrator and a compatible running Rust binary.</p>
-</section>
-<section class="card">
-  <h2>Live connectivity</h2>
-  <p class="muted">Checks whether PHP can reach the Rust HTTP endpoint and optional WebSocket handshake.</p>
-  <div class="grid"><button type="button" class="secondary" id="probe-rust">Test Rust health</button><output class="status" id="probe-result">Not checked</output></div>
-</section>
-<section class="card">
-  <h2>Demo WebSocket stream</h2>
-  <p class="muted">Samples exactly two simulated quotes from Rust through PHP. Not connected to Upstox or a public WebSocket.</p>
-  <div class="grid"><button type="button" class="secondary" id="rust-stream-test">Test demo stream</button><output class="status" id="rust-stream-result" role="status">Not tested</output></div>
-  <p class="muted" id="rust-stream-samples" aria-live="polite">Demo streaming defaults to off. Once the upgraded Rust runtime and admin login are configured, toggle it using the buttons above without a console.</p>
-</section>
-<p id="feedback" class="muted" role="status" aria-live="polite"></p>
-</main>
-<script src="/qsyn/assets/rust-admin.js?v=<?= rawurlencode($rustAdminVersion) ?>" defer></script>
-<script src="/qsyn/assets/rust-stream-test.js?v=<?= rawurlencode($rustStreamTestVersion) ?>" defer></script>
-<script src="/qsyn/assets/rust-activation-readiness.js?v=<?= rawurlencode($activationReadinessVersion) ?>" defer></script>
-</body>
-</html>
+declare(strict_types=1);
+
+// Retired standalone page. Keep this physical PHP entrypoint as a safe
+// redirect in case the hosting layer exposes it directly, bypassing the
+// main /qsyn/* application router. No private operation is handled here.
+$method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
+if ($method !== 'GET' && $method !== 'HEAD') {
+    header('Allow: GET, HEAD');
+    header('Cache-Control: private, no-store, max-age=0');
+    http_response_code(405);
+    exit;
+}
+header('Cache-Control: private, no-store, max-age=0');
+header('Pragma: no-cache');
+header('X-Robots-Tag: noindex, nofollow');
+header('Location: /qsyn/terminal?view=operations', true, 302);
+exit;

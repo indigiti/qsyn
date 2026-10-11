@@ -128,7 +128,10 @@ jobs:
           curl --fail --silent http://127.0.0.1:18080/qsyn/api/v1/diagnostics/rust | grep -q '"status":"offline"'
           curl --fail --silent http://127.0.0.1:18080/qsyn/api/v1/diagnostics/rust-stream | grep -q '"status":"offline"'
           curl --fail --silent http://127.0.0.1:18080/qsyn/api/v1/admin/rust/state | grep -q '"configured":false'
-          curl --fail --silent http://127.0.0.1:18080/qsyn/admin/rust | grep -q 'Rust service control'
+          test "$(curl --silent -o /dev/null -w '%{http_code}' http://127.0.0.1:18080/qsyn/admin/rust)" = 302
+          curl --silent -D - -o /dev/null http://127.0.0.1:18080/qsyn/admin/rust | grep -qi '^Location: /qsyn/terminal?view=operations'
+          curl --silent -D - -o /dev/null http://127.0.0.1:18080/qsyn/studio/ | grep -qi '^Location: /qsyn/terminal?view=strategy'
+          curl --silent -D - -o /dev/null http://127.0.0.1:18080/qsyn/legacy-chart | grep -qi '^Location: /qsyn/terminal?view=diagnostics'
           curl --fail --silent http://127.0.0.1:18080/qsyn/api/v1/india/indexes | grep -q 'QSYN-INDIA-INDEX-CATALOG/1'
           test "$(curl --silent -o /tmp/qsyn-india.json -w '%{http_code}' 'http://127.0.0.1:18080/qsyn/api/v1/india/bars?exchange=NSE_INDEX&symbol=NIFTY&interval=1m')" = 503
           grep -q 'india_index_feed_not_authorized' /tmp/qsyn-india.json
