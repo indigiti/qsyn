@@ -43,7 +43,7 @@ final class TerminalRoutes
         foreach ($data['aliases'] as $alias) {
             if (!is_array($alias) || !is_string($alias['path'] ?? null)
                 || !is_string($alias['view'] ?? null)
-                || !preg_match('#\A/qsyn/[a-z][a-z0-9/-]{0,70}\z/D', $alias['path'])
+                || !preg_match('#\A/qsyn/[a-z][a-z0-9/-]{0,70}\z#D', $alias['path'])
                 || !isset($this->views[$alias['view']])
                 || isset($this->aliases[$alias['path']])) {
                 throw new \RuntimeException('invalid_terminal_alias');
