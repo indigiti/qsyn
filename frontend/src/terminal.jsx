@@ -152,40 +152,43 @@ function HomepageChart({ theme }) {
       ...(nativeWatchlists?{watchlist:{store:nativeWatchlists,quotes:noSyntheticQuotes}}:{}),
       links:{crosshair:true},navigation:{defaultVisibleBars:120,mousePan:'horizontal'},
     });
-    // The grid keeps one official Layout picker and one saved-Layouts action.
-    // Preserve their original onClick/menu implementations and tooltips, but
-    // position the actual native buttons alongside the active cell's Watchlist.
-    let mountedLayout=null, mountedSaved=null;
+    // Keep OpenAlgo's buttons inside their OWN grid bar; reparenting them
+    // into a chart intercepts the grid's outside-click menu handling.
+    // Reserve one inline slot beside Watchlist and float the native bar onto it.
+    let slot=null;
     const syncToolbar=()=>{
       if(!active)return;
       const root=host.current;
-      const nativeBar=root?.querySelector('.oac-grid__bar');
-      if(!mountedLayout)mountedLayout=nativeBar?.querySelector('.oac-grid__layout')||null;
-      if(!mountedSaved)mountedSaved=nativeBar?.querySelector('.oac-grid__saved')||null;
-      const activeWidget=grid.active()?.widget;
-      const toolbar=activeWidget?.root?.querySelector('.oac-topbar');
-      if(!toolbar)return;
-      const watchlist=toolbar.querySelector('.oac-topbar__watchlist');
-      const anchor=watchlist||toolbar.querySelector('.oac-topbar__objects');
-      if(!anchor)return;
-      const controls=[mountedLayout,mountedSaved].filter(Boolean);
-      for(const button of controls)button.classList.add('qsyn-native-chart-action');
-      const inOrder=controls.every((button,i)=>button.parentNode===toolbar &&
-        button.nextSibling===(controls[i+1]||anchor));
-      if(!inOrder)for(const button of controls)toolbar.insertBefore(button,anchor);
-      // Keep native symbol search plus Watchlist alongside Arrange charts
-      // and Saved layouts. All buttons remain keyboard navigable.
+      const bar=root?.querySelector('.oac-grid__bar');
+      const nativeWatchlist=grid.active()?.widget?.root?.querySelector('.oac-topbar__watchlist');
+      if(!bar || !nativeWatchlist || !bar.querySelector('.oac-grid__layout'))return;
+      const topbar=nativeWatchlist.parentElement;
+      if(!slot) {
+        slot=document.createElement('span');
+        slot.className='qsyn-grid-toolbar-slot';
+        slot.setAttribute('aria-hidden','true');
+      }
+      if(slot.parentElement!==topbar || slot.nextElementSibling!==nativeWatchlist)
+        topbar.insertBefore(slot,nativeWatchlist);
+      const gridRect=grid.root.getBoundingClientRect();
+      const position=slot.getBoundingClientRect();
+      bar.style.left=(position.left-gridRect.left)+'px';
+      bar.style.top=(position.top-gridRect.top)+'px';
+      bar.dataset.placed='true';
     };
     const observer=new MutationObserver(syncToolbar);
     observer.observe(host.current,{childList:true,subtree:true});
     const offActive=grid.on('active',syncToolbar);
     const offLayout=grid.on('layout',syncToolbar);
+    window.addEventListener('resize',syncToolbar);
     void grid.ready.then(syncToolbar).catch(()=>{
       if(active)setMessage('Public market feed unavailable · no demo fallback');
     });
     syncToolbar();
     return ()=>{
       active=false;observer.disconnect();offActive?.();offLayout?.();
+      window.removeEventListener('resize',syncToolbar);
+      slot?.remove();
       grid.destroy();feed.destroy();
     };
   },[theme,nativeWorkspaces,nativeWatchlists]);
