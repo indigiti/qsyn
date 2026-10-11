@@ -42,7 +42,8 @@ try {
   });
   await ready(origin);
   browser=await chromium.launch({headless:true,args:['--disable-dev-shm-usage']});
-  const page=await browser.newPage({viewport:{width:1440,height:900}});
+  const context=await browser.newContext({viewport:{width:1440,height:900}});
+  const page=await context.newPage();
   page.on('pageerror',e=>browserErrors.push(e.message));
   page.on('request',r=>browserRequests.push(r.url()));
   // Homepage uses native OpenAlgo Charts 2.6 grid and a strict public crypto
