@@ -90,3 +90,20 @@ and rights expiry. Independently verify live index V3 feeds and at least
 two seamless WSS grant renewals on a regular trading session. Market
 closed != data unauthorized != no backfill. Never substitute demo candles,
 start broker OMS, or permit anonymous index redistribution.
+
+
+## Continuous index worker session lifecycle
+
+The private Rust index subscriber rotates its upstream V3 WebSocket after each
+bounded 120-second observation, requesting a **new one-use Upstox URL** and
+rechecking current BOD mapping, OAuth account, private display/retention rights,
+WAL and owner-only files before reconnecting. A successful session with at
+least one *durably persisted* real index quote resets the consecutive
+failure budget; receiving only heartbeat/market-status frames does not.
+
+`max_attempts` is the maximum number of **consecutive unsuccessful**
+connections (not a lifetime cap on healthy streaming). Exhausting it,
+a permission denial, stale BOD, revoked display rights, or an expired
+operator entitlement terminates the worker. Cloudways Supervisor's default
+template stays `autostart=false` and `QSYN_UPSTOX_INDEX_WORKER_ENABLE=0`.
+No new license or broker trading rights are created by this renewal logic.
