@@ -31,7 +31,7 @@ try{
   page.on('request',r=>{if(/\/api\/v1\/(placeorder|modifyorder|cancelorder)/.test(r.url()))orders.push(r.url());});
   for(const path of ['/qsyn/studio','/qsyn/studio/']){
     const res=await page.request.get(origin+path,{maxRedirects:0});
-    if(res.status()!==302||res.headers().location!=='/qsyn/terminal?view=strategy'||
+    if(res.status()!==302||res.headers().location!=='/qsyn/terminal/strategy'||
       !String(res.headers()['cache-control']||'').includes('no-store'))
       throw Error('Retired strategy URL still serves HTML: '+path);
     const post=await page.request.post(origin+path,{maxRedirects:0});
@@ -40,11 +40,11 @@ try{
   // The PHP -S test router rewrites direct documents through index.php.
   // Inspect the physical fallback shim independently for Cloudways deployments.
   const shim=await readFile(resolve(root,'apps/web-php/public/studio.php'),'utf8');
-  if(!shim.includes("Location: /qsyn/terminal?view=strategy") ||
+  if(!shim.includes("Location: /qsyn/terminal/strategy") ||
       !shim.includes("no-store") || shim.includes('<!doctype html>'))
     throw Error('Physical studio.php was not retired');
   const r=await page.goto(origin+'/qsyn/studio/',{waitUntil:'domcontentloaded'});
-  if(r.status()!==200||!page.url().endsWith('/qsyn/terminal?view=strategy'))
+  if(r.status()!==200||!page.url().endsWith('/qsyn/terminal/strategy'))
     throw Error('Studio does not resolve to unified React strategy workspace');
   await page.getByRole('heading',{name:'Strategy Studio'}).waitFor({timeout:14000});
   await page.waitForFunction(()=>document.querySelectorAll('.qt-table tbody tr').length===13,
