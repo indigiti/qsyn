@@ -167,6 +167,164 @@ impl UpstoxV3Plan {
     }
 }
 
+/// A current BOD-resolved NSE/BSE index (never from unauthenticated chart inputs).
+#[derive(Clone, Debug)]
+pub struct ApprovedIndexInstrument {
+    pub exchange: String,
+    pub symbol: String,
+    pub instrument_key: String,
+}
+
+/// Read-only index plan, separate from CE/PE synthetic option subscriptions.
+/// OAuth token presence alone must NEVER satisfy these operator gates.
+#[derive(Clone, Debug)]
+pub struct UpstoxIndexV3Plan {
+    pub scope: Scope,
+    pub instruments: Vec<ApprovedIndexInstrument>,
+    pub rights_expire_ms: u64,
+    pub session_approved: bool,
+    pub instrument_mapping_verified: bool,
+    pub market_data_display_approved: bool,
+}
+impl UpstoxIndexV3Plan {
+    pub fn validate(&self, now_ms: u64) -> io::Result<()> {
+        if self.scope.tenant_id.is_empty()
+            || self.scope.account_id.is_empty()
+            || self.scope.entitlement_id.is_empty()
+            || self.scope.source_id != "upstox_v3_direct"
+            || !self.session_approved
+            || !self.instrument_mapping_verified
+            || !self.market_data_display_approved
+            || self.rights_expire_ms <= now_ms
+            || self.instruments.is_empty()
+            || self.instruments.len() > 6 {
+            return Err(denied("unverified_index_v3_subscription_plan"));
+        }
+        let mut keys = std::collections::HashSet::new();
+        let mut symbols = std::collections::HashSet::new();
+        for index in &self.instruments {
+            let allowed = match index.exchange.as_str() {
+                "NSE_INDEX" => matches!(
+                    index.symbol.as_str(),
+                    "NIFTY" | "BANKNIFTY" | "FINNIFTY" | "MIDCPNIFTY" | "INDIAVIX"
+                ),
+                "BSE_INDEX" => index.symbol == "SENSEX",
+                _ => false,
+            };
+            let prefix = format!("{}|", index.exchange);
+            let key = index.instrument_key.strip_prefix(&prefix);
+            if !allowed || !key.is_some_and(|name| {
+                !name.is_empty()
+                    && name.len() <= 100
+                    && name.bytes().all(|b| b.is_ascii_alphanumeric()
+                        || b == b' ' || b == b'_' || b == b'.' || b == b'-')
+            }) || !keys.insert(&index.instrument_key)
+                || !symbols.insert((&index.exchange, &index.symbol)) {
+                return Err(denied("unverified_index_v3_instrument"));
+            }
+        }
+        Ok(())
+    }
+
+    /// Upstox V3 requires JSON encoded into a WebSocket BINARY message.
+    pub fn binary_subscription(&self, guid: &str, now_ms: u64) -> io::Result<Vec<u8>> {
+        self.validate(now_ms)?;
+        if guid.is_empty() || guid.len() > 64 ||
+            !guid.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-') {
+            return Err(denied("invalid_index_subscription_nonce"));
+        }
+        let keys: Vec<&str> = self.instruments.iter()
+            .map(|i| i.instrument_key.as_str()).collect();
+        Ok(json!({"guid":guid,"method":"sub","data":{
+            "mode":"ltpc","instrumentKeys":keys
+        }}).to_string().into_bytes())
+    }
+}
+
+/// Decoder yields private CandidateQuote records only; it cannot bypass
+/// downstream account/entitlement checks in the Rust WAL and WSS gate.
+pub struct UpstoxV3IndexDecoder {
+    plan: UpstoxIndexV3Plan,
+    open_segments: std::collections::HashSet<String>,
+    last_trade_ms: HashMap<String, u64>,
+}
+impl UpstoxV3IndexDecoder {
+    pub fn new(plan: UpstoxIndexV3Plan, now_ms: u64) -> io::Result<Self> {
+        plan.validate(now_ms)?;
+        Ok(Self { plan, open_segments: std::collections::HashSet::new(),
+            last_trade_ms: HashMap::new() })
+    }
+    pub fn reconnect(&mut self) {
+        self.open_segments.clear();
+        // Keep the watermark: reconnect snapshots are not fresh index ticks.
+    }
+    pub fn decode(&mut self, binary: &[u8], received_ms: u64) -> io::Result<Vec<CandidateQuote>> {
+        self.plan.validate(received_ms)?;
+        if binary.is_empty() || binary.len() > MAX_FRAME {
+            return Err(denied("invalid_index_v3_frame"));
+        }
+        let frame = FeedResponse::decode(binary).map_err(|_| denied("invalid_index_v3_protobuf"))?;
+        if frame.current_ts <= 0 || frame.current_ts as u64 > received_ms.saturating_add(2_000) {
+            return Err(denied("invalid_index_v3_provider_clock"));
+        }
+        match frame.frame_type {
+            2 => {
+                if !frame.feeds.is_empty() {
+                    return Err(denied("invalid_index_v3_market_info"));
+                }
+                let market = frame.market_info.ok_or_else(|| denied("missing_index_market_info"))?;
+                self.open_segments.clear();
+                for instrument in &self.plan.instruments {
+                    if market.segment_status.get(&instrument.exchange) == Some(&2) {
+                        self.open_segments.insert(instrument.exchange.clone());
+                    }
+                }
+                Ok(Vec::new())
+            }
+            0 | 1 => {
+                if frame.feeds.len() > self.plan.instruments.len() {
+                    return Err(denied("excessive_index_v3_instruments"));
+                }
+                let mut out = Vec::new();
+                for (key, feed) in frame.feeds {
+                    let instrument = self.plan.instruments.iter()
+                        .find(|item| item.instrument_key == key)
+                        .ok_or_else(|| denied("unapproved_index_v3_key"))?;
+                    if !self.open_segments.contains(&instrument.exchange) {
+                        return Err(denied("index_market_not_verified_open"));
+                    }
+                    let last = feed.last_trade()
+                        .ok_or_else(|| denied("missing_index_v3_ltpc"))?;
+                    let trade_ms = u64::try_from(last.ltt)
+                        .map_err(|_| denied("invalid_index_v3_ltt"))?;
+                    if trade_ms == 0 || trade_ms > received_ms.saturating_add(2_000)
+                        || trade_ms > (frame.current_ts as u64).saturating_add(2_000)
+                        || !last.ltp.is_finite() || last.ltp <= 0.0 {
+                        return Err(denied("invalid_index_v3_exchange_tick"));
+                    }
+                    if received_ms.saturating_sub(trade_ms) > MAX_QUOTE_DELAY_MS
+                        || self.last_trade_ms.get(&key).is_some_and(|prior| trade_ms <= *prior) {
+                        continue;
+                    }
+                    self.last_trade_ms.insert(key.clone(), trade_ms);
+                    out.push(CandidateQuote {
+                        scope: self.plan.scope.clone(),
+                        instrument_id: key,
+                        exchange_timestamp_ms: trade_ms,
+                        received_timestamp_ms: received_ms,
+                        price: last.ltp,
+                        stale: false,
+                        entitlement_verified: false,
+                        publishable_to_public_studio: false,
+                    });
+                }
+                Ok(out)
+            }
+            _ => Err(denied("unsupported_index_v3_frame_type")),
+        }
+    }
+}
+
 /// Validates a one-use authorized redirect given by Upstox, rather than ever
 /// forwarding bearer headers/credentials to a user-controlled WebSocket host.
 pub fn validate_one_use_redirect(raw: &str) -> io::Result<()> {
@@ -423,6 +581,95 @@ mod tests {
             current_ts: now, market_info: None,
         }.encode_to_vec()
     }
+    fn index_plan() -> UpstoxIndexV3Plan {
+        UpstoxIndexV3Plan {
+            scope: Scope {
+                tenant_id:"tenant-A".into(), account_id:"upstox-A".into(),
+                source_id:"upstox_v3_direct".into(), entitlement_id:"license-A".into(),
+            },
+            instruments:vec![
+                ApprovedIndexInstrument {
+                    exchange:"NSE_INDEX".into(),symbol:"NIFTY".into(),
+                    instrument_key:"NSE_INDEX|Nifty 50".into(),
+                },
+                ApprovedIndexInstrument {
+                    exchange:"BSE_INDEX".into(),symbol:"SENSEX".into(),
+                    instrument_key:"BSE_INDEX|SENSEX".into(),
+                },
+            ],
+            rights_expire_ms:500_000,
+            session_approved:true, instrument_mapping_verified:true,
+            market_data_display_approved:true,
+        }
+    }
+    #[test]
+    fn native_index_plan_requires_bod_session_and_display_rights() {
+        let plan=index_plan();
+        let sub=plan.binary_subscription("idx-123",100_000).unwrap();
+        let json:Value=serde_json::from_slice(&sub).unwrap();
+        assert_eq!(json["method"],"sub");
+        assert_eq!(json["data"]["mode"],"ltpc");
+        assert_eq!(json["data"]["instrumentKeys"][0],"NSE_INDEX|Nifty 50");
+        assert_eq!(json["data"]["instrumentKeys"][1],"BSE_INDEX|SENSEX");
+
+        let mut p=plan.clone();p.market_data_display_approved=false;
+        assert!(p.binary_subscription("idx-123",100_000).is_err());
+        let mut p=plan.clone();p.session_approved=false;
+        assert!(p.validate(100_000).is_err());
+        let mut p=plan.clone();p.instrument_mapping_verified=false;
+        assert!(p.validate(100_000).is_err());
+        let mut p=plan.clone();p.rights_expire_ms=100_000;
+        assert!(p.validate(100_000).is_err());
+        let mut p=plan.clone();p.instruments[0].instrument_key="NSE_FO|123".into();
+        assert!(p.validate(100_000).is_err());
+        let mut p=plan.clone();p.instruments[1].exchange="NSE_INDEX".into();
+        assert!(p.validate(100_000).is_err());
+        let mut p=plan.clone();p.instruments.push(p.instruments[0].clone());
+        assert!(p.validate(100_000).is_err());
+    }
+    #[test]
+    fn private_index_protobuf_ltt_and_reconnect_watermark() {
+        let mut dec=UpstoxV3IndexDecoder::new(index_plan(),100_000).unwrap();
+        let tick = |when:i64, lt_time:i64, key:&str, price:f64| {
+            FeedResponse {
+                frame_type:1, current_ts:when,market_info:None,
+                feeds:HashMap::from([(key.to_string(),Feed {
+                    variant:Some(feed::Variant::Full(FullFeed {
+                        variant:Some(full_feed::Variant::Index(IndexFullFeed {
+                            ltpc:Some(Ltpc{ltp:price,ltt:lt_time,ltq:0,cp:90.0})
+                        }))
+                    })),
+                    request_mode:0,
+                })]),
+            }.encode_to_vec()
+        };
+        let info=FeedResponse {
+            frame_type:2,current_ts:100_000,feeds:HashMap::new(),
+            market_info:Some(MarketInfo {
+                segment_status:HashMap::from([
+                    ("NSE_INDEX".into(),2),("BSE_INDEX".into(),3)
+                ]),
+            }),
+        }.encode_to_vec();
+        assert!(dec.decode(&tick(100_000,99_999,"NSE_INDEX|Nifty 50",105.0),100_020).is_err());
+        assert!(dec.decode(&info,100_000).unwrap().is_empty());
+        let rows=dec.decode(&tick(100_100,100_090,"NSE_INDEX|Nifty 50",105.0),100_110).unwrap();
+        assert_eq!(rows.len(),1);
+        assert_eq!(rows[0].exchange_timestamp_ms,100_090);
+        assert!(!rows[0].entitlement_verified && !rows[0].publishable_to_public_studio);
+        assert!(dec.decode(&tick(100_120,100_090,"NSE_INDEX|Nifty 50",106.0),100_130)
+            .unwrap().is_empty());
+        assert!(dec.decode(&tick(100_130,100_120,"BSE_INDEX|SENSEX",89000.0),100_140).is_err());
+        dec.reconnect();
+        assert!(dec.decode(&tick(100_190,100_180,"NSE_INDEX|Nifty 50",106.0),100_200).is_err());
+        dec.decode(&info,100_201).unwrap();
+        assert!(dec.decode(&tick(100_250,100_090,"NSE_INDEX|Nifty 50",106.0),100_260)
+            .unwrap().is_empty());
+        assert!(dec.decode(&tick(100_300,100_280,"NSE_INDEX|Nifty 50",-1.0),100_310).is_err());
+        assert!(dec.decode(&tick(100_320,0,"NSE_INDEX|Nifty 50",106.0),100_330).is_err());
+        assert!(dec.decode(&tick(100_340,100_330,"NSE_FO|123",106.0),100_350).is_err());
+    }
+
     #[test]
     fn official_v3_protobuf_tags_binary_subscribe_and_market_gate() {
         let p = plan();
