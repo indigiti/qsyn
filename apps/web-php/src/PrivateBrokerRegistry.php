@@ -50,6 +50,12 @@ final class PrivateBrokerRegistry
         return $file;
     }
 
+    /** Broker names only; never broker secrets or account connections. */
+    public static function supportedBrokers(): array
+    {
+        return self::BROKERS;
+    }
+
     /** @return array<string, array<string, mixed>> */
     public static function load(string $path): array
     {
@@ -58,6 +64,24 @@ final class PrivateBrokerRegistry
             || getenv('QSYN_ENABLE_LIVE_TRADING') === '1') {
             throw new \RuntimeException('broker_gateway_disabled');
         }
+        return self::loadValidated($path);
+    }
+
+    /** This is ONLY called after an approved development identity and role check. */
+    public static function loadForPrivateBrowser(string $path): array
+    {
+        if (PHP_SAPI === 'cli'
+            || getenv('QSYN_OPENALGO_BROWSER_CONNECT_ENABLED') !== '1'
+            || getenv('QSYN_TRADING_ENABLED') === '1'
+            || getenv('QSYN_ENABLE_LIVE_TRADING') === '1') {
+            throw new \RuntimeException('broker_browser_gateway_disabled');
+        }
+        return self::loadValidated($path);
+    }
+
+    /** @return array<string, array<string, mixed>> */
+    private static function loadValidated(string $path): array
+    {
         $input = file_get_contents(self::privateFile($path));
         if (!is_string($input)) {
             throw new \RuntimeException('private_config_unreadable');

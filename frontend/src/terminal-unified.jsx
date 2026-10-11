@@ -137,44 +137,99 @@ export function DiagnosticsWorkspace(){
     </div>
   </div>;
 }
+const OPENALGO_API='/qsyn/api/v1/brokers/openalgo/';
+const BROKER_LABELS={upstox:'Upstox',zerodha:'Zerodha',angel:'Angel One',dhan:'Dhan',fyers:'Fyers',shoonya:'Shoonya',groww:'Groww',aliceblue:'Alice Blue',flattrade:'FlatTrade',fivepaisa:'5paisa'};
 export function BrokersWorkspace({openView}){
-  const [catalog,setCatalog]=useState(null);
-  const [access,setAccess]=useState('checking');
-  useEffect(()=>{
-    const a=new AbortController();
-    void Promise.all([
-      jsonGet('/qsyn/api/v1/india/indexes',a.signal).catch(()=>null),
-      jsonGet('/qsyn/api/v1/auth/state',a.signal).catch(()=>null),
-    ]).then(([items,session])=>{
-      if(a.signal.aborted)return;
-      setCatalog(items);
-      setAccess(session?.authenticated&&session?.profile==='mock-only'
-        ?'Development identity only':'No production broker session verified');
-    });
-    return ()=>a.abort();
+  const [catalog,setCatalog]=useState(null),[privateState,setPrivateState]=useState(null);
+  const [indexCatalog,setIndexCatalog]=useState(null),[message,setMessage]=useState('No production broker session verified');
+  const [busy,setBusy]=useState(false),[selected,setSelected]=useState('upstox');
+  const refresh=useCallback(async(signal)=>{
+    const [brokers,accounts,indexes]=await Promise.all([
+      jsonGet(OPENALGO_API+'catalog',signal).catch(()=>null),
+      jsonGet(OPENALGO_API+'accounts',signal).catch(()=>null),
+      jsonGet('/qsyn/api/v1/india/indexes',signal).catch(()=>null),
+    ]);
+    if(signal?.aborted)return;
+    setCatalog(brokers?.schema==='QSYN-OPENALGO-CONNECTIONS/1'?brokers:null);
+    setPrivateState(accounts?.schema==='QSYN-OPENALGO-CONNECTIONS/1' &&
+      accounts?.profile==='private_development_only'?accounts:null);
+    setIndexCatalog(indexes);
   },[]);
+  useEffect(()=>{const controller=new AbortController();void refresh(controller.signal);return()=>controller.abort();},[refresh]);
+  const brokers=catalog?.brokers||[];
+  const accounts=(privateState?.accounts||[]).filter(x=>x.broker===selected);
+  async function connect(account){
+    if(busy||!account?.login_available||!privateState?.csrf)return;
+    setBusy(true);setMessage('Requesting an approved private OpenAlgo login…');
+    try{
+      const r=await fetch(OPENALGO_API+'connect',{method:'POST',credentials:'same-origin',
+        cache:'no-store',headers:{'Content-Type':'application/json','Accept':'application/json',
+          'X-CSRF-Token':privateState.csrf},body:JSON.stringify({account_id:account.account_id})});
+      const data=await r.json();
+      if(!r.ok||data.schema!=='QSYN-OPENALGO-CONNECTIONS/1'||data.account_id!==account.account_id||
+        typeof data.login_url!=='string')throw Error(data.error||'connection_not_available');
+      const target=new URL(data.login_url);
+      if(target.protocol!=='https:'||target.pathname!=='/login'||target.search||target.hash)
+        throw Error('invalid_login_destination');
+      // OpenAlgo owns the actual session and broker consent in a separate secure tab.
+      window.open(target.href,'_blank','noopener,noreferrer');
+      setMessage('OpenAlgo login opened where your browser permits popups. Return here and verify the session.');
+    }catch(e){setMessage('Connection unavailable: '+String(e.message).slice(0,100));}
+    finally{setBusy(false);}
+  }
+  async function verify(account){
+    if(busy)return;
+    setBusy(true);
+    try{
+      const data=await jsonGet(OPENALGO_API+'status?account_id='+encodeURIComponent(account.account_id));
+      setMessage(data.session_state==='openalgo_session_responding'
+        ?'OpenAlgo broker session responds for '+account.account_id+'. Broker identity and market-data rights remain unverified.'
+        :'No responding broker session for '+account.account_id+'. Sign in to its approved OpenAlgo instance.');
+    }catch{setMessage('Broker verification unavailable; private identity or OpenAlgo runtime may not be enabled.');}
+    finally{setBusy(false);}
+  }
   return <div className="terminal-page qt-unified">
-    <PanelTitle eyebrow="BROKER CONNECTIONS" title="Accounts & authorizations"
-      description="Account-level permissions are kept separate from public chart access."/>
+    <PanelTitle eyebrow="BROKER CONNECTIONS · OPENALGO" title="Accounts & authorizations"
+      description="Choose a supported Indian broker. Actual sign-in stays within an independently managed OpenAlgo instance."/>
     <div className="qt-summary">
-      <section className="terminal-surface"><Wallet size={19}/><span>Upstox account</span><strong>Not verified</strong></section>
-      <section className="terminal-surface"><LockKeyhole size={19}/><span>Market-data entitlement</span><strong>Not enabled</strong></section>
+      <section className="terminal-surface"><Wallet size={19}/><span>Private accounts</span><strong>{privateState?.accounts?.length??'Not available'}</strong></section>
+      <section className="terminal-surface"><LockKeyhole size={19}/><span>Exchange display rights</span><strong>Not verified</strong></section>
       <section className="terminal-surface"><ShieldCheck size={19}/><span>Order execution</span><strong>Disabled</strong></section>
     </div>
     <section className="terminal-surface">
-      <div className="terminal-card-head"><h2>Upstox connection</h2><LockKeyhole size={18}/></div>
-      <p role="status">{access}</p>
-      <p>QSYN currently completes real Upstox OAuth through the Cloudways operator-only CLI. Login credentials, client secrets, authorization codes and broker tokens are never entered or shown in this public terminal.</p>
-      <p className="terminal-footnote">Command: <code>php private_html/qsyn/app/tools/upstox-oauth.php status</code> · OAuth success does not imply that the India index feed is licensed or connected.</p>
+      <div className="terminal-card-head"><h2>Select broker</h2><ShieldCheck size={18}/></div>
+      <div className="qt-broker-grid">
+        {brokers.map(b=><button type="button" key={b} onClick={()=>setSelected(b)}
+          className={'qt-broker-card'+(b===selected?' selected':'')}
+          aria-pressed={b===selected}>
+          <span className="qt-broker-avatar">{(BROKER_LABELS[b]||b).slice(0,2).toUpperCase()}</span>
+          <span>{BROKER_LABELS[b]||b}</span>
+        </button>)}
+      </div>
+      {!catalog&&<p className="terminal-footnote">Broker catalog unavailable. No account connection is implied.</p>}
+      <p role="status" className="qt-message">{message}</p>
+      <div className="qt-actions"><button className="terminal-action terminal-secondary-action" disabled={busy}
+        onClick={()=>void refresh(new AbortController().signal)}><RefreshCw size={16}/> Refresh accounts</button></div>
+    </section>
+    <section className="terminal-surface">
+      <div className="terminal-card-head"><h2>{BROKER_LABELS[selected]||selected} connections</h2><LockKeyhole size={18}/></div>
+      {accounts.length===0?<p>No authorized private OpenAlgo instance is configured for this broker and your account. Broker selection does not grant access.</p>:
+        <div className="qt-broker-accounts">{accounts.map(account=><div key={account.account_id} className="qt-broker-account">
+          <strong>{account.account_id}</strong><span>Session: {account.session_state||'Not checked'}</span>
+          <div className="qt-actions"><button className="terminal-action" disabled={busy||!account.login_available}
+            onClick={()=>void connect(account)}>Connect with OpenAlgo</button>
+            <button className="terminal-action terminal-secondary-action" disabled={busy}
+              onClick={()=>void verify(account)}>Verify session</button></div>
+        </div>)}</div>}
+      <p className="terminal-footnote">This workflow is disabled by default and uses development-private QSYN identity only. OpenAlgo receives broker credentials on its own authenticated site; QSYN never accepts a browser-supplied broker token, port or redirect target.</p>
       <div className="qt-actions">
         <button className="terminal-action terminal-secondary-action" onClick={()=>openView('private-live')}>Private chart readiness</button>
         <button className="terminal-action terminal-secondary-action" onClick={()=>openView('diagnostics')}>Feed diagnostics</button>
       </div>
     </section>
-    <section className="terminal-surface">
-      <h2>NSE / BSE index catalog</h2>
+    <section className="terminal-surface"><h2>NSE / BSE index catalog</h2>
       <div className="qt-market-tags">{INDIA_INDEX_MARKETS.map(x=><span key={x.id}>{x.name} · {x.exchange==='BSE_INDEX'?'BSE':'NSE'}</span>)}</div>
-      <p className="terminal-footnote">{catalog?.indexes?.length===6?'Index discovery operational.':'Index discovery unavailable.'} Live candles stay blocked until licensed account-scoped Upstox data is provisioned.</p>
+      <p className="terminal-footnote">{indexCatalog?.indexes?.length===6?'Index discovery operational.':'Index discovery unavailable.'} Live candles remain blocked until account-specific exchange display rights and real provider data are verified.</p>
     </section>
   </div>;
 }
