@@ -227,6 +227,32 @@ if (preg_match('#^/qsyn/api/v1/admin/openalgo/(accounts|connect|inspect|setup)$#
     respond($payload, $status);
 }
 
+// Server-side administrator-only terminal gate. This runs before React,
+// pretty-URL redirects, studio/legacy aliases, and terminal shell rendering.
+// The public chart-only /qsyn/ homepage is deliberately excluded.
+$isTerminalDocument = $route === '/qsyn/terminal'
+    || str_starts_with($route, '/qsyn/terminal/')
+    || in_array($route, [
+        '/qsyn/studio', '/qsyn/studio/',
+        '/qsyn/admin/rust', '/qsyn/admin/rust/',
+        '/qsyn/legacy-chart', '/qsyn/legacy-chart/',
+    ], true);
+if ($isTerminalDocument) {
+    $gateSource = dirname(__DIR__) . '/src';
+    if (!is_file($gateSource . '/TerminalAdminGate.php')) {
+        $gateSource = dirname(__DIR__, 2) . '/private_html/qsyn/app/src';
+    }
+    foreach (['RustAdmin', 'RustAdminBootstrap', 'TerminalAdminGate'] as $unit) {
+        if (!is_file($gateSource . '/' . $unit . '.php')) {
+            respond(['error' => 'terminal_auth_unavailable'], 503);
+        }
+        require_once $gateSource . '/' . $unit . '.php';
+    }
+    \QSYN\Routing\TerminalAdminGate::enforce(
+        $route, $_SERVER, __DIR__ . '/terminal-login.php'
+    );
+}
+
 // Central terminal route management: one reviewed JSON registry consumed by
 // PHP and React. This block handles only UI navigation, not any protected API.
 if (str_starts_with($route, '/qsyn/terminal') || in_array($route, [
