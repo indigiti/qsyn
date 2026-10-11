@@ -84,9 +84,9 @@ final class PrivateBrokerRegistry
     {
         if (getenv('QSYN_TRADING_ENABLED') === '1'
             || getenv('QSYN_ENABLE_LIVE_TRADING') === '1'
-            || !class_exists(\\QSYN\\Admin\\RustAdmin::class)
-            || !\\QSYN\\Admin\\RustAdmin::authenticated()) {
-            throw new \\RuntimeException('admin_broker_read_denied');
+            || !class_exists(\QSYN\Admin\RustAdmin::class)
+            || !\QSYN\Admin\RustAdmin::authenticated()) {
+            throw new \RuntimeException('admin_broker_read_denied');
         }
         return self::loadValidated($path);
     }
