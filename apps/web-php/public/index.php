@@ -201,13 +201,13 @@ if (preg_match('#^/qsyn/api/v1/brokers/openalgo/(catalog|accounts|status|connect
 // Administrator-only OpenAlgo readiness. Reuses the existing separate QSYN
 // Rust administrator password/session; no mock user identities or broker keys
 // enter the browser. Read-only status and approved upstream login handoff.
-if (preg_match('#^/qsyn/api/v1/admin/openalgo/(accounts|connect|inspect)$#', $route, $openAlgoAdmin)) {
+if (preg_match('#^/qsyn/api/v1/admin/openalgo/(accounts|connect|inspect|setup)$#', $route, $openAlgoAdmin)) {
     $src = dirname(__DIR__) . '/src';
     if (!is_file($src . '/OpenAlgoAdminWebApi.php')) {
         $src = dirname(__DIR__, 2) . '/private_html/qsyn/app/src';
     }
     foreach (['RustAdmin', 'OpenAlgoLocalProbe', 'PrivateBrokerRegistry',
-        'OpenAlgoBrokerConnectionsApi', 'OpenAlgoAdminWebApi'] as $unit) {
+        'OpenAlgoBrokerConnectionsApi', 'OpenAlgoAdminSetup', 'OpenAlgoAdminWebApi'] as $unit) {
         if (!is_file($src . '/' . $unit . '.php')) {
             respond(['error' => 'admin_broker_modules_unavailable'], 503);
         }
@@ -216,9 +216,11 @@ if (preg_match('#^/qsyn/api/v1/admin/openalgo/(accounts|connect|inspect)$#', $ro
     header('Cache-Control: private, no-store');
     header('Pragma: no-cache');
     header('X-Robots-Tag: noindex, nofollow');
-    [$status, $payload] = \QSYN\Broker\OpenAlgoAdminWebApi::dispatch(
-        $openAlgoAdmin[1], $_SERVER
-    );
+    [$status, $payload] = $openAlgoAdmin[1] === 'setup'
+        ? \QSYN\Broker\OpenAlgoAdminSetup::dispatch($_SERVER)
+        : \QSYN\Broker\OpenAlgoAdminWebApi::dispatch(
+            $openAlgoAdmin[1], $_SERVER
+        );
     if ($status === 405) {
         header('Allow: ' . ($openAlgoAdmin[1] === 'accounts' ? 'GET' : 'POST'));
     }
