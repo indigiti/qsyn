@@ -173,6 +173,31 @@ if ($route === '/qsyn/api/v1/studio/market' || $route === '/qsyn/api/v1/studio/b
     }
 }
 
+// Public broker names; private account selection, login and status are gated by
+// the existing development identity and separate explicit runtime opt-in.
+if (preg_match('#^/qsyn/api/v1/brokers/openalgo/(catalog|accounts|status|connect)$#', $route, $brokerMatch)) {
+    $src = dirname(__DIR__) . '/src';
+    if (!is_file($src . '/OpenAlgoBrokerConnectionsApi.php')) {
+        $src = dirname(__DIR__, 2) . '/private_html/qsyn/app/src';
+    }
+    foreach (['FileStore', 'UserRepository', 'FileUserRepository', 'UserSession',
+        'IdentityApi', 'OpenAlgoLocalProbe', 'PrivateBrokerRegistry',
+        'OpenAlgoBrokerConnectionsApi'] as $unit) {
+        if (!is_file($src . '/' . $unit . '.php')) {
+            respond(['error' => 'broker_modules_unavailable'], 503);
+        }
+        require_once $src . '/' . $unit . '.php';
+    }
+    header('Cache-Control: private, no-store');
+    header('Pragma: no-cache');
+    header('X-Robots-Tag: noindex, nofollow');
+    [$status, $payload] = \QSYN\Broker\OpenAlgoBrokerConnectionsApi::dispatch(
+        $brokerMatch[1], $_SERVER, $_GET
+    );
+    if ($status === 405) header('Allow: ' . ($brokerMatch[1] === 'connect' ? 'POST' : 'GET'));
+    respond($payload, $status);
+}
+
 // Central terminal route management: one reviewed JSON registry consumed by
 // PHP and React. This block handles only UI navigation, not any protected API.
 if (str_starts_with($route, '/qsyn/terminal') || in_array($route, [
