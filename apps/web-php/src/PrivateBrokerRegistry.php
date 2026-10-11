@@ -79,6 +79,18 @@ final class PrivateBrokerRegistry
         return self::loadValidated($path);
     }
 
+    /** Operator web reader; never let browser claims select an account/URL/port. */
+    public static function loadForAdminWeb(string $path): array
+    {
+        if (getenv('QSYN_TRADING_ENABLED') === '1'
+            || getenv('QSYN_ENABLE_LIVE_TRADING') === '1'
+            || !class_exists(\\QSYN\\Admin\\RustAdmin::class)
+            || !\\QSYN\\Admin\\RustAdmin::authenticated()) {
+            throw new \\RuntimeException('admin_broker_read_denied');
+        }
+        return self::loadValidated($path);
+    }
+
     /** @return array<string, array<string, mixed>> */
     private static function loadValidated(string $path): array
     {
