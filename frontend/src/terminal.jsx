@@ -116,7 +116,7 @@ const ignoreHomepageWidget = () => {};
  * reference without removing any upstream chart controls. Its candles remain
  * explicitly simulated. Full workspace features remain at /qsyn/terminal.
  */
-function HomepageChart({ theme, setTheme }) {
+function HomepageChart({ theme, onToggleTheme }) {
   return <div className="qsyn-homepage">
     <header className="qsyn-home-topbar">
       <a className="qsyn-home-brand" href="/qsyn/" aria-label="QSYN chart homepage">
@@ -130,7 +130,7 @@ function HomepageChart({ theme, setTheme }) {
       <div className="qsyn-home-utilities">
         <span className="qsyn-home-source">SIMULATED DATA</span>
         <button type="button" className="terminal-icon" aria-label="Toggle theme"
-          onClick={() => setTheme(value => value === 'dark' ? 'light' : 'dark')}>
+          onClick={onToggleTheme}>
           {theme === 'dark' ? <Sun size={18}/> : <Moon size={18}/>}
         </button>
       </div>
@@ -536,8 +536,14 @@ function App() {
   }, []);
   useEffect(() => {
     document.documentElement.setAttribute('data-qsyn-theme', theme);
-    try { localStorage.setItem('qsyn-terminal-theme', theme); } catch {}
   }, [theme]);
+  // Respect the two distinct page defaults. Do not silently save the
+  // homepage's bright default as a user preference for the full terminal.
+  function toggleTheme() {
+    const next = theme === 'dark' ? 'light' : 'dark';
+    setTheme(next);
+    try { localStorage.setItem('qsyn-terminal-theme', next); } catch {}
+  }
   useEffect(() => {
     let active = true;
     const controller = new AbortController();
@@ -570,7 +576,7 @@ function App() {
     </nav>;
   }
   if (['/', '/qsyn', '/qsyn/'].includes(window.location.pathname)) {
-    return <HomepageChart theme={theme} setTheme={setTheme}/>;
+    return <HomepageChart theme={theme} onToggleTheme={toggleTheme}/>;
   }
   return <div className="terminal-shell">
     <header className="terminal-topbar">
@@ -585,7 +591,7 @@ function App() {
       <div className="terminal-top-right">
         <span className="terminal-environment">{view === 'private-live' ? '● PRIVATE · GATED' : '● SIMULATED'}</span>
         <button type="button" className="terminal-icon" aria-label="Toggle theme"
-          onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
+          onClick={toggleTheme}>
           {theme === 'dark' ? <Sun size={18}/> : <Moon size={18}/>}</button>
         <a className="terminal-icon" href="/qsyn/admin/rust" aria-label="Administrator diagnostics" title="Restricted administrator diagnostics"><Settings size={17}/></a>
       </div>
