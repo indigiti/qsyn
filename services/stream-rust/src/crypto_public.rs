@@ -328,6 +328,50 @@ mod tests {
     fn query(exchange:&str,market:&str,symbol:&str)->Request {
         Request{exchange:exchange.into(),market:market.into(),symbol:symbol.into(),interval:"1m".into(),limit:Some(200),before:None}
     }
+    #[test]
+    fn older_history_cursor_is_bounded_and_provider_specific() {
+        let before=1_696_982_400_u64;
+        for (exchange,market,symbol) in [
+            ("BINANCE","spot","BTCUSDT"),
+            ("BYBIT","spot","BTCUSDT"),
+            ("OKX","spot","BTC-USDT"),
+            ("COINBASE","spot","BTC-USD"),
+            ("KRAKEN","spot","XBTUSD"),
+            ("BITGET","spot","BTCUSDT"),
+            ("HYPERLIQUID","perp","BTC")
+        ] {
+            let mut q=query(exchange,market,symbol);
+            q.before=Some(before);
+            q.limit=Some(300);
+            assert!(valid(&q),"valid cursor for {exchange}");
+            let (url,post)=source(&q).expect("fixed-provider historical request");
+            assert!(url.starts_with("https://"));
+            match exchange {
+                "BINANCE"|"BITGET" => assert!(url.contains("endTime=")),
+                "BYBIT" => assert!(url.contains("end=")),
+                "OKX" => {
+                    assert!(url.contains("/api/v5/market/history-candles"));
+                    assert!(url.contains("after="));
+                    assert_eq!(provider_page_limit(&q),100);
+                },
+                "COINBASE" => {
+                    assert!(url.contains("start=")&&url.contains("end="));
+                    assert!(url.contains("/products/BTC-USD/candles"));
+                },
+                "KRAKEN" => assert!(!url.contains("start=")&&!url.contains("end=")),
+                "HYPERLIQUID" => {
+                    let body=post.expect("fixed history snapshot");
+                    assert_eq!(body["type"],json!("candleSnapshot"));
+                    assert!(body["req"]["endTime"].as_u64().unwrap() < before*1000);
+                },
+                _=>unreachable!()
+            }
+            q.before=Some(before+30);
+            assert!(!valid(&q),"reject unaligned cursor");
+            q.before=Some(epoch_ms()/1000 + 604800);
+            assert!(!valid(&q),"reject future cursor");
+        }
+    }
     #[test] fn strict_catalog() {
         for (e,m,s) in [("BINANCE","spot","BTCUSDT"),("BYBIT","perp","ETHUSDT"),
             ("OKX","perp","BTC-USDT-SWAP"),("COINBASE","spot","BTC-USD"),
