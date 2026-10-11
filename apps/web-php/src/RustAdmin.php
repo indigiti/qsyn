@@ -9,7 +9,8 @@ namespace QSYN\Admin;
  */
 final class RustAdmin
 {
-    private const IDLE_SECONDS = 1200;
+    private const IDLE_SECONDS = 3600; // One hour of inactivity, not an hourly forced logout.
+    private const MAX_SESSION_SECONDS = 28800; // Absolute 8-hour administrator session.
 
     /**
      * Password configuration belongs to the QSYN application, not PHP-FPM.
@@ -87,6 +88,7 @@ final class RustAdmin
         if (session_status() === PHP_SESSION_ACTIVE) {
             return;
         }
+        ini_set('session.gc_maxlifetime', (string)self::MAX_SESSION_SECONDS);
         ini_set('session.use_strict_mode', '1');
         ini_set('session.use_only_cookies', '1');
         ini_set('session.cookie_httponly', '1');
@@ -104,9 +106,14 @@ final class RustAdmin
             'httponly' => true,
             'samesite' => 'Strict',
         ]);
-        session_start();
+        if (!@session_start()) {
+            return; // Fail closed; diagnostic status will report an unavailable session.
+        }
         if (isset($_SESSION['qsyn_last']) && (time() - (int)$_SESSION['qsyn_last']) > self::IDLE_SECONDS) {
-            self::clearAuth();
+            self::clearAuth('idle_expired');
+        } elseif (isset($_SESSION['qsyn_login_at'])
+            && (time() - (int)$_SESSION['qsyn_login_at']) > self::MAX_SESSION_SECONDS) {
+            self::clearAuth('session_expired');
         }
     }
 
@@ -115,7 +122,9 @@ final class RustAdmin
         return self::configured()
             && ($_SESSION['qsyn_admin'] ?? false) === true
             && isset($_SESSION['qsyn_last'])
-            && (time() - (int)$_SESSION['qsyn_last']) <= self::IDLE_SECONDS;
+            && (time() - (int)$_SESSION['qsyn_last']) <= self::IDLE_SECONDS
+            && (!isset($_SESSION['qsyn_login_at'])
+                || (time() - (int)$_SESSION['qsyn_login_at']) <= self::MAX_SESSION_SECONDS);
     }
 
     public static function csrf(): string
@@ -195,6 +204,8 @@ final class RustAdmin
         session_regenerate_id(true);
         $_SESSION['qsyn_admin'] = true;
         $_SESSION['qsyn_last'] = time();
+        $_SESSION['qsyn_login_at'] = time();
+        unset($_SESSION['qsyn_auth_exit_reason']);
         $_SESSION['qsyn_csrf'] = bin2hex(random_bytes(32));
         $_SESSION['qsyn_failures'] = 0;
         $_SESSION['qsyn_lock_until'] = 0;
@@ -210,12 +221,39 @@ final class RustAdmin
 
     public static function logout(): void
     {
-        self::clearAuth();
+        self::clearAuth('signed_out');
         session_regenerate_id(true);
     }
 
-    private static function clearAuth(): void
+    /** Safe, server-derived status for troubleshooting; never returns cookies or secrets. */
+    public static function sessionReport(): array
     {
-        unset($_SESSION['qsyn_admin'], $_SESSION['qsyn_last'], $_SESSION['qsyn_csrf']);
+        $ok = self::authenticated();
+        $reason = $ok ? 'authenticated' : (string)(
+            $_SESSION['qsyn_auth_exit_reason'] ?? (
+                self::configured() ? 'admin_session_missing' : 'admin_not_configured'
+            )
+        );
+        $now=time();
+        $idle = $ok ? max(0,self::IDLE_SECONDS - ($now - (int)$_SESSION['qsyn_last'])) : 0;
+        $absolute = $ok && isset($_SESSION['qsyn_login_at'])
+            ? max(0,self::MAX_SESSION_SECONDS - ($now - (int)$_SESSION['qsyn_login_at']))
+            : ($ok ? $idle : 0);
+        return [
+            'authenticated' => $ok,
+            'reason_code' => $reason,
+            'idle_remaining_seconds' => $ok ? min($idle,$absolute) : 0,
+            'cookie_received' => isset($_COOKIE['QSYN_ADMIN_SESSION']),
+            'session_storage_active' => session_status() === PHP_SESSION_ACTIVE,
+            'cookie_secure_expected' => (bool)ini_get('session.cookie_secure'),
+            'cookie_path' => '/qsyn/',
+            'trading_enabled' => false,
+        ];
+    }
+
+    private static function clearAuth(string $reason = 'signed_out'): void
+    {
+        unset($_SESSION['qsyn_admin'], $_SESSION['qsyn_last'], $_SESSION['qsyn_login_at'], $_SESSION['qsyn_csrf']);
+        $_SESSION['qsyn_auth_exit_reason'] = $reason;
     }
 }

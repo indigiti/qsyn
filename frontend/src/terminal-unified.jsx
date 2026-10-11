@@ -42,6 +42,8 @@ export function DiagnosticsWorkspace(){
   const [busy,setBusy]=useState(false);
   const [sample,setSample]=useState(null);
   const [last,setLast]=useState(0);
+  const [adminAudit,setAdminAudit]=useState(null),[auditError,setAuditError]=useState('');
+  const [auditLoading,setAuditLoading]=useState(false);
   const probe=useCallback(async(signal)=>{
     setBusy(true);
     const values=await Promise.all(VENUES.map(async ex=>{
@@ -76,6 +78,34 @@ export function DiagnosticsWorkspace(){
       trading_enabled:false};
     void navigator.clipboard?.writeText(JSON.stringify(safe,null,2));
   };
+  async function runAdminAudit(){
+    setAuditLoading(true);setAuditError('');
+    const started=Date.now();const ctl=new AbortController();
+    const timeout=setTimeout(()=>ctl.abort(),12000);
+    try{
+      const res=await fetch('/qsyn/api/v1/admin/diagnostics/report',{
+        credentials:'same-origin',cache:'no-store',signal:ctl.signal,
+        headers:{Accept:'application/json'}});
+      const data=await res.json();
+      if(!res.ok){
+        setAdminAudit(null);
+        setAuditError(res.status===401?'ADMIN_REAUTH_REQUIRED':
+          res.status===503?'DIAGNOSTICS_SERVICE_UNAVAILABLE':'DIAGNOSTICS_HTTP_'+res.status);
+        return;
+      }
+      if(data.schema!=='QSYN-ADMIN-DIAGNOSTICS/1')throw Error('INVALID_REPORT_SCHEMA');
+      setAdminAudit({...data,browser:{
+        schema:'QSYN-CLIENT-DIAGNOSTIC/1',
+        checked_at_utc:new Date().toISOString(),
+        request_duration_ms:Date.now()-started,
+        client_http_status:res.status,
+        source:'admin_terminal',
+      }});
+    }catch{
+      setAdminAudit(null);
+      setAuditError(ctl.signal.aborted?'DIAGNOSTICS_REQUEST_TIMEOUT':'DIAGNOSTICS_NETWORK_ERROR');
+    }finally{clearTimeout(timeout);setAuditLoading(false);}
+  }
   async function sampleDemo() {
     setSample({message:'Checking demo stream…'});
     try {
@@ -95,6 +125,35 @@ export function DiagnosticsWorkspace(){
           <ClipboardCopy size={16}/> Copy report</button>
       </div>
     </PanelTitle>
+    <section className="terminal-surface" aria-label="Administrator diagnostics center">
+      <div className="terminal-card-head"><h2>Administrator diagnostics center</h2><ShieldCheck size={18}/></div>
+      <p>Read-only audit of session state, private Upstox configuration and Rust index
+        worker packaging. This does not use tokens to contact Upstox, start a feed or place orders.</p>
+      <div className="qt-actions">
+        <button type="button" className="terminal-action" disabled={auditLoading}
+          onClick={()=>void runAdminAudit()}><RefreshCw size={15}/>
+          {auditLoading?' Checking…':'Run secure audit'}</button>
+        <button type="button" className="terminal-action terminal-secondary-action"
+          disabled={!adminAudit}
+          onClick={()=>void navigator.clipboard?.writeText(JSON.stringify(adminAudit,null,2))}>
+          <ClipboardCopy size={15}/> Copy diagnostic JSON</button>
+      </div>
+      {auditError&&<p role="alert">Diagnostic check: {auditError}.
+        The admin login or server connectivity may need attention.</p>}
+      {adminAudit&&<div>
+        <p role="status">Checked {adminAudit.checked_at_utc} · Request ID {adminAudit.request_id}</p>
+        <div className="qt-table-wrap"><table className="qt-table">
+          <thead><tr><th>Component</th><th>Reported state</th><th>Code</th></tr></thead>
+          <tbody>{(adminAudit.components||[]).map(c=><tr key={c.component}>
+            <td>{c.component}</td><td>{c.status}</td><td><code>{c.code}</code></td>
+          </tr>)}</tbody>
+        </table></div>
+        <pre style={{whiteSpace:'pre-wrap',overflowWrap:'anywhere',fontSize:12}}>
+          {JSON.stringify(adminAudit,null,2)}</pre>
+        <p className="terminal-footnote">No broker credentials, access tokens, administrator
+          password, session cookie values or private paths are included.</p>
+      </div>}
+    </section>
     <div className="qt-summary">
       <section className="terminal-surface"><Activity size={19}/><span>Public crypto venues</span>
         <strong>{VENUES.filter(x=>rows[x]?.feed?.state==='websocket'&&rows[x]?.feed?.fresh===true).length} / 7 fresh</strong></section>
@@ -151,9 +210,10 @@ async function openAlgoAdminPost(operation, account_id, csrf){
   return json;
 }
 const NATIVE_UPSTOX_API='/qsyn/api/v1/admin/upstox/';
-function NativeUpstoxPanel(){
+function NativeUpstoxPanel({refreshTick=0}){
   const [status,setStatus]=useState(null),[busy,setBusy]=useState(false);
   const [profileCheck,setProfileCheck]=useState(null);
+  const [lastDiagnostic,setLastDiagnostic]=useState(null);
   const [notice,setNotice]=useState('Checking native Upstox authorization readiness…');
   const [form,setForm]=useState({client_id:'',client_secret:'',expected_user_id:'',confirmed:false});
   const load=useCallback(async()=>{
@@ -167,40 +227,79 @@ function NativeUpstoxPanel(){
         :data.configured?'Upstox app configured. Authorize using your Upstox login.':'Set up your Upstox Developer App before authorizing.');
     }catch{setStatus(null);setNotice('Native Upstox setup is unavailable; check the QSYN administrator session and private runtime.');}
   },[]);
-  useEffect(()=>{void load();},[load]);
+  useEffect(()=>{void load();},[load,refreshTick]);
   async function action(operation,payload){
     if(!status?.csrf||busy)return;
     setBusy(true);
+    const started=Date.now();
+    const ctl=new AbortController();
+    const timeout=setTimeout(()=>ctl.abort(),15000);
+    let httpStatus=0,requestId=null;
     try{
+      setNotice(operation==='verify'
+        ?'Contacting the official Upstox profile API…'
+        :operation==='begin'?'Preparing secure Upstox authorization…':'Saving the Upstox app privately…');
       const r=await fetch(NATIVE_UPSTOX_API+operation,{
-        method:'POST',credentials:'same-origin',cache:'no-store',
+        method:'POST',credentials:'same-origin',cache:'no-store',signal:ctl.signal,
         headers:{'Content-Type':'application/json','Accept':'application/json',
           'X-CSRF-Token':status.csrf},
         body:JSON.stringify(payload)});
-      const data=await r.json();
-      if(!r.ok)throw Error(data.error||'upstox_action_denied');
+      httpStatus=r.status;
+      const id=r.headers.get('X-QSYN-Request-ID');
+      requestId=/^[a-f0-9]{16}$/.test(id||'')?id:null;
+      let data;
+      try{data=await r.json();}catch{throw Error('INVALID_JSON_RESPONSE');}
+      if(!r.ok)throw Error(/^[a-z0-9_]{3,80}$/.test(data.error||'')
+        ?data.error.toUpperCase():'HTTP_REQUEST_REJECTED');
       if(operation==='setup'){
         setForm({client_id:'',client_secret:'',expected_user_id:'',confirmed:false});
         await load();
-        setNotice('Upstox application saved privately. Register the exact callback URL in Upstox, then select Connect Upstox.');
+        setNotice('Upstox app configuration saved. Register its callback before OAuth.');
       }else if(operation==='verify'){
         setProfileCheck(data);
+        const code=/^[A-Z0-9_]{8,80}$/.test(data.diagnostic_code||'')
+          ?data.diagnostic_code:'UPSTOX_UNCLASSIFIED_STATUS';
+        setLastDiagnostic({schema:'QSYN-UPSTOX-BROWSER-DIAGNOSTIC/1',
+          checked_at_utc:new Date().toISOString(),component:'native_upstox_profile',
+          operation:'verify',http_status:r.status,request_id:requestId,
+          duration_ms:Date.now()-started,code,session_verified:data.session_verified===true,
+          index_feed_activated:false,trading_enabled:false});
         setNotice(data.session_verified
-          ?'Upstox profile verified for the expected account on this check. Exchange display licensing, Rust V3 feed and live index charts remain separately gated.'
-          :'Upstox profile could not be verified. The token may have expired or the account is inactive; reauthorize if necessary.');
+          ?'Upstox profile verified at this instant. Index feeds, licensing and chart subscriptions remain independently gated.'
+          :'Upstox verification failed: '+code+'. Copy the JSON report below for diagnosis.');
       }else if(operation==='begin'){
         const url=new URL(data.authorization_url);
         if(url.protocol!=='https:'||url.hostname!=='api.upstox.com'
           ||url.pathname!=='/v2/login/authorization/dialog'
           ||url.searchParams.get('response_type')!=='code'
-          ||!url.searchParams.get('state'))throw Error('invalid_upstox_authorize_url');
+          ||!url.searchParams.get('state'))throw Error('INVALID_UPSTOX_AUTHORIZE_URL');
         window.location.assign(url.href);
       }
-    }catch(e){setNotice('Upstox authorization unavailable: '+String(e.message).slice(0,100));}
-    finally{setBusy(false);}
+    }catch(err){
+      const code=ctl.signal.aborted?'CLIENT_REQUEST_TIMEOUT'
+        :/^[A-Z0-9_]{3,80}$/.test(err?.message||'')?err.message
+        :'CLIENT_NETWORK_OR_RESPONSE_ERROR';
+      setLastDiagnostic({schema:'QSYN-UPSTOX-BROWSER-DIAGNOSTIC/1',
+        checked_at_utc:new Date().toISOString(),component:'native_upstox_profile',
+        operation,http_status:httpStatus,request_id:requestId,
+        duration_ms:Date.now()-started,code,session_verified:false,
+        index_feed_activated:false,trading_enabled:false});
+      setNotice('Upstox request not completed: '+code+
+        '. You can copy the sanitized JSON below. Do not share credentials.');
+    }finally{clearTimeout(timeout);setBusy(false);}
   }
   return <div className="qt-openalgo-setup">
-    <p role="status" className="qt-message">{notice}</p>
+    <p role="status" className="qt-message" style={{fontWeight:600}}>{busy?'Working · ':''}{notice}</p>
+    {lastDiagnostic&&<section aria-label="Upstox error diagnostics" className="terminal-surface">
+      <div className="terminal-card-head"><h3>Upstox diagnostic report</h3>
+        <button type="button" className="terminal-action terminal-secondary-action"
+          onClick={()=>void navigator.clipboard?.writeText(JSON.stringify(lastDiagnostic,null,2))}>
+          <ClipboardCopy size={15}/> Copy safe JSON</button></div>
+      <pre style={{whiteSpace:'pre-wrap',overflowWrap:'anywhere',fontSize:12}}>
+        {JSON.stringify(lastDiagnostic,null,2)}</pre>
+      <p className="terminal-footnote">Report contains only approved status codes and timing;
+        never paste Upstox tokens, OAuth codes, cookies or passwords into support messages.</p>
+    </section>}
     <div className="qt-summary">
       <div><strong>Upstox OAuth token</strong><p>{profileCheck?.session_verified?'Profile verified now · not continuously monitored':status?.token_stored?'Stored privately · verify current session':status?.configured?'Authorization required':'Not configured'}</p></div>
       <div><strong>Index feed / license</strong><p>Not activated · no live prices</p></div>
@@ -249,6 +348,7 @@ function NativeUpstoxPanel(){
 }
 export function BrokersWorkspace({openView}){
   const [catalog,setCatalog]=useState(null),[admin,setAdmin]=useState(null);
+  const [nativeRefreshTick,setNativeRefreshTick]=useState(0);
   const [inventory,setInventory]=useState(null),[selected,setSelected]=useState('upstox');
   const [message,setMessage]=useState('No production broker session verified');
   const [statuses,setStatuses]=useState({}),[loginTarget,setLoginTarget]=useState(null);
@@ -365,9 +465,9 @@ export function BrokersWorkspace({openView}){
         </button>)}
       </div>
       {!catalog&&<p>Broker catalog is temporarily unavailable.</p>}
-      <p role="status" className="qt-message">{selected==='upstox'?'Native Upstox OAuth and index data subscription are not activated; no OpenAlgo API key is required.':message}</p>
+      <p role="status" className="qt-message">{selected==='upstox'?'Native Upstox uses direct OAuth and Rust. Check current OAuth below; live licensed index subscriptions are not activated.':message}</p>
       <button className="terminal-action terminal-secondary-action" disabled={busy}
-        onClick={()=>void refresh(new AbortController().signal)}>
+        onClick={()=>selected==='upstox' ? setNativeRefreshTick(v=>v+1) : void refresh(new AbortController().signal)}>
         <RefreshCw size={16}/> Refresh broker status
       </button>
     </section>
@@ -376,7 +476,7 @@ export function BrokersWorkspace({openView}){
       <p>Connect directly to Upstox. Its Market Data Feed V3 is decoded by the Rust streaming
         engine and distributed to authorized React index charts. No OpenAlgo application key,
         OpenAlgo Python runtime, or trading connection is required.</p>
-      <NativeUpstoxPanel/>
+      <NativeUpstoxPanel refreshTick={nativeRefreshTick}/>
       <p className="terminal-footnote">Native Rust index subscriptions and licensed candle backfill
         are not activated until current instrument keys and exchange data entitlement are verified.</p>
       <button type="button" className="terminal-action terminal-secondary-action"

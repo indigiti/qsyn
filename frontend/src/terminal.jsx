@@ -589,26 +589,46 @@ function App() {
   const [view, setView] = useState(routeView);
   const [theme, setTheme] = useState(currentTheme);
   const [sidebar, setSidebar] = useState(false);
+  const [sessionWarning, setSessionWarning] = useState('');
   const [capabilities, setCapabilities] = useState(null);
   useEffect(() => {
     if (['/', '/qsyn', '/qsyn/'].includes(window.location.pathname)) return;
     let active = true;
     const check = async () => {
+      if (!active || document.visibilityState === 'hidden') return;
       try {
         const result = await fetch('/qsyn/api/v1/admin/rust/state', {
           credentials:'same-origin',cache:'no-store',headers:{Accept:'application/json'},
         });
-        const state = await result.json();
-        if (active && (!result.ok || !state.authenticated)) {
+        // Transport errors and 5xx are NOT authorization failures. A prior
+        // implementation incorrectly redirected every transient network error.
+        if (result.status === 401) {
           window.location.replace('/qsyn/terminal/login');
+          return;
         }
+        if (!result.ok) {
+          if (active) setSessionWarning('ADMIN_STATE_HTTP_'+result.status);
+          return;
+        }
+        const state=await result.json();
+        if (!state || typeof state.authenticated!=='boolean') {
+          if (active) setSessionWarning('ADMIN_STATE_INVALID_RESPONSE');
+          return;
+        }
+        if (!state.authenticated) {
+          window.location.replace('/qsyn/terminal/login');
+          return;
+        }
+        if (active) setSessionWarning('');
       } catch {
-        if (active) window.location.replace('/qsyn/terminal/login');
+        if (active) setSessionWarning('ADMIN_STATE_NETWORK_UNAVAILABLE');
       }
     };
     void check();
     const interval = window.setInterval(check, 60000);
-    return () => { active = false; window.clearInterval(interval); };
+    const visible=()=>{if (document.visibilityState==='visible') void check();};
+    document.addEventListener('visibilitychange',visible);
+    return () => { active = false; window.clearInterval(interval); document.removeEventListener('visibilitychange',visible); };
   }, []);
   useEffect(() => {
     const change = () => setView(routeView());
@@ -713,6 +733,13 @@ function App() {
     {sidebar && <button type="button" className="terminal-overlay" aria-label="Close navigation"
       onClick={() => setSidebar(false)} />}
     <main id="terminal-main" className="terminal-main">
+      {sessionWarning && <div className="terminal-alert" role="status">
+        <ShieldAlert size={17}/>
+        <span><b>Session check unavailable.</b> {sessionWarning}. Your terminal remains visible,
+          but protected requests can fail until connectivity is restored. Open Diagnostics to copy a safe report.</span>
+        <button type="button" className="terminal-action terminal-secondary-action"
+          onClick={()=>openView('diagnostics')}>Diagnostics</button>
+      </div>}
       <div className="terminal-alert" role="note"><ShieldAlert size={17}/>
         <span>{view==='private-live'||view==='brokers'||view==='operations'
           ? <><b>Restricted services.</b> Broker entitlements and administrator permissions are independently gated. No orders.</>

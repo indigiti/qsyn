@@ -68,6 +68,24 @@ try {
   if(new URL(page.url()).pathname==='/qsyn/terminal/login')
     throw new Error('Administrator unlock returned login instead of terminal: '+(await page.locator('body').innerText()).slice(0,420));
   await page.getByRole('heading',{name:'Trading charts'}).waitFor();
+  // Transient admin API 503 must not forcibly log out a valid administrator.
+  await page.route('**/qsyn/api/v1/admin/rust/state',async route=>{
+    await route.fulfill({status:503,contentType:'application/json',
+      body:JSON.stringify({error:'temporary_unavailable'})});
+  });
+  await page.evaluate(()=>document.dispatchEvent(new Event('visibilitychange')));
+  await page.getByText('Session check unavailable.').waitFor({timeout:7000});
+  if(new URL(page.url()).pathname==='/qsyn/terminal/login')
+    throw new Error('Temporary admin API failure incorrectly triggered a login redirect');
+  await page.unroute('**/qsyn/api/v1/admin/rust/state');
+  await page.evaluate(()=>document.dispatchEvent(new Event('visibilitychange')));
+  await page.getByText('Session check unavailable.').waitFor({state:'detached',timeout:7000});
+  const auditResponse=await page.request.get(origin+'/qsyn/api/v1/admin/diagnostics/report');
+  if(auditResponse.status()!==200)throw Error('Authenticated diagnostic endpoint unavailable');
+  const audit=await auditResponse.json();
+  if(audit.schema!=='QSYN-ADMIN-DIAGNOSTICS/1'||!audit.request_id||audit.trading_enabled!==false)
+    throw Error('Sanitized administrator audit contract failed');
+
   for (const [old,view] of [
     ['/qsyn/legacy-chart','diagnostics'],
     ['/qsyn/legacy-chart/','diagnostics'],
