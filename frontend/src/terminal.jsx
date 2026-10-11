@@ -169,10 +169,10 @@ function HomepageChart({ theme }) {
       const anchor=watchlist||toolbar.querySelector('.oac-topbar__objects');
       if(!anchor)return;
       const controls=[mountedLayout,mountedSaved].filter(Boolean);
-      for(const button of controls) {
-        button.classList.add('qsyn-native-chart-action');
-        if(button.parentNode!==toolbar || button.nextSibling!==anchor)toolbar.insertBefore(button,anchor);
-      }
+      for(const button of controls)button.classList.add('qsyn-native-chart-action');
+      const inOrder=controls.every((button,i)=>button.parentNode===toolbar &&
+        button.nextSibling===(controls[i+1]||anchor));
+      if(!inOrder)for(const button of controls)toolbar.insertBefore(button,anchor);
       // Keep native symbol search plus Watchlist alongside Arrange charts
       // and Saved layouts. All buttons remain keyboard navigable.
     };
