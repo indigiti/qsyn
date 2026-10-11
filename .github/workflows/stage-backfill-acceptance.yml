@@ -1,0 +1,46 @@
+name: QSYN Stage Historical Acceptance
+
+on:
+  workflow_dispatch:
+    inputs:
+      bars:
+        description: 'Real Binance BTCUSDT 1m candles to validate on deployed staging'
+        required: true
+        default: '1600'
+        type: choice
+        options:
+          - '1600'
+          - '15016'
+
+permissions:
+  contents: read
+
+jobs:
+  verify-stage:
+    name: Verify deployed stage history
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Test validation logic against deterministic mock exchange data
+        run: node --test ops/verify-public-backfill.test.mjs
+      - name: Probe actual read-only Binance public history on Cloudways staging
+        env:
+          QSYN_BARS: ${{ inputs.bars }}
+        run: |
+          node ops/verify-public-backfill.mjs --base https://stage.digiti.in/qsyn --bars "$QSYN_BARS" > stage-backfill-report.json 2> stage-backfill-error.json || {
+            cat stage-backfill-error.json
+            cp stage-backfill-error.json stage-backfill-report.json
+            exit 1
+          }
+          cat stage-backfill-report.json
+      - name: Preserve stage acceptance report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qsyn-stage-history-acceptance
+          path: stage-backfill-report.json
+          if-no-files-found: warn
