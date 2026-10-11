@@ -22,9 +22,11 @@ jobs:
           count=0
           def check(path,code=200,location=None,ctype=None,method='GET',cache_control=False):
               global count
-              req=urllib.request.Request(BASE+path,method=method,headers={
+              req=urllib.request.Request(BASE+path,method=method,
+                data=b'{"action":"restart"}' if method=='POST' and path.endswith('/admin/rust/action') else None,
+                headers={
                   'User-Agent':'QSYN-Stage-256-Routing/1','Accept':'text/html,application/json',
-                  'Cache-Control':'no-cache'})
+                  'Cache-Control':'no-cache','Content-Type':'application/json'})
               try:
                   with opener.open(req,timeout=20) as response:
                       status=response.status;headers=response.headers;body=response.read(2500000)
