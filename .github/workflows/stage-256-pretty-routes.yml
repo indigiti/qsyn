@@ -86,7 +86,11 @@ jobs:
           match=re.search(r'src="(/qsyn/assets/terminal[.]js[^"]*)"',html)
           assert match,'missing versioned chart bundle'
           script,_=check(match.group(1),200)
-          assert b'Route management' in script and b'/qsyn/terminal/routes' in script,'old terminal bundle still delivered'
+          markers={key:(key.encode('utf-8') in script) for key in [
+            'Route management','QSYN-TERMINAL-ROUTES/1','terminal_route_not_found','terminalRoutes',
+            '/qsyn/terminal','Route Management','Canonical workspaces']}
+          print('BUNDLE_MARKERS',json.dumps(markers))
+          assert markers['Route management'] and markers['QSYN-TERMINAL-ROUTES/1'], 'route management React bundle missing'
           print('ACCEPTANCE_SUMMARY',json.dumps({'tested':count,'passed':count,'views':len(views),
             'staging_commit_expected':'63f1e5b19268','browsers_tested':False}))
           PY
