@@ -198,7 +198,7 @@ try {
     throw new Error('Light theme did not activate');
   await page.getByRole('button',{name:'Dashboard',exact:true}).first().click();
   await page.getByRole('heading',{name:'Command center'}).waitFor();
-  if(!new URL(page.url()).pathname==='/qsyn/terminal/dashboard')throw new Error('Dashboard deep link failed');
+  if(new URL(page.url()).pathname!=='/qsyn/terminal/dashboard')throw new Error('Dashboard deep link failed');
   if(!(await page.getByText('SIMULATION ONLY').count()))
     throw new Error('Dashboard simulation provenance label missing');
   await page.waitForFunction(()=>document.querySelectorAll('.qd-chart-preview #qsyn-native-chart canvas').length>0);
@@ -234,6 +234,7 @@ try {
     layouts:[{name:'Private unique',panes:[{id:'primary',symbol:'QSYN-FINNIFTY-STRADDLE'}],chartStates:{}}],
   };
   const requests=[];
+  let privateReads=0;
   await privatePage.route('**/qsyn/api/v1/terminal/workspace', async route=>{
     const req=route.request();
     if(req.method()==='POST'){
@@ -242,12 +243,20 @@ try {
         body:JSON.stringify({mode:'simulated',storage:'private_file_development_only',
           revision:1,workspace:body.workspace})});
     } else {
+      privateReads++;
       await route.fulfill({status:200,contentType:'application/json',
         body:JSON.stringify({mode:'simulated',storage:'private_file_development_only',
           revision:0,csrf:'a'.repeat(64),can_write:true,workspace:privateSnapshot})});
     }
   });
   await privatePage.goto(origin+'/qsyn/terminal',{waitUntil:'domcontentloaded'});
+  await privatePage.getByRole('heading',{name:'Trading charts'}).waitFor();
+  if(privateReads!==0)
+    throw new Error('Private development workspace was probed without operator opt-in');
+  await privatePage.getByRole('button',{name:'Refresh private file status'}).click();
+  await privatePage.getByRole('button',{name:'Load private file'}).waitFor();
+  if(privateReads!==1)
+    throw new Error('Private development workspace opt-in did not fetch exactly once');
   await privatePage.getByRole('button',{name:'Load private file'}).click();
   await privatePage.locator('select[aria-label="Saved layouts"] option[value="Private unique"]').waitFor({state:'attached'});
   if(await privatePage.locator('.terminal-watch-row').count()!==1)
