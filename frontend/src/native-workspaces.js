@@ -8,27 +8,25 @@
 import { WorkspaceRepository, createIndexedDbWorkspaceStorage } from 'openalgo-charts/workspace';
 
 const DATABASE = 'qsyn-simulated-openalgo-workspaces-v1';
-const PREFIX = 'qsyn-public-simulated-v1-';
-const ALLOWED = new Set(['home', 'terminal-primary', 'terminal-secondary']);
+const NAMESPACE = 'qsyn-public-simulated-v1-charts';
 let storage = null;
-const repositories = new Map();
+let repository = null;
 
 /**
- * One stable WorkspaceRepository per public widget surface.
+ * One stable WorkspaceRepository shared by public simulated charts.
  * No fallback to transient memory storage: a Save button must mean durable
  * browser-local persistence, not a layout that disappears on refresh.
  * Browsers with disabled IndexedDB will not show the native Layouts menu.
  */
-export function publicNativeWorkspaceStore(scope) {
-  if (!ALLOWED.has(scope) || typeof window === 'undefined') return null;
-  if (repositories.has(scope)) return repositories.get(scope);
+export function publicNativeWorkspaceStore() {
+  if (typeof window === 'undefined') return null;
+  if (repository) return repository;
   let db;
   try { db = window.indexedDB; } catch { return null; }
   if (!db) return null;
   try {
     if (!storage) storage = createIndexedDbWorkspaceStorage(db, DATABASE);
-    const repository = new WorkspaceRepository(storage, PREFIX + scope);
-    repositories.set(scope, repository);
+    repository = new WorkspaceRepository(storage, NAMESPACE);
     return repository;
   } catch {
     return null;
