@@ -25,7 +25,10 @@ use std::{
     sync::Arc,
 };
 fn denied() -> io::Error {
-    io::Error::new(io::ErrorKind::PermissionDenied, "private_index_history_access_denied")
+    io::Error::new(
+        io::ErrorKind::PermissionDenied,
+        "private_index_history_access_denied",
+    )
 }
 #[derive(Clone)]
 pub struct IndexHistoryConfig {
@@ -64,27 +67,40 @@ pub struct IndexHistoryResponse {
     bars: Vec<IndexHistoryBar>,
 }
 fn header_token(headers: &HeaderMap) -> io::Result<&str> {
-    let value = headers.get(header::AUTHORIZATION)
-        .ok_or_else(denied)?.to_str().map_err(|_| denied())?
-        .strip_prefix("Bearer ").ok_or_else(denied)?;
+    let value = headers
+        .get(header::AUTHORIZATION)
+        .ok_or_else(denied)?
+        .to_str()
+        .map_err(|_| denied())?
+        .strip_prefix("Bearer ")
+        .ok_or_else(denied)?;
     if value.is_empty() || value.len() > 2048 || value.contains(char::is_whitespace) {
         return Err(denied());
     }
     Ok(value)
 }
-pub fn validate_index_ticket(token: &str, now: u64,
-    settings: &IndexWorkerSettings, signing_key: &Path) -> io::Result<ChartGrant>
-{
-    if token.len() > 2048 { return Err(denied()); }
+pub fn validate_index_ticket(
+    token: &str,
+    now: u64,
+    settings: &IndexWorkerSettings,
+    signing_key: &Path,
+) -> io::Result<ChartGrant> {
+    if token.len() > 2048 {
+        return Err(denied());
+    }
     let raw = token.split_once('.').ok_or_else(denied)?.0;
     let bytes = URL_SAFE_NO_PAD.decode(raw).map_err(|_| denied())?;
-    if bytes.len() > 1024 { return Err(denied()); }
+    if bytes.len() > 1024 {
+        return Err(denied());
+    }
     let claim: ChartGrant = serde_json::from_slice(&bytes).map_err(|_| denied())?;
     let signer = ChartSigner::new(load_secret(signing_key)?);
     let rights = load_rights(&settings.private_rights_file)?;
     let viewer = ChartViewer {
-        tenant: &claim.tenant, account: &claim.account,
-        owner: &claim.owner, instrument: &claim.instrument,
+        tenant: &claim.tenant,
+        account: &claim.account,
+        owner: &claim.owner,
+        instrument: &claim.instrument,
     };
     signer.verify(token, now, &viewer, &rights)?;
     approved_key(settings, &claim.instrument)?;
@@ -101,20 +117,28 @@ pub fn validate_index_ticket(token: &str, now: u64,
     }
     Ok(claim)
 }
-pub fn read_recent_index_bars(root: &Path, settings: &IndexWorkerSettings,
-    instrument: &str, now: u64, limit: usize) -> io::Result<Vec<IndexHistoryBar>>
-{
-    if limit == 0 || limit > 1200 { return Err(denied()); }
+pub fn read_recent_index_bars(
+    root: &Path,
+    settings: &IndexWorkerSettings,
+    instrument: &str,
+    now: u64,
+    limit: usize,
+) -> io::Result<Vec<IndexHistoryBar>> {
+    if limit == 0 || limit > 1200 {
+        return Err(denied());
+    }
     approved_key(settings, instrument)?;
     root_check(root)?;
-    let today = chrono::DateTime::<Utc>::from_timestamp_millis(
-        i64::try_from(now).map_err(|_| denied())?
-    ).ok_or_else(denied)?
-        .with_timezone(&FixedOffset::east_opt(19_800).ok_or_else(denied)?)
-        .date_naive();
+    let today =
+        chrono::DateTime::<Utc>::from_timestamp_millis(i64::try_from(now).map_err(|_| denied())?)
+            .ok_or_else(denied)?
+            .with_timezone(&FixedOffset::east_opt(19_800).ok_or_else(denied)?)
+            .date_naive();
     let mut out = Vec::new();
     for days_ago in (0..=30).rev() {
-        let date = today.checked_sub_days(Days::new(days_ago)).ok_or_else(denied)?;
+        let date = today
+            .checked_sub_days(Days::new(days_ago))
+            .ok_or_else(denied)?;
         let descriptor = index_descriptor(settings, instrument, date)?;
         let partition = date.format("%Y%m").to_string();
         let mut reader = match CandlePartition::open(root, &partition, &descriptor) {
@@ -125,29 +149,38 @@ pub fn read_recent_index_bars(root: &Path, settings: &IndexWorkerSettings,
         reader.audit()?;
         for row in reader.range(0, now, limit)? {
             out.push(IndexHistoryBar {
-                time: row.open_time_ms / 1000, open: row.open,
-                high: row.high, low: row.low, close: row.close,
+                time: row.open_time_ms / 1000,
+                open: row.open,
+                high: row.high,
+                low: row.low,
+                close: row.close,
             });
         }
-        if out.len() > limit { out.drain(0..out.len() - limit); }
+        if out.len() > limit {
+            out.drain(0..out.len() - limit);
+        }
     }
     Ok(out)
 }
-fn response_for_token(cfg: &IndexHistoryConfig, ticket: &str, now: u64)
-    -> io::Result<IndexHistoryResponse>
-{
+fn response_for_token(
+    cfg: &IndexHistoryConfig,
+    ticket: &str,
+    now: u64,
+) -> io::Result<IndexHistoryResponse> {
     let settings = cfg.verify(now)?;
     let claim = validate_index_ticket(ticket, now, &settings, &cfg.signing_key_path)?;
-    let bars = read_recent_index_bars(
-        &cfg.archive_root, &settings, &claim.instrument, now, 1200,
-    )?;
+    let bars = read_recent_index_bars(&cfg.archive_root, &settings, &claim.instrument, now, 1200)?;
     Ok(IndexHistoryResponse {
         schema: "QSYN-UPSTOX-PRIVATE-INDEX-HISTORY/1",
         source: "licensed_private_index_history",
-        account: claim.account, instrument: claim.instrument,
-        exchange: "UPSTOX_PRIVATE", interval: "1m",
-        trading_enabled: false, public_redistribution_allowed: false,
-        history_complete: false, bars,
+        account: claim.account,
+        instrument: claim.instrument,
+        exchange: "UPSTOX_PRIVATE",
+        interval: "1m",
+        trading_enabled: false,
+        public_redistribution_allowed: false,
+        history_complete: false,
+        bars,
     })
 }
 async fn handler(State(cfg): State<Arc<IndexHistoryConfig>>, headers: HeaderMap) -> Response {
@@ -155,27 +188,38 @@ async fn handler(State(cfg): State<Arc<IndexHistoryConfig>>, headers: HeaderMap)
         response_for_token(&cfg, header_token(&headers)?, epoch_ms()?)
     })();
     match report {
-        Ok(body) => ([
-            (header::CACHE_CONTROL, "private, no-store"),
-            (header::PRAGMA, "no-cache"),
-            (header::X_CONTENT_TYPE_OPTIONS, "nosniff"),
-        ], Json(body)).into_response(),
-        Err(_) => (StatusCode::FORBIDDEN,
+        Ok(body) => (
+            [
+                (header::CACHE_CONTROL, "private, no-store"),
+                (header::PRAGMA, "no-cache"),
+                (header::X_CONTENT_TYPE_OPTIONS, "nosniff"),
+            ],
+            Json(body),
+        )
+            .into_response(),
+        Err(_) => (
+            StatusCode::FORBIDDEN,
             [(header::CACHE_CONTROL, "private, no-store")],
-            Json(serde_json::json!({"error":"private_index_history_unavailable"})))
+            Json(serde_json::json!({"error":"private_index_history_unavailable"})),
+        )
             .into_response(),
     }
 }
 pub fn router(cfg: IndexHistoryConfig) -> Router {
-    Router::new().route("/qsyn/private-chart/index-history", get(handler))
+    Router::new()
+        .route("/qsyn/private-chart/index-history", get(handler))
         .with_state(Arc::new(cfg))
 }
 pub async fn serve(port: u16, cfg: IndexHistoryConfig) -> io::Result<()> {
-    if !(1025..=65535).contains(&port) { return Err(denied()); }
+    if !(1025..=65535).contains(&port) {
+        return Err(denied());
+    }
     cfg.verify(epoch_ms()?)?;
-    let listener = tokio::net::TcpListener::bind(
-        SocketAddrV4::new(Ipv4Addr::LOCALHOST, port)).await?;
-    axum::serve(listener, router(cfg)).await.map_err(|_| denied())
+    let listener =
+        tokio::net::TcpListener::bind(SocketAddrV4::new(Ipv4Addr::LOCALHOST, port)).await?;
+    axum::serve(listener, router(cfg))
+        .await
+        .map_err(|_| denied())
 }
 #[cfg(test)]
 mod tests {
