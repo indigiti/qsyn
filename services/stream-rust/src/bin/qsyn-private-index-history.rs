@@ -1,10 +1,13 @@
 //! Operator-only private index history gateway; loopback ingress only.
-use qsyn_stream::private_index_history_http::{serve, IndexHistoryConfig};
 use qsyn_stream::private_chart_ws::epoch_ms;
+use qsyn_stream::private_index_history_http::{serve, IndexHistoryConfig};
 use serde_json::json;
-use std::{env,io,path::PathBuf};
+use std::{env, io, path::PathBuf};
 fn denied() -> io::Error {
-    io::Error::new(io::ErrorKind::PermissionDenied,"private_index_history_not_enabled")
+    io::Error::new(
+        io::ErrorKind::PermissionDenied,
+        "private_index_history_not_enabled",
+    )
 }
 #[tokio::main]
 async fn main() {
@@ -18,21 +21,29 @@ async fn main() {
             };
             match cfg.verify(epoch_ms().unwrap_or(0)) {
                 Ok(_) if cmd == "check" => {
-                    println!("{}",json!({
-                        "status":"private_index_history_preflight_ok",
-                        "listening":false, "broker_verified_live":false,
-                        "trading_enabled":false
-                    }));
+                    println!(
+                        "{}",
+                        json!({
+                            "status":"private_index_history_preflight_ok",
+                            "listening":false, "broker_verified_live":false,
+                            "trading_enabled":false
+                        })
+                    );
                     Ok(())
                 }
-                Ok(_) if cmd == "serve" && env::var("QSYN_PRIVATE_INDEX_HISTORY_HTTP_ENABLED").as_deref()==Ok("1")
-                    && env::var("QSYN_TRADING_ENABLED").as_deref()!=Ok("1")
-                    && env::var("QSYN_ENABLE_LIVE_TRADING").as_deref()!=Ok("1") =>
+                Ok(_)
+                    if cmd == "serve"
+                        && env::var("QSYN_PRIVATE_INDEX_HISTORY_HTTP_ENABLED").as_deref()
+                            == Ok("1")
+                        && env::var("QSYN_TRADING_ENABLED").as_deref() != Ok("1")
+                        && env::var("QSYN_ENABLE_LIVE_TRADING").as_deref() != Ok("1") =>
+                {
                     match port.parse::<u16>() {
-                        Ok(port)=>serve(port,cfg).await,
-                        Err(_)=>Err(denied()),
-                    },
-                _=>Err(denied()),
+                        Ok(port) => serve(port, cfg).await,
+                        Err(_) => Err(denied()),
+                    }
+                }
+                _ => Err(denied()),
             }
         }
         _ => Err(denied()),
