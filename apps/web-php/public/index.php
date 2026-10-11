@@ -64,7 +64,7 @@ if ($route === '/qsyn/api/v1/india/indexes' || $route === '/qsyn/api/v1/india/ba
     }
     if (!is_file($source)) respond(['error' => 'india_index_catalog_unavailable'], 503);
     require_once $source;
-    [$status, $payload] = \\QSYN\\MarketData\\IndiaIndexCatalog::dispatch(
+    [$status, $payload] = \QSYN\MarketData\IndiaIndexCatalog::dispatch(
         str_ends_with($route, '/indexes') ? 'indexes' : 'bars', $_GET, $_SERVER
     );
     if ($status === 405) header('Allow: GET');
