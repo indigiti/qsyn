@@ -191,7 +191,14 @@ try {
 
   // Stub an authenticated PRIVATE developer response in an isolated tab;
   // loading it must never copy owner-scoped layout data to the shared local key.
-  const privatePage = await page.context().newPage();
+  // A private tab must share only the administrator SESSION COOKIE, never
+  // the previous public browser's localStorage/watchlist state.
+  const signedState = await context.storageState();
+  const privateContext = await browser.newContext({
+    viewport:{width:1280,height:800},
+    storageState:{cookies:signedState.cookies,origins:[]},
+  });
+  const privatePage = await privateContext.newPage();
   privatePage.on('pageerror',e=>browserErrors.push(e.message));
   const privateSnapshot = {
     schema:'QSYN-TERMINAL-BROWSER-WORKSPACES/1',
@@ -228,6 +235,7 @@ try {
   if(await privatePage.locator('select[aria-label="Saved layouts"] option[value="Private unique"]').count()!==0)
     throw new Error('Private owner workspace remained visible after returning to browser');
   await privatePage.close();
+  await privateContext.close();
   // Unified shell: no iframe, redirect or new page for markets, strategies,
   // broker readiness, diagnostics, operations or saved workspaces.
   await page.goto(origin+'/qsyn/terminal?view=diagnostics',{waitUntil:'domcontentloaded'});
