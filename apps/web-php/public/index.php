@@ -221,6 +221,9 @@ if (preg_match('#^/qsyn/api/v1/admin/upstox/(status|setup|begin|verify|callback)
         header('Location: ' . $payload['location'], true, 303);
         exit;
     }
+    $requestId = bin2hex(random_bytes(8));
+    header('X-QSYN-Request-ID: ' . $requestId);
+    $payload['request_id'] = $requestId;
     respond($payload, $status);
 }
 
