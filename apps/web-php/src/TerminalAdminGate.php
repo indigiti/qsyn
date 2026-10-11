@@ -22,7 +22,15 @@ final class TerminalAdminGate
         header('Pragma: no-cache');
         header('X-Frame-Options: DENY');
         header('X-Robots-Tag: noindex, nofollow');
-        if (!RustAdmin::originAllowed($server)) {
+        // Ordinary document navigation may use Sec-Fetch-Site: same-site
+        // after an HTTP 303, even for our own page. A GET/HEAD cannot
+        // mutate privileges. Require secure transport, but reserve the full
+        // origin/fetch-metadata check for POST sign-in and setup.
+        $transport = $server;
+        if (in_array(($server['REQUEST_METHOD'] ?? 'GET'), ['GET', 'HEAD'], true)) {
+            unset($transport['HTTP_ORIGIN'], $transport['HTTP_SEC_FETCH_SITE']);
+        }
+        if (!RustAdmin::originAllowed($transport)) {
             self::error(403, 'Secure same-origin terminal access required.');
         }
         RustAdmin::boot();
