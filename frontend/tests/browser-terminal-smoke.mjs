@@ -146,8 +146,8 @@ try {
   await page.waitForFunction(()=>document.querySelectorAll('.qd-chart-preview #qsyn-native-chart canvas').length>0);
   await page.getByRole('button',{name:'Tools',exact:true}).first().click();
   await page.getByRole('heading',{name:'Tools'}).waitFor();
-  if(!(await page.locator('a[href="/qsyn/studio"]').count()>0))
-    throw new Error('Synthetic Studio link missing');
+  if(!(await page.getByRole('button',{name:/Strategy Studio/}).count()>0))
+    throw new Error('Unified Strategy Studio tool missing');
   // Public terminal stays browser-only without opt-in identity/private storage.
   await page.getByRole('button',{name:'Trading',exact:true}).first().click();
   await page.getByRole('heading',{name:'Trading charts'}).waitFor();
@@ -193,6 +193,38 @@ try {
   if(await privatePage.locator('select[aria-label="Saved layouts"] option[value="Private unique"]').count()!==0)
     throw new Error('Private owner workspace remained visible after returning to browser');
   await privatePage.close();
+  // Unified shell: no iframe, redirect or new page for markets, strategies,
+  // broker readiness, diagnostics, operations or saved workspaces.
+  await page.goto(origin+'/qsyn/terminal?view=diagnostics',{waitUntil:'domcontentloaded'});
+  await page.getByRole('heading',{name:'Diagnostics & feed health'}).waitFor();
+  if(await page.locator('.qt-table tbody tr').count()!==7)
+    throw new Error('Seven crypto worker diagnostics not rendered');
+  if(await page.locator('iframe').count())throw new Error('Unified terminal used iframe');
+  await page.getByRole('button',{name:'Brokers',exact:true}).first().click();
+  await page.getByRole('heading',{name:'Accounts & authorizations'}).waitFor();
+  if(!page.url().includes('view=brokers'))throw new Error('Broker view not routed in React');
+  await page.getByText('No production broker session verified').waitFor({timeout:12000});
+  await page.getByRole('button',{name:'Operations',exact:true}).first().click();
+  await page.getByRole('heading',{name:'Service administration'}).waitFor();
+  if(await page.getByRole('button',{name:'Restart',exact:true}).count() &&
+     await page.getByRole('button',{name:'Restart',exact:true}).isEnabled())
+    throw new Error('Public visitor gained Rust restart privileges');
+  await page.getByRole('button',{name:'Strategies',exact:true}).first().click();
+  await page.getByRole('heading',{name:'Strategy Studio'}).waitFor();
+  await page.getByRole('button',{name:'Render strategy'}).waitFor({state:'visible'});
+  await page.getByRole('button',{name:'Render strategy'}).click();
+  await page.waitForFunction(()=>document.querySelectorAll('.qt-strategy-canvas canvas').length>0,
+    null,{timeout:14000});
+  if(await page.getByText('Fictional reference points').count()===0)
+    throw new Error('Strategy payoff not integrated into React');
+  await page.getByRole('button',{name:'Workspaces',exact:true}).first().click();
+  await page.getByRole('heading',{name:'Chart workspaces'}).waitFor();
+  await page.getByRole('button',{name:'Markets',exact:true}).first().click();
+  await page.getByRole('heading',{name:'Live crypto & India index charts'}).waitFor();
+  await page.waitForFunction(()=>document.querySelectorAll('.terminal-market-embedded canvas').length>0,
+    null,{timeout:14000});
+  if(new URL(page.url()).pathname!=='/qsyn/terminal')
+    throw new Error('Market view escaped unified React terminal');
   const mobile=await browser.newPage({viewport:{width:390,height:844}});
   mobile.on('pageerror',e=>browserErrors.push(e.message));
   await mobile.goto(origin+'/qsyn/',{waitUntil:'domcontentloaded'});

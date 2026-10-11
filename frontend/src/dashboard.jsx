@@ -71,7 +71,7 @@ export function DashboardCockpit({ capabilities, openView, theme, ChartPanel }) 
           <button type="button" className="qd-primary-button" onClick={() => openView('trading')}>
             Open chart terminal <ArrowRight size={16}/>
           </button>
-          <a className="qd-ghost-button" href="/qsyn/studio">Explore strategy lab <ArrowUpRight size={16}/></a>
+          <button type="button" className="qd-ghost-button" onClick={()=>openView('strategy')}>Explore strategy lab <ArrowUpRight size={16}/></button>
         </div>
       </div>
       <div className="qd-hero-graphic" aria-hidden="true">
@@ -115,7 +115,7 @@ export function DashboardCockpit({ capabilities, openView, theme, ChartPanel }) 
             <FlowStep number="02" title="Compose synthetic premium" description="Aligned simulated candles"/>
             <FlowStep number="03" title="Explore payoff and risk" description="Greeks, scenarios, and replay" tone="last"/>
           </div>
-          <a className="qd-wide-link" href="/qsyn/studio">Launch Synthetic Studio <ArrowRight size={16}/></a>
+          <button type="button" className="qd-wide-link" onClick={()=>openView('strategy')}>Launch Strategy Studio <ArrowRight size={16}/></button>
         </section>
 
         <section className="qd-surface qd-security" aria-label="Safety and execution readiness">
@@ -135,7 +135,7 @@ export function DashboardCockpit({ capabilities, openView, theme, ChartPanel }) 
         <div className="qd-section-header"><div><div className="qd-overline">NAVIGATION</div><h2>Go to workspace</h2></div><Compass size={18}/></div>
         <div className="qd-links-grid">
           <LinkTile title="OpenAlgo Charts" detail="Candles, studies, drawings" icon={CandlestickChart} onClick={() => openView('trading')}/>
-          <LinkTile title="Synthetic Studio" detail="CE/PE premium and Greeks" icon={FlaskConical} href="/qsyn/studio"/>
+          <LinkTile title="Strategy Studio" detail="Simulated CE/PE and payoff" icon={FlaskConical} onClick={()=>openView('strategy')}/>
           <LinkTile title="Analytics tools" detail="Explore available features" icon={SlidersHorizontal} onClick={() => openView('tools')}/>
           <LinkTile title="Private market view" detail="Requires authorized access" icon={LockKeyhole} onClick={() => openView('private-live')} subtle/>
         </div>

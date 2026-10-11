@@ -30,14 +30,23 @@ import {
 } from './terminal-workspace.js';
 import './terminal.css';
 import { DashboardCockpit } from './dashboard.jsx';
+import {DiagnosticsWorkspace,BrokersWorkspace,OperationsWorkspace} from './terminal-unified.jsx';
+import {StrategyWorkspace} from './terminal-strategy.jsx';
 
 const BASE = '/qsyn/terminal';
-const VIEWS = new Set(['dashboard', 'trading', 'tools', 'private-live']);
+const VIEWS = new Set(['dashboard','markets','trading','strategy','workspaces','brokers','diagnostics','operations','tools','private-live']);
 const sections = [
   { label: 'Dashboard', view: 'dashboard', icon: LayoutDashboard },
-  { label: 'Trading', view: 'trading', icon: CandlestickChart },
+  { label: 'Markets', view: 'markets', icon: CandlestickChart },
+  { label: 'Trading', view: 'trading', icon: ChartColumnIncreasing },
+  { label: 'Strategies', view: 'strategy', icon: FlaskConical },
+  { label: 'Workspaces', view: 'workspaces', icon: Layers },
+  { label: 'Brokers', view: 'brokers', icon: Wallet },
+  { label: 'Diagnostics', view: 'diagnostics', icon: Activity },
+  { label: 'Operations', view: 'operations', icon: Settings },
   { label: 'Tools', view: 'tools', icon: Wrench },
 ];
+const mobileSections=sections.filter(s=>['markets','trading','strategy','diagnostics'].includes(s.view));
 const unavailable = [
   { label: 'Orderbook', icon: ClipboardList },
   { label: 'Positions', icon: ChartColumnIncreasing },
@@ -134,7 +143,7 @@ const ignoreHomepageWidget = () => {};
  * watchlist. Reuse native grid action buttons beside its Watchlist control,
  * rather than duplicating exchange and layout dropdowns above the chart.
  */
-function HomepageChart({ theme }) {
+function HomepageChart({ theme, embedded = false }) {
   const host=useRef(null);
   const [message,setMessage]=useState('Connecting public exchange candles…');
   const nativeWorkspaces=useMemo(()=>cryptoNativeWorkspaceStore(),[]);
@@ -194,7 +203,7 @@ function HomepageChart({ theme }) {
       grid.destroy();feed.destroy();
     };
   },[theme,nativeWorkspaces,nativeWatchlists]);
-  return <main className="qsyn-homepage" aria-label="QSYN crypto and India index charts">
+  return <main className={embedded ? 'qsyn-homepage terminal-market-embedded' : 'qsyn-homepage'} aria-label="QSYN crypto and India index charts">
     <div className="qsyn-home-chart">
       <div className="qsyn-crypto-grid" ref={host}/>
       <span className="qsyn-screenreader-status" role="status" aria-live="polite">{message}</span>
@@ -561,15 +570,15 @@ function Dashboard({ capabilities, openView }) {
     </div>
   );
 }
-function Tools() {
+function Tools({openView}) {
   return (
     <div className="terminal-page">
       <header className="terminal-title"><div><p className="terminal-eyebrow">ANALYTICS</p>
         <h1>Tools</h1><p>Tools are enabled only when their QSYN backend contracts exist.</p>
       </div></header>
       <div className="terminal-tool-grid">
-        <a className="terminal-tool" href="/qsyn/studio"><Layers /><h2>Synthetic Studio</h2><p>Simulated CE/PE legs, combined premiums, risk and replay.</p><span>Open studio →</span></a>
-        <a className="terminal-tool" href={BASE + '?view=trading'}><CandlestickChart /><h2>Chart terminal</h2><p>Upstream OpenAlgo Charts widget, indicators and drawings.</p><span>Open chart →</span></a>
+        <button type="button" className="terminal-tool" onClick={()=>openView('strategy')}><Layers /><h2>Strategy Studio</h2><p>Simulated CE/PE legs, combined premiums, option chain, expiry payoff and saved research setups.</p><span>Open workspace →</span></button>
+        <button type="button" className="terminal-tool" onClick={()=>openView('markets')}><CandlestickChart /><h2>Public market charts</h2><p>Live crypto charts, licensed India index discovery, native indicators and drawings.</p><span>Open markets →</span></button>
         <div className="terminal-tool unavailable"><LockKeyhole /><h2>Live option chain</h2><p>Requires a licensed, authenticated account-scoped feed.</p><span>Unavailable</span></div>
         <div className="terminal-tool unavailable"><Gauge /><h2>Order management</h2><p>Requires production permissions and execution risk approval.</p><span>Unavailable</span></div>
       </div>
@@ -620,7 +629,7 @@ function App() {
         aria-current={view === s.view ? 'page' : undefined}
         className={'terminal-nav-item' + (view === s.view ? ' active' : '')}
         onClick={() => openView(s.view)}><s.icon size={18}/><span>{s.label}</span></button>)}
-      <a className="terminal-nav-item" href="/qsyn/studio"><Layers size={18}/><span>Synthetic Studio</span></a>
+      <button type="button" className="terminal-nav-item" onClick={()=>openView('private-live')}><LockKeyhole size={18}/><span>Private CE/PE charts</span></button>
       <p className="terminal-nav-label">Broker services</p>
       {unavailable.map(s => <button type="button" key={s.label} disabled
         className="terminal-nav-item locked" title="Requires authenticated QSYN backend">
@@ -641,11 +650,11 @@ function App() {
         <span className="terminal-current"><current.icon size={16}/>{current.label}</span>
       </div>
       <div className="terminal-top-right">
-        <span className="terminal-environment">{view === 'private-live' ? '● PRIVATE · GATED' : '● SIMULATED'}</span>
+        <span className="terminal-environment">{['private-live','brokers','operations'].includes(view)?'● PRIVATE · GATED':['markets','diagnostics'].includes(view)?'● PUBLIC · READ ONLY':'● SIMULATED'}</span>
         <button type="button" className="terminal-icon" aria-label="Toggle theme"
           onClick={toggleTheme}>
           {theme === 'dark' ? <Sun size={18}/> : <Moon size={18}/>}</button>
-        <a className="terminal-icon" href="/qsyn/admin/rust" aria-label="Administrator diagnostics" title="Restricted administrator diagnostics"><Settings size={17}/></a>
+        <button type="button" className="terminal-icon" onClick={()=>openView('operations')} aria-label="Terminal operations" title="Protected Rust administration"><Settings size={17}/></button>
       </div>
     </header>
     <aside className={'terminal-sidebar' + (sidebar ? ' show' : '')}>
@@ -659,20 +668,37 @@ function App() {
       onClick={() => setSidebar(false)} />}
     <main id="terminal-main" className="terminal-main">
       <div className="terminal-alert" role="note"><ShieldAlert size={17}/>
-        <span>{view === 'private-live' ? <><b>Restricted market data.</b> No feed is assumed connected; licensed account login and WSS proxy required. No orders.</> : <><b>Simulation workspace.</b> No live market data, connected broker or executable orders.</>}</span></div>
+        <span>{view==='private-live'||view==='brokers'||view==='operations'
+          ? <><b>Restricted services.</b> Broker entitlements and administrator permissions are independently gated. No orders.</>
+          : view==='markets'||view==='diagnostics'
+          ? <><b>Public crypto feed.</b> Exchange WebSocket workers supply public OHLCV; NSE/BSE data is separately licensed. No orders.</>
+          : <><b>Simulation workspace.</b> No live market data, connected broker or executable orders.</>}</span></div>
       {view === 'dashboard' && <DashboardCockpit capabilities={capabilities} openView={openView} theme={theme} ChartPanel={ChartPanel}/>}
+      {view === 'markets' && <div className="terminal-page qt-unified">
+        <header className="terminal-title"><div><p className="terminal-eyebrow">PUBLIC MARKETS</p><h1>Live crypto & India index charts</h1>
+        <p>Native OpenAlgo market chart. Seven public crypto exchanges; licensed NSE/BSE indexes remain authorization-gated.</p></div></header>
+        <HomepageChart theme={theme} embedded/>
+      </div>}
+      {view === 'strategy' && <StrategyWorkspace theme={theme}/>}
+      {view === 'workspaces' && <div className="terminal-page"><header className="terminal-title">
+        <div><p className="terminal-eyebrow">SAVED LAYOUTS</p><h1>Chart workspaces</h1>
+        <p>Browser-local simulated research layouts and optional separately authorized private files.</p></div></header>
+        <ChartWorkspace theme={theme}/></div>}
+      {view === 'brokers' && <BrokersWorkspace openView={openView}/>}
+      {view === 'diagnostics' && <DiagnosticsWorkspace/>}
+      {view === 'operations' && <OperationsWorkspace/>}
       {view === 'trading' && <div className="terminal-page">
         <header className="terminal-title"><div><p className="terminal-eyebrow">MARKET WORKSPACE</p><h1>Trading charts</h1>
           <p>OpenAlgo Charts 2.6.0 with QSYN's existing simulated PHP data adapter.</p></div></header>
         <ChartWorkspace theme={theme}/></div>}
-      {view === 'tools' && <Tools/>}
+      {view === 'tools' && <Tools openView={openView}/>}
       {view === 'private-live' && <PrivateMarketWorkspace/>}
     </main>
     <nav className="terminal-bottom-nav" aria-label="Mobile quick navigation">
-      {sections.map(s=><button type="button" key={s.view}
+      {mobileSections.map(s=><button type="button" key={s.view}
         className={view === s.view ? 'active':''} aria-current={view === s.view ? 'page':undefined}
         onClick={()=>openView(s.view)}><s.icon size={18}/><span>{s.label}</span></button>)}
-      <a href="/qsyn/studio"><Layers size={18}/><span>Synthetics</span></a>
+      <button type="button" onClick={()=>openView('dashboard')}><LayoutDashboard size={18}/><span>Overview</span></button>
     </nav>
   </div>;
 }

@@ -1,0 +1,62 @@
+/* Consolidated React terminal only. Homepage chart selectors and styles are
+ * intentionally untouched: nothing here targets bare page elements. */
+.terminal-shell .qt-unified{display:flex;flex-direction:column;gap:15px}
+.terminal-shell .qt-unified .terminal-title{margin:0 0 5px}
+.terminal-shell .qt-unified .terminal-title .qt-actions{margin-top:0}
+.terminal-shell .qt-unified p{line-height:1.6}
+.terminal-shell .qt-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:12px 0}
+.terminal-shell .qt-actions .terminal-action{min-height:36px}
+.terminal-shell .qt-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+.terminal-shell .qt-summary>.terminal-surface{display:flex;flex-direction:column;align-items:flex-start;gap:8px;padding:18px}
+.terminal-shell .qt-summary svg{color:var(--q-accent)}
+.terminal-shell .qt-summary span{font-size:11px;color:var(--q-muted)}
+.terminal-shell .qt-summary strong{font-size:18px;font-weight:750;line-height:1.3}
+.terminal-shell .qt-two{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.terminal-shell .qt-two>.terminal-surface{min-width:0}
+.terminal-shell .qt-table-wrap{width:100%;max-height:440px;overflow:auto}
+.terminal-shell .qt-table{width:100%;border-collapse:collapse;text-align:left;font-size:12px}
+.terminal-shell .qt-table th,.terminal-shell .qt-table td{border-bottom:1px solid var(--q-line);padding:11px 9px;white-space:nowrap}
+.terminal-shell .qt-table th{font-size:11px;color:var(--q-muted);font-weight:700}
+.terminal-shell .qt-table td:first-child small{display:block;font-size:10px;color:var(--q-muted);margin-top:3px}
+.terminal-shell .qt-health-badge{display:inline-flex;align-items:center;gap:5px;font-weight:700;font-size:11px}
+.terminal-shell .qt-health-badge.good{color:#2aa880}
+.terminal-shell .qt-health-badge.bad{color:var(--q-sim)}
+.terminal-shell .qt-market-tags{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0}
+.terminal-shell .qt-market-tags span{border:1px solid var(--q-line);background:var(--q-hover);border-radius:6px;padding:7px 9px;font-size:12px}
+.terminal-shell .qt-message{font-size:12px;color:var(--q-muted);margin:8px 0}
+.terminal-shell .qt-form{border-top:1px solid var(--q-line);padding:14px 0;display:flex;flex-direction:column;align-items:flex-start;gap:10px;max-width:460px}
+.terminal-shell .qt-form label,.terminal-shell .qt-field-row label,.terminal-shell .qt-leg label,.terminal-shell .qt-actions label{display:flex;flex-direction:column;gap:4px;font-size:11px;color:var(--q-muted);font-weight:650}
+.terminal-shell .qt-form input,.terminal-shell .qt-field-row select,.terminal-shell .qt-leg select,.terminal-shell .qt-leg input,.terminal-shell .qt-actions input,.terminal-shell .qt-actions select{background:var(--q-bg);color:var(--q-fg);border:1px solid var(--q-line);border-radius:6px;padding:8px 10px;min-width:90px;font-size:12px}
+.terminal-shell .qt-form input{width:min(420px,80vw)}
+.terminal-shell .qt-atm{color:var(--q-muted);font-size:12px;font-weight:650;margin-left:auto}
+.terminal-shell .qt-leg{display:flex;align-items:flex-end;flex-wrap:wrap;gap:10px;border-top:1px solid var(--q-line);padding:12px 0}
+.terminal-shell .qt-leg strong{font-size:12px;padding-bottom:8px;min-width:50px}
+.terminal-shell .qt-leg select{min-width:85px}
+.terminal-shell .qt-leg label:nth-of-type(3) select{min-width:110px}
+.terminal-shell .qt-leg input{width:80px}
+.terminal-shell .qt-leg .terminal-icon{border:1px solid var(--q-line)}
+.terminal-shell .qt-strategy-chart{padding:12px}
+.terminal-shell .qt-strategy-canvas{height:470px;min-height:360px;border:1px solid var(--q-line);border-radius:7px;overflow:hidden}
+.terminal-shell .qt-payoff{width:100%;max-height:270px}
+.terminal-shell .qt-atm-row td{font-weight:750;background:var(--q-hover)}
+.terminal-shell .terminal-market-embedded{min-height:0;height:auto;margin:0}
+.terminal-shell .terminal-market-embedded .qsyn-crypto-grid{height:min(74vh,750px);min-height:470px}
+.terminal-shell .terminal-market-embedded .qsyn-india-entitlement-note{top:74px}
+.terminal-shell .qt-market-description{color:var(--q-muted);font-size:12px}
+.terminal-shell .qt-operations-warning{border:1px solid var(--q-line);padding:10px 13px;border-radius:7px;color:var(--q-muted);font-size:12px;margin-bottom:12px}
+@media(max-width:1000px){
+ .terminal-shell .qt-summary{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media(max-width:700px){
+ .terminal-shell .qt-summary,.terminal-shell .qt-two{grid-template-columns:1fr}
+ .terminal-shell .qt-leg{gap:8px}
+ .terminal-shell .qt-leg strong{width:100%}
+ .terminal-shell .qt-unified .terminal-title{align-items:flex-start;flex-wrap:wrap}
+ .terminal-shell .terminal-market-embedded .qsyn-crypto-grid{height:65vh;min-height:400px}
+ .terminal-shell .qt-strategy-canvas{height:370px}
+}
+
+/* Native terminal tool cards can be buttons, never external page links. */
+.terminal-shell button.terminal-tool{width:100%;text-align:left;color:var(--q-fg);cursor:pointer}
+.terminal-shell button.terminal-tool span{color:var(--q-accent)}
+.terminal-shell .qd-ghost-button,.terminal-shell .qd-wide-link{cursor:pointer}
