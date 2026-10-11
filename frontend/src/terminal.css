@@ -148,27 +148,18 @@ button:focus-visible,a:focus-visible{outline:2px solid var(--q-accent);outline-o
 .terminal-private-chart-grid .terminal-chart-host{height:500px;min-height:380px}
 @media(max-width:980px){.terminal-private-chart-grid{grid-template-columns:1fr}}
 
-/* Minimal chart-only homepage: native OpenAlgo toolbar begins at page top.
-   Do not change /qsyn/terminal, dashboard, or Studio layout. */
+/* Homepage chart occupies the entire viewport. The native OpenAlgo
+   chart toolbar includes its own symbols and controls; no QSYN footer or
+   card metadata is displayed. Other routes keep their original disclosures. */
 .qsyn-homepage{min-height:100dvh;width:100%;background:var(--q-bg);color:var(--q-fg)}
 .qsyn-home-chart{width:100%;min-width:0}
 .qsyn-home-chart .terminal-chart-card{background:transparent;border:0;padding:0;border-radius:0}
 .qsyn-home-chart .terminal-card-head{display:none}
 .qsyn-home-chart .terminal-chart-host{
-  width:100%;height:calc(100dvh - 100px);min-height:390px;
+  width:100%;height:100dvh;min-height:350px;
   max-height:none;border:0;border-radius:0
 }
-.qsyn-home-chart .terminal-footnote{font-size:10px;margin:5px 10px 0;color:var(--q-muted)}
-.qsyn-home-disclaimer{
-  display:flex;align-items:center;flex-wrap:wrap;gap:7px 14px;
-  margin:7px 10px 0;padding:4px 0 12px;
-  color:var(--q-muted);font-size:10px;line-height:1.55
-}
-.qsyn-home-disclaimer>svg{flex:none;color:var(--q-sim)}
-.qsyn-home-disclaimer a{color:var(--q-accent);text-decoration:none;font-weight:750;white-space:nowrap}
-.qsyn-home-disclaimer a:hover{text-decoration:underline}
+.qsyn-home-chart .terminal-footnote{display:none}
 @media(max-width:700px){
- .qsyn-home-chart .terminal-chart-host{height:calc(100dvh - 155px);min-height:350px}
- .qsyn-home-chart .terminal-footnote{margin:6px 8px 0}
- .qsyn-home-disclaimer{margin:8px 8px 0;padding-bottom:18px}
+ .qsyn-home-chart .terminal-chart-host{height:100dvh;min-height:350px}
 }
