@@ -37,6 +37,15 @@ def page(opener, base, route, method="GET", form=None, origin=None):
         return err.code, err.read().decode("utf-8"), err.headers
 
 def run():
+    # PHP-only CI runs before the frontend JS/CSS build. Temporary inert
+    # files satisfy the shell's existence check without enabling any feed.
+    assets = Path(__file__).resolve().parents[1] / "public" / "assets"
+    installed = []
+    for name in ("terminal.js", "terminal.css"):
+        target = assets / name
+        if not target.exists():
+            target.write_text("/* CI placeholder: no executable terminal data */", encoding="utf-8")
+            installed.append(target)
     with tempfile.TemporaryDirectory(prefix="qsyn-terminal-gate-") as tmp:
         parent = Path(tmp)
         private = parent / "private"
@@ -142,6 +151,8 @@ def run():
         finally:
             proc.terminate()
             proc.communicate(timeout=5)
+    for target in installed:
+        target.unlink(missing_ok=True)
 
 if __name__=="__main__":
     run()
