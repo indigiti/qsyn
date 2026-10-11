@@ -35,7 +35,9 @@ export async function fetchPrivateChartGrant(fetcher, account, instrument, signa
     method: 'GET', credentials: 'same-origin', cache: 'no-store', signal,
   });
   if (!state.ok) {
-    const error = new Error('Private chart session not authorized.');
+    const error = new Error(authMode === 'operator_admin'
+      ? 'Operator chart session not authorized.'
+      : 'Private test identity is not configured.');
     error.status = state.status;
     throw error;
   }
