@@ -111,6 +111,10 @@ final class TerminalAdminGate
         $setupAvailable = !$configured && RustAdminBootstrap::status()['available'];
         $csrf = $configured ? RustAdmin::terminalLoginCsrf()
             : ($setupAvailable ? RustAdminBootstrap::csrf() : '');
+        // The site's global no-referrer policy causes Chromium's native
+        // HTML form POST to send Origin: null. Keep cross-site referrers
+        // suppressed while preserving the same-origin form Origin header.
+        header('Referrer-Policy: same-origin');
         header('Content-Type: text/html; charset=utf-8');
         header('Content-Security-Policy: default-src ' . "'none'"
             . '; style-src ' . "'self'"
