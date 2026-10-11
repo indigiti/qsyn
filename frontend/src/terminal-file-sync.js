@@ -24,8 +24,19 @@ export async function checkPrivateWorkspace(fetcher = fetch, signal) {
     return { status: 'offline' };
   }
   if (response.status === 401) return { status: 'login_required' };
-  if (response.status === 403 || response.status === 503 || response.status === 404) {
+  if (response.status === 403 || response.status === 404) {
     return { status: 'disabled' };
+  }
+  if (response.status === 503) {
+    // Only an explicit application feature gate is "disabled"; module missing,
+    // proxy/WAF outages and unexpected 503 payloads must remain observable.
+    try {
+      const body = await response.json();
+      if (body?.error === 'private_terminal_workspace_disabled') {
+        return { status: 'disabled' };
+      }
+    } catch { /* Proxy-generated 503 responses may be non-JSON. */ }
+    return { status: 'offline' };
   }
   if (!response.ok) return { status: 'offline' };
   try {
