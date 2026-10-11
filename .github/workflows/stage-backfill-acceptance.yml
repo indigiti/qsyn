@@ -37,10 +37,18 @@ jobs:
             exit 1
           }
           cat stage-backfill-report.json
+      - name: Install test-only Playwright Chromium
+        run: |
+          npm install --no-save --no-audit --no-fund playwright@1.55.0
+          npx playwright install --with-deps chromium
+      - name: Verify deployed React chart actually auto-loads 1600 candles
+        run: node ops/verify-stage-chart.mjs
       - name: Preserve stage acceptance report
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: qsyn-stage-history-acceptance
-          path: stage-backfill-report.json
+          path: |
+            stage-backfill-report.json
+            stage-chart-report.json
           if-no-files-found: warn
