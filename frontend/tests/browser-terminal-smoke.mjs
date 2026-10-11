@@ -64,6 +64,8 @@ try {
   await page.getByRole('heading',{name:'Administrator sign-in'}).waitFor();
   await page.getByLabel('QSYN administrator password').fill(adminPassword);
   await page.getByRole('button',{name:'Unlock terminal'}).click();
+  if(new URL(page.url()).pathname==='/qsyn/terminal/login')
+    throw new Error('Administrator unlock returned login instead of terminal: '+(await page.locator('body').innerText()).slice(0,420));
   await page.getByRole('heading',{name:'Trading charts'}).waitFor();
   for (const [old,view] of [
     ['/qsyn/legacy-chart','diagnostics'],
