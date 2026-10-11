@@ -97,7 +97,7 @@ final class OpenAlgoAdminSetup
             || !is_string($data['application_api_key'])
             || strlen($data['application_api_key']) < 16
             || strlen($data['application_api_key']) > 256
-            || preg_match('/^[\x21-\x7E]+$/D', $data['application_api_key']) !== 1
+            || preg_match('/^[A-Za-z0-9_-]+$/D', $data['application_api_key']) !== 1
             || $data['confirmed'] !== true) return false;
         return true;
     }
