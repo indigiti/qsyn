@@ -142,6 +142,12 @@ impl IndexWorkerSettings {
         }
         Ok(session)
     }
+    /// Operator history reads remain subject to the same current rights,
+    /// private OAuth session and BOD attestation as the live index worker.
+    pub fn history_token(&self, now: u64) -> io::Result<String> {
+        self.validate(now)?;
+        Ok(self.session()?.access_token)
+    }
     pub fn validate(&self, now: u64) -> io::Result<()> {
         if self.schema != "QSYN-UPSTOX-INDEX-PRIVATE-WORKER/1"
             || self.tenant.is_empty()
