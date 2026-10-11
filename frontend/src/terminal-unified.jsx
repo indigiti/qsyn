@@ -42,6 +42,8 @@ export function DiagnosticsWorkspace(){
   const [busy,setBusy]=useState(false);
   const [sample,setSample]=useState(null);
   const [last,setLast]=useState(0);
+  const [adminAudit,setAdminAudit]=useState(null),[auditError,setAuditError]=useState('');
+  const [auditLoading,setAuditLoading]=useState(false);
   const probe=useCallback(async(signal)=>{
     setBusy(true);
     const values=await Promise.all(VENUES.map(async ex=>{
@@ -76,6 +78,34 @@ export function DiagnosticsWorkspace(){
       trading_enabled:false};
     void navigator.clipboard?.writeText(JSON.stringify(safe,null,2));
   };
+  async function runAdminAudit(){
+    setAuditLoading(true);setAuditError('');
+    const started=Date.now();const ctl=new AbortController();
+    const timeout=setTimeout(()=>ctl.abort(),12000);
+    try{
+      const res=await fetch('/qsyn/api/v1/admin/diagnostics/report',{
+        credentials:'same-origin',cache:'no-store',signal:ctl.signal,
+        headers:{Accept:'application/json'}});
+      const data=await res.json();
+      if(!res.ok){
+        setAdminAudit(null);
+        setAuditError(res.status===401?'ADMIN_REAUTH_REQUIRED':
+          res.status===503?'DIAGNOSTICS_SERVICE_UNAVAILABLE':'DIAGNOSTICS_HTTP_'+res.status);
+        return;
+      }
+      if(data.schema!=='QSYN-ADMIN-DIAGNOSTICS/1')throw Error('INVALID_REPORT_SCHEMA');
+      setAdminAudit({...data,browser:{
+        schema:'QSYN-CLIENT-DIAGNOSTIC/1',
+        checked_at_utc:new Date().toISOString(),
+        request_duration_ms:Date.now()-started,
+        client_http_status:res.status,
+        source:'admin_terminal',
+      }});
+    }catch{
+      setAdminAudit(null);
+      setAuditError(ctl.signal.aborted?'DIAGNOSTICS_REQUEST_TIMEOUT':'DIAGNOSTICS_NETWORK_ERROR');
+    }finally{clearTimeout(timeout);setAuditLoading(false);}
+  }
   async function sampleDemo() {
     setSample({message:'Checking demo stream…'});
     try {
@@ -95,6 +125,35 @@ export function DiagnosticsWorkspace(){
           <ClipboardCopy size={16}/> Copy report</button>
       </div>
     </PanelTitle>
+    <section className="terminal-surface" aria-label="Administrator diagnostics center">
+      <div className="terminal-card-head"><h2>Administrator diagnostics center</h2><ShieldCheck size={18}/></div>
+      <p>Read-only audit of session state, private Upstox configuration and Rust index
+        worker packaging. This does not use tokens to contact Upstox, start a feed or place orders.</p>
+      <div className="qt-actions">
+        <button type="button" className="terminal-action" disabled={auditLoading}
+          onClick={()=>void runAdminAudit()}><RefreshCw size={15}/>
+          {auditLoading?' Checking…':'Run secure audit'}</button>
+        <button type="button" className="terminal-action terminal-secondary-action"
+          disabled={!adminAudit}
+          onClick={()=>void navigator.clipboard?.writeText(JSON.stringify(adminAudit,null,2))}>
+          <ClipboardCopy size={15}/> Copy diagnostic JSON</button>
+      </div>
+      {auditError&&<p role="alert">Diagnostic check: {auditError}.
+        The admin login or server connectivity may need attention.</p>}
+      {adminAudit&&<div>
+        <p role="status">Checked {adminAudit.checked_at_utc} · Request ID {adminAudit.request_id}</p>
+        <div className="qt-table-wrap"><table className="qt-table">
+          <thead><tr><th>Component</th><th>Reported state</th><th>Code</th></tr></thead>
+          <tbody>{(adminAudit.components||[]).map(c=><tr key={c.component}>
+            <td>{c.component}</td><td>{c.status}</td><td><code>{c.code}</code></td>
+          </tr>)}</tbody>
+        </table></div>
+        <pre style={{whiteSpace:'pre-wrap',overflowWrap:'anywhere',fontSize:12}}>
+          {JSON.stringify(adminAudit,null,2)}</pre>
+        <p className="terminal-footnote">No broker credentials, access tokens, administrator
+          password, session cookie values or private paths are included.</p>
+      </div>}
+    </section>
     <div className="qt-summary">
       <section className="terminal-surface"><Activity size={19}/><span>Public crypto venues</span>
         <strong>{VENUES.filter(x=>rows[x]?.feed?.state==='websocket'&&rows[x]?.feed?.fresh===true).length} / 7 fresh</strong></section>
