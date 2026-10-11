@@ -43,8 +43,19 @@ try {
   const page=await browser.newPage({viewport:{width:1440,height:900}});
   page.on('pageerror',e=>browserErrors.push(e.message));
   page.on('request',r=>browserRequests.push(r.url()));
-  const response=await page.goto(origin+'/qsyn/terminal',{waitUntil:'domcontentloaded',timeout:25000});
-  if(response.status()!==200)throw new Error('Terminal route returned '+response.status());
+  // New public homepage directly renders the existing trading workspace: no redirect.
+  const response=await page.goto(origin+'/qsyn/',{waitUntil:'domcontentloaded',timeout:25000});
+  if(response.status()!==200)throw new Error('QSYN homepage returned '+response.status());
+  if(new URL(page.url()).pathname!=='/qsyn/')
+    throw new Error('Homepage redirected away from /qsyn/');
+  const alternate=await page.request.get(origin+'/qsyn/terminal');
+  if(alternate.status()!==200 || !(await alternate.text()).includes('qsyn-root'))
+    throw new Error('Canonical terminal route became unavailable');
+  const rollback=await page.request.get(origin+'/qsyn/legacy-chart');
+  if(rollback.status()!==200 || !(await rollback.text()).includes('chart-reset'))
+    throw new Error('Legacy chart diagnostics rollback route unavailable');
+  const blockedPost=await page.request.post(origin+'/qsyn/');
+  if(blockedPost.status()!==405)throw new Error('Chart homepage accepted POST');
   if(!String(response.headers()['content-security-policy']).includes("connect-src 'self'"))
     throw new Error('Terminal lost same-origin API CSP');
   if(!String(response.headers()['x-robots-tag']).includes('noindex'))
@@ -164,7 +175,7 @@ try {
   if(browserRequests.some(url=>/(\/api\/v1\/(placeorder|cancelorder|modifyorder)|\/auth\/login|\/socket\.io)/i.test(url)))
     throw new Error('Terminal unexpectedly requested broker, auth or order execution endpoints');
   if(browserErrors.length)throw new Error('Browser exceptions: '+JSON.stringify(browserErrors));
-  console.log('PASS: QSYN file-only React terminal, chart paint, deep links, mobile, theme, CSP, no broker/order calls');
+  console.log('PASS: /qsyn/ chart-first homepage, legacy rollback, React terminal, charts, mobile, CSP, no order calls');
 }finally{
   if(browser)await browser.close();
   if(server)server.kill('SIGTERM');
