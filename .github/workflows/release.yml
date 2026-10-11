@@ -81,6 +81,8 @@ jobs:
           php apps/web-php/tests/IndiaIndexCatalogTest.php
           php -l apps/web-php/src/UpstoxIndexV3.php
           php apps/web-php/tests/UpstoxIndexV3Test.php
+          php -l apps/web-php/src/NativeUpstoxWebApi.php
+          python3 apps/web-php/tests/NativeUpstoxWebHttpSmoke.py
           php -l apps/web-php/src/SimulatedOptionsStudio.php
           php -l apps/web-php/public/studio.php
           php apps/web-php/tests/SimulatedOptionsStudioTest.php
@@ -208,6 +210,7 @@ jobs:
           cp apps/web-php/src/TerminalWorkspaceApi.php staging/private/app/src/TerminalWorkspaceApi.php
           cp apps/web-php/src/PrivateChartGrantApi.php staging/private/app/src/PrivateChartGrantApi.php
           cp apps/web-php/src/UpstoxOperatorOAuth.php staging/private/app/src/UpstoxOperatorOAuth.php
+          cp apps/web-php/src/NativeUpstoxWebApi.php staging/private/app/src/NativeUpstoxWebApi.php
           cp apps/web-php/src/FileMockAccountSelection.php staging/private/app/src/FileMockAccountSelection.php
           cp apps/web-php/src/AccountApi.php staging/private/app/src/AccountApi.php
           cp apps/web-php/src/SimulatedAccountBars.php staging/private/app/src/SimulatedAccountBars.php
@@ -314,6 +317,8 @@ jobs:
           test -s staging/private/app/src/TerminalWorkspaceApi.php
           test -s staging/private/app/src/PrivateChartGrantApi.php
           test -s staging/private/app/src/UpstoxOperatorOAuth.php
+          test -s staging/private/app/src/NativeUpstoxWebApi.php
+          php -l staging/private/app/src/NativeUpstoxWebApi.php
           test -s staging/private/app/src/FileMockAccountSelection.php
           test -s staging/private/app/src/AccountApi.php
           test -s staging/private/app/src/SimulatedAccountBars.php
@@ -420,6 +425,8 @@ jobs:
           test -s verified-release/private/app/src/TerminalWorkspaceApi.php
           test -s verified-release/private/app/src/PrivateChartGrantApi.php
           test -s verified-release/private/app/src/UpstoxOperatorOAuth.php
+          test -s verified-release/private/app/src/NativeUpstoxWebApi.php
+          php -l verified-release/private/app/src/NativeUpstoxWebApi.php
           test -s verified-release/private/app/src/FileMockAccountSelection.php
           test -s verified-release/private/app/src/AccountApi.php
           test -s verified-release/private/app/src/SimulatedAccountBars.php

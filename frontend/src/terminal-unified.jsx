@@ -150,6 +150,93 @@ async function openAlgoAdminPost(operation, account_id, csrf){
   if(!res.ok)throw Error(json.error||'operator_action_denied');
   return json;
 }
+const NATIVE_UPSTOX_API='/qsyn/api/v1/admin/upstox/';
+function NativeUpstoxPanel(){
+  const [status,setStatus]=useState(null),[busy,setBusy]=useState(false);
+  const [notice,setNotice]=useState('Checking native Upstox authorization readiness…');
+  const [form,setForm]=useState({client_id:'',client_secret:'',expected_user_id:'',confirmed:false});
+  const load=useCallback(async()=>{
+    try{
+      const data=await jsonGet(NATIVE_UPSTOX_API+'status');
+      if(data.schema!=='QSYN-NATIVE-UPSTOX-WEB/1')throw Error('unexpected_schema');
+      setStatus(data);
+      setNotice(data.token_stored
+        ?'A provider-identity-checked Upstox token is stored privately. Current validity, index display rights and live feed remain unverified.'
+        :data.configured?'Upstox app configured. Authorize using your Upstox login.':'Set up your Upstox Developer App before authorizing.');
+    }catch{setStatus(null);setNotice('Native Upstox setup is unavailable; check the QSYN administrator session and private runtime.');}
+  },[]);
+  useEffect(()=>{void load();},[load]);
+  async function action(operation,payload){
+    if(!status?.csrf||busy)return;
+    setBusy(true);
+    try{
+      const r=await fetch(NATIVE_UPSTOX_API+operation,{
+        method:'POST',credentials:'same-origin',cache:'no-store',
+        headers:{'Content-Type':'application/json','Accept':'application/json',
+          'X-CSRF-Token':status.csrf},
+        body:JSON.stringify(payload)});
+      const data=await r.json();
+      if(!r.ok)throw Error(data.error||'upstox_action_denied');
+      if(operation==='setup'){
+        setForm({client_id:'',client_secret:'',expected_user_id:'',confirmed:false});
+        await load();
+        setNotice('Upstox application saved privately. Register the exact callback URL in Upstox, then select Connect Upstox.');
+      }else if(operation==='begin'){
+        const url=new URL(data.authorization_url);
+        if(url.protocol!=='https:'||url.hostname!=='api.upstox.com'
+          ||url.pathname!=='/v2/login/authorization/dialog'
+          ||url.searchParams.get('response_type')!=='code'
+          ||!url.searchParams.get('state'))throw Error('invalid_upstox_authorize_url');
+        window.location.assign(url.href);
+      }
+    }catch(e){setNotice('Upstox authorization unavailable: '+String(e.message).slice(0,100));}
+    finally{setBusy(false);}
+  }
+  return <div className="qt-openalgo-setup">
+    <p role="status" className="qt-message">{notice}</p>
+    <div className="qt-summary">
+      <div><strong>Upstox OAuth token</strong><p>{status?.token_stored?'Stored privately · session validity not checked':status?.configured?'Authorization required':'Not configured'}</p></div>
+      <div><strong>Index feed / license</strong><p>Not activated · no live prices</p></div>
+      <div><strong>QSYN order execution</strong><p>Disabled</p></div>
+    </div>
+    {status&&!status.configured&&<form className="qt-form qt-openalgo-setup"
+      onSubmit={e=>{e.preventDefault();void action('setup',form);}} autoComplete="off">
+      <h3>Configure Upstox developer application</h3>
+      <p>Use the API key and API secret issued by your own Upstox Developer App.
+        These are NOT OpenAlgo credentials. QSYN stores them only in its private server directory.</p>
+      <label>Upstox application API key
+        <input required minLength={8} maxLength={128} autoComplete="off"
+          value={form.client_id} onChange={e=>setForm(p=>({...p,client_id:e.target.value}))}/></label>
+      <label>Upstox application API secret
+        <input required type="password" minLength={8} maxLength={512} autoComplete="off"
+          value={form.client_secret} onChange={e=>setForm(p=>({...p,client_secret:e.target.value}))}/></label>
+      <label>Expected Upstox User ID (account verification)
+        <input required minLength={2} maxLength={128} autoComplete="off"
+          value={form.expected_user_id} onChange={e=>setForm(p=>({...p,expected_user_id:e.target.value}))}/></label>
+      <p className="terminal-footnote">Set your Upstox app's exact redirect URI to:
+        <code>{status.oauth_callback_uri}</code>
+      </p>
+      <label className="qt-setup-confirm">
+        <input type="checkbox" checked={form.confirmed}
+          onChange={e=>setForm(p=>({...p,confirmed:e.target.checked}))}/>
+        I control this Upstox developer application and have registered the callback URL.
+        The account will be used for authorized market data only; no trading is activated.
+      </label>
+      <button className="terminal-action" type="submit" disabled={busy||!form.confirmed}>
+        Save Upstox application</button>
+    </form>}
+    {status?.configured&&<div className="qt-actions">
+      <button type="button" className="terminal-action" disabled={busy}
+        onClick={()=>void action('begin',{})}>Connect Upstox (OAuth)</button>
+      <button type="button" className="terminal-action terminal-secondary-action" disabled={busy}
+        onClick={()=>void load()}><RefreshCw size={16}/> Refresh OAuth status</button>
+    </div>}
+    <p className="terminal-footnote">Provider login and consent happen on Upstox.
+      QSYN checks the returned user ID and stores the access token in a 0600 private file.
+      A stored token is not proof of a currently active WebSocket, an exchange data license,
+      or permission to redistribute NSE/BSE prices. Trading stays disabled.</p>
+  </div>;
+}
 export function BrokersWorkspace({openView}){
   const [catalog,setCatalog]=useState(null),[admin,setAdmin]=useState(null);
   const [inventory,setInventory]=useState(null),[selected,setSelected]=useState('upstox');
@@ -169,7 +256,7 @@ export function BrokersWorkspace({openView}){
     setAdmin(auth);
     setIndexCatalog(indexes);
     setLoginTarget(null);setStatuses({});
-    if(auth?.authenticated){
+    if(auth?.authenticated&&selected!=='upstox'){
       try{
         const data=await jsonGet(OPENALGO_ADMIN+'accounts',signal);
         if(signal?.aborted)return;
@@ -183,7 +270,7 @@ export function BrokersWorkspace({openView}){
         setMessage('Private OpenAlgo not provisioned or unavailable. No broker session verified.');
       }
     }else{setInventory(null);setMessage('No production broker session verified');}
-  },[]);
+  },[selected]);
   useEffect(()=>{
     const ctl=new AbortController();void refresh(ctl.signal);
     return()=>ctl.abort();
@@ -252,7 +339,7 @@ export function BrokersWorkspace({openView}){
       description="Native Upstox V3 index market data uses the QSYN Rust WebSocket engine. Other broker plugins remain separately gated."/>
     <div className="qt-summary">
       <section className="terminal-surface"><Wallet size={19}/><span>Configured accounts</span>
-        <strong>{selected==='upstox'?'OAuth pending':(hasAdmin?(inventory?.accounts?.length??'Not provisioned'):'Restricted')}</strong></section>
+        <strong>{selected==='upstox'?'Native Upstox':(hasAdmin?(inventory?.accounts?.length??'Not provisioned'):'Restricted')}</strong></section>
       <section className="terminal-surface"><LockKeyhole size={19}/><span>Exchange display rights</span>
         <strong>Not verified</strong></section>
       <section className="terminal-surface"><ShieldCheck size={19}/><span>QSYN order execution</span>
@@ -276,19 +363,12 @@ export function BrokersWorkspace({openView}){
     </section>
     {selected==='upstox'&&<section className="terminal-surface">
       <div className="terminal-card-head"><h2>Native Upstox → QSYN Rust V3</h2><ShieldCheck size={18}/></div>
-      <p>Upstox provides the authenticated market-data feed; the Rust V3 worker
-        decodes binary Protobuf, validates instrument updates and fans out
-        authorized index data to the React charts. OpenAlgo Charts provides the
-        chart UI only. No OpenAlgo application API key or Python service is required.</p>
-      <div className="qt-summary">
-        <div><strong>Upstox OAuth</strong><p>Not verified · native web consent pending</p></div>
-        <div><strong>Rust feed worker</strong><p>Not activated for live index instruments</p></div>
-        <div><strong>NSE/BSE chart rights</strong><p>Not verified · live data blocked</p></div>
-      </div>
-      <p className="terminal-footnote">The existing Rust V3 receiver has private CE/PE code, but
-        index instrument subscriptions, licensed historical candles, browser chart
-        grants and supervised Cloudways deployment still require acceptance.
-        No orders and no simulated prices substituted for Upstox.</p>
+      <p>Connect directly to Upstox. Its Market Data Feed V3 is decoded by the Rust streaming
+        engine and distributed to authorized React index charts. No OpenAlgo application key,
+        OpenAlgo Python runtime, or trading connection is required.</p>
+      <NativeUpstoxPanel/>
+      <p className="terminal-footnote">Native Rust index subscriptions and licensed candle backfill
+        are not activated until current instrument keys and exchange data entitlement are verified.</p>
       <button type="button" className="terminal-action terminal-secondary-action"
         onClick={()=>openView('private-live')}>View Rust chart readiness</button>
     </section>}

@@ -173,6 +173,36 @@ if ($route === '/qsyn/api/v1/studio/market' || $route === '/qsyn/api/v1/studio/b
     }
 }
 
+// Native Upstox operator OAuth. No OpenAlgo Python or API key is involved.
+// The callback accepts a one-use 256-bit state instead of an admin cookie:
+// external Upstox redirects will not carry our SameSite=Strict admin session.
+if (preg_match('#^/qsyn/api/v1/admin/upstox/(status|setup|begin|callback)$#', $route, $nativeUpstox)) {
+    $src = dirname(__DIR__) . '/src';
+    if (!is_file($src . '/NativeUpstoxWebApi.php')) {
+        $src = dirname(__DIR__, 2) . '/private_html/qsyn/app/src';
+    }
+    foreach (['RustAdmin','UpstoxOperatorOAuth','NativeUpstoxWebApi'] as $unit) {
+        if (!is_file($src . '/' . $unit . '.php')) {
+            respond(['error' => 'upstox_web_unavailable'], 503);
+        }
+        require_once $src . '/' . $unit . '.php';
+    }
+    header('Cache-Control: private, no-store');
+    header('Pragma: no-cache');
+    header('Referrer-Policy: no-referrer');
+    header('X-Robots-Tag: noindex, nofollow');
+    [$status, $payload] = \QSYN\Broker\NativeUpstoxWebApi::dispatch(
+        $nativeUpstox[1], $_SERVER, $_GET
+    );
+    if ($status === 405) header('Allow: ' . ($nativeUpstox[1] === 'setup'
+        || $nativeUpstox[1] === 'begin' ? 'POST' : 'GET'));
+    if ($status === 303) {
+        header('Location: ' . $payload['location'], true, 303);
+        exit;
+    }
+    respond($payload, $status);
+}
+
 // Public broker names; private account selection, login and status are gated by
 // the existing development identity and separate explicit runtime opt-in.
 if (preg_match('#^/qsyn/api/v1/brokers/openalgo/(catalog|accounts|status|connect)$#', $route, $brokerMatch)) {
