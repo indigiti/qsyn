@@ -20,14 +20,22 @@ export function validIndexBarTime(time,interval) {
  * No quote-to-OHLC approximation and no fallback to fictional candles.
  */
 export class QsynMarketsFeed extends QsynCryptoFeed {
-  constructor(onState=()=>{}) {
+  constructor(onState=()=>{}, {indexAccessApproved=false}={}) {
     super(onState);
     this.unavailableIndexSymbols=new Set();
+    // Public chart pages must never probe the explicitly locked index bars
+    // endpoint. A future PRIVATE grant may opt in only after server-side
+    // account-scoped display rights; this flag alone never grants access.
+    this.indexAccessApproved=indexAccessApproved===true;
   }
   async getBars(req) {
     const instrument=findIndiaIndex(req.exchange,req.symbol);
     if(!instrument)return super.getBars(req);
     if(this.closed||!INTERVALS.has(req.interval))return [];
+    if(!this.indexAccessApproved){
+      this.onState('India index · licensed Upstox chart authorization required');
+      return [];
+    }
     const key=instrument.id+':'+req.interval;
     if(this.unavailableIndexSymbols.has(key))return [];
     const ac=new AbortController();
@@ -69,9 +77,9 @@ export class QsynMarketsFeed extends QsynCryptoFeed {
       if(!this.closed)this.onState(instrument.name+' · Upstox authorized chart · read-only');
       return data.bars;
     }catch(err){
-      if(!ac.signal.aborted&&!this.closed){
-        this.onState('India index unavailable · no simulated prices');
-      }
+      if(ac.signal.aborted || req.signal?.aborted || this.closed ||
+          err?.name==='AbortError')return [];
+      this.onState('India index unavailable · no simulated prices');
       throw err;
     }finally{
       req.signal?.removeEventListener('abort',onAbort);

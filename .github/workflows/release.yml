@@ -142,6 +142,7 @@ jobs:
           npm install --no-audit --no-fund
           npm run build
           node tests/india-index-contract.mjs
+          node tests/chart-cancellation-contract.mjs
           node tests/terminal-routes-contract.mjs
       - name: Stage DigiOps-compatible release
         shell: bash

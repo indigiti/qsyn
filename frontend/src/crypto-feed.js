@@ -36,7 +36,11 @@ export class QsynCryptoFeed {
       if(!this.closed) this.onState(listing.exchange+' '+listing.market.toUpperCase()+' · public OHLCV · REST refreshed');
       return bars;
     } catch(error) {
-      if(!ac.signal.aborted && !this.closed) this.onState('Exchange unavailable · no simulated fallback');
+      // OpenAlgo cancels old loads when changing symbols, intervals, grids
+      // or tearing down the widget. Cancellation is not a data-feed failure.
+      if(ac.signal.aborted || signal?.aborted || this.closed ||
+          error?.name==='AbortError')return [];
+      this.onState('Exchange unavailable · no simulated fallback');
       throw error;
     } finally {signal?.removeEventListener('abort',onAbort);this.controllers.delete(ac);}
   }
