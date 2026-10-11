@@ -83,16 +83,25 @@ if ($route === '/qsyn/api/v1/crypto/bars' || $route === '/qsyn/api/v1/crypto/hea
     $symbol = $_GET['symbol'] ?? '';
     $interval = $_GET['interval'] ?? '';
     $limit = $_GET['limit'] ?? '250';
+    $before = $_GET['before'] ?? null; // strictly exclusive UTC-second cursor
     if (!is_string($exchange) || !is_string($market) || !is_string($symbol)
         || !is_string($interval) || !is_string($limit)
         || !preg_match('/\A[A-Z]{2,16}\z/', $exchange)
         || !in_array($market, ['spot', 'perp'], true)
         || !preg_match('/\A[A-Z0-9-]{2,32}\z/', $symbol)
         || !in_array($interval, ['1m','5m','15m','1h','1d'], true)
-        || !ctype_digit($limit) || (int)$limit < 1 || (int)$limit > 300) {
+        || !ctype_digit($limit) || (int)$limit < 1 || (int)$limit > 300
+        || ($before !== null && ($cryptoHealth || !is_string($before)
+            || !preg_match('/\\A[1-9][0-9]{9}\\z/', $before)
+            || (int)$before > time()+86400
+            || (int)$before < 1500000000
+            || (int)$before < time() - 15316 * (['1m'=>60,'5m'=>300,'15m'=>900,'1h'=>3600,'1d'=>86400][$interval] ?? 1)
+            || ((int)$before) % (['1m'=>60,'5m'=>300,'15m'=>900,'1h'=>3600,'1d'=>86400][$interval] ?? 1) !== 0))) {
         respond(['error' => 'invalid_crypto_request'], 422);
     }
-    $params = http_build_query(compact('exchange', 'market', 'symbol', 'interval', 'limit'), '', '&', PHP_QUERY_RFC3986);
+    $params = compact('exchange', 'market', 'symbol', 'interval', 'limit');
+    if ($before !== null) $params['before'] = $before;
+    $params = http_build_query($params, '', '&', PHP_QUERY_RFC3986);
     $ch = curl_init('http://127.0.0.1:10251/api/v1/crypto/' . ($cryptoHealth ? 'health' : 'bars') . '?' . $params);
     if ($ch === false) respond(['error' => 'crypto_gateway_unavailable'], 503);
     curl_setopt_array($ch, [
@@ -112,7 +121,11 @@ if ($route === '/qsyn/api/v1/crypto/bars' || $route === '/qsyn/api/v1/crypto/hea
         || ($data['trading_enabled'] ?? true) !== false
         || ($data['exchange'] ?? '') !== $exchange || ($data['market'] ?? '') !== $market
         || ($data['symbol'] ?? '') !== $symbol || ($data['interval'] ?? '') !== $interval
-        || ($cryptoHealth ? !is_array($data['feed'] ?? null) : !is_array($data['bars'] ?? null))) {
+        || ($cryptoHealth ? !is_array($data['feed'] ?? null) : !is_array($data['bars'] ?? null))
+        || (!$cryptoHealth && $before !== null
+            && (!isset($data['pagination']) || !is_array($data['pagination'])
+                || ($data['pagination']['before'] ?? null) !== (int)$before
+                || !is_bool($data['pagination']['has_more'] ?? null)))) {
         respond(['error' => 'crypto_gateway_invalid_response'], 502);
     }
     respond($data);

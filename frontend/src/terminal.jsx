@@ -18,6 +18,8 @@ import {
 import { createWidget, createChartGrid } from 'openalgo-charts/widget';
 import { observeChartCancellations } from './chart-cancellation.js';
 import { QsynMarketsFeed } from './qsyn-markets-feed.js';
+import {MAX_AUTO_BACKFILL_BARS,INITIAL_BACKFILL_BARS} from './crypto-feed.js';
+import {observeWickScienceBackfill} from './wick-science-auto-backfill.js';
 import { cryptoDefault } from './crypto-catalog.js';
 import { nativeCryptoWatchlists, noSyntheticQuotes } from './native-crypto-watchlists.js';
 import 'openalgo-charts/indicators';
@@ -164,6 +166,8 @@ function HomepageChart({ theme, embedded = false }) {
       interval:'1m',intervals:['1m','5m','15m','1h','1d'],
       theme,branding:false,panels:true,toolbar:true,bottombar:true,
       preset:'1x1',workspaces:nativeWorkspaces||undefined,
+      lookbackBars:INITIAL_BACKFILL_BARS,
+      loading:{pageSize:300,maxBars:MAX_AUTO_BACKFILL_BARS},
       ...(nativeWatchlists?{watchlist:{store:nativeWatchlists,quotes:noSyntheticQuotes}}:{}),
       links:{crosshair:true},navigation:{defaultVisibleBars:120,mousePan:'horizontal'},
     });
@@ -193,16 +197,26 @@ function HomepageChart({ theme, embedded = false }) {
     };
     const observer=new MutationObserver(syncToolbar);
     observer.observe(host.current,{childList:true,subtree:true});
-    const offActive=grid.on('active',syncToolbar);
-    const offLayout=grid.on('layout',syncToolbar);
+    let seenWidget=null,stopWick=()=>{};
+    const syncWick=()=>{
+      if(!active)return;
+      const widget=grid.active()?.widget;
+      if(widget===seenWidget)return;
+      stopWick();
+      seenWidget=widget;
+      stopWick=observeWickScienceBackfill(widget,feed);
+    };
+    const updateGrid=()=>{syncToolbar();syncWick();};
+    const offActive=grid.on('active',updateGrid);
+    const offLayout=grid.on('layout',updateGrid);
     window.addEventListener('resize',syncToolbar);
     host.current.addEventListener('scroll',syncToolbar,true);
-    void grid.ready.then(syncToolbar).catch(()=>{
+    void grid.ready.then(updateGrid).catch(()=>{
       if(active)setMessage('Public market feed unavailable · no demo fallback');
     });
-    syncToolbar();
+    updateGrid();
     return ()=>{
-      active=false;observer.disconnect();offActive?.();offLayout?.();
+      active=false;stopWick();observer.disconnect();offActive?.();offLayout?.();
       window.removeEventListener('resize',syncToolbar);
       host.current?.removeEventListener('scroll',syncToolbar,true);
       slot?.remove();

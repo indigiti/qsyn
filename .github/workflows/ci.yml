@@ -164,6 +164,10 @@ jobs:
           test "$(curl --silent -o /tmp/qsyn-india.json -w '%{http_code}' 'http://127.0.0.1:18080/qsyn/api/v1/india/bars?exchange=NSE_INDEX&symbol=NIFTY&interval=1m')" = 503
           grep -q 'india_index_feed_not_authorized' /tmp/qsyn-india.json
           test "$(curl --silent -o /tmp/qsyn-india.json -w '%{http_code}' 'http://127.0.0.1:18080/qsyn/api/v1/india/bars?exchange=NSE_INDEX&symbol=../etc&interval=1m')" = 422
+          # Historical before-cursor is bars-only, UTC-aligned, bounded and strictly numeric.
+          test "$(curl --silent -o /dev/null -w '%{http_code}' 'http://127.0.0.1:18080/qsyn/api/v1/crypto/bars?exchange=BINANCE&market=spot&symbol=BTCUSDT&interval=1m&before=not-a-timestamp')" = 422
+          test "$(curl --silent -o /dev/null -w '%{http_code}' 'http://127.0.0.1:18080/qsyn/api/v1/crypto/bars?exchange=BINANCE&market=spot&symbol=BTCUSDT&interval=1m&before=1696982410')" = 422
+          test "$(curl --silent -o /dev/null -w '%{http_code}' 'http://127.0.0.1:18080/qsyn/api/v1/crypto/health?exchange=BINANCE&market=spot&symbol=BTCUSDT&interval=1m&before=1696982400')" = 422
           # Health checks do not trigger new exchange subscriptions.
           test "$(curl --silent -o /tmp/qsyn-crypto-health.json -w '%{http_code}' 'http://127.0.0.1:18080/qsyn/api/v1/crypto/health?exchange=BINANCE&market=spot&symbol=../bad&interval=1m')" = 422
           grep -q 'invalid_crypto_request' /tmp/qsyn-crypto-health.json
@@ -225,6 +229,9 @@ jobs:
         working-directory: frontend
       - name: Verify Wick Science MFE indicator state machine and signal safety
         run: node tests/wick-science.test.mjs
+        working-directory: frontend
+      - name: Verify provider-backed automatic max history, native paging and polling safety
+        run: node tests/crypto-backfill.test.mjs
         working-directory: frontend
       - run: |
           test -s frontend/dist/chart.js
