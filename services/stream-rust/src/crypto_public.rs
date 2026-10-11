@@ -13,6 +13,7 @@ use tokio::sync::Mutex;
 struct Request {
     exchange: String, market: String, symbol: String, interval: String,
     limit: Option<usize>,
+    before: Option<u64>, // strictly exclusive UTC-second upper cursor; no arbitrary provider URL
 }
 #[derive(Debug, Clone, Serialize, PartialEq)]
 struct Bar { time: u64, open: f64, high: f64, low: f64, close: f64, volume: f64 }
@@ -41,6 +42,11 @@ fn supported(exchange: &str, market: &str, symbol: &str) -> bool {
 fn valid(req: &Request) -> bool {
     req.exchange.len() <= 16 && req.symbol.len() <= 32 &&
     req.limit.unwrap_or(250) >= 1 && req.limit.unwrap_or(250) <= 300 &&
+    req.before.is_none_or(|before| {
+        let step=step_seconds(&req.interval).unwrap_or(1);
+        before>=1_500_000_000 && before<=epoch_ms()/1000+step &&
+        before.is_multiple_of(step)
+    }) &&
     step_seconds(&req.interval).is_some() &&
     supported(&req.exchange,&req.market,&req.symbol)
 }
@@ -105,13 +111,21 @@ fn parse_rows(req:&Request, value:&Value) -> Result<Vec<Bar>,()> {
     }
     parsed.sort_by_key(|b|b.time);
     parsed.dedup_by_key(|b|b.time);
-    if parsed.len()>req.limit.unwrap_or(250) {
-        parsed.drain(..parsed.len()-req.limit.unwrap_or(250));
+    if let Some(before)=req.before { parsed.retain(|b| b.time<before); }
+    // OKX historical endpoint hard-caps at 100; unlike the current endpoint
+    // it can page older data using after=timestamp.
+    let limit=provider_page_limit(req);
+    if parsed.len()>limit {
+        parsed.drain(..parsed.len()-limit);
     }
     Ok(parsed)
 }
+fn provider_page_limit(req:&Request)->usize {
+    req.limit.unwrap_or(250).min(if req.exchange=="OKX" && req.before.is_some() {100} else {300})
+}
 fn source(req:&Request) -> Result<(String,Option<Value>),()> {
-    let n=req.limit.unwrap_or(250).to_string();
+    let n=provider_page_limit(req).to_string();
+    let until=req.before.map(|t|t.saturating_mul(1000).saturating_sub(1).to_string());
     let i=req.interval.as_str(); let s=req.symbol.as_str();
     let (host,path,params):(&str,String,Vec<(&str,&str)>)= match req.exchange.as_str() {
         "BINANCE" => (
@@ -121,7 +135,9 @@ fn source(req:&Request) -> Result<(String,Option<Value>),()> {
         "BYBIT" => ("https://api.bybit.com","/v5/market/kline".into(),
             vec![("category",if req.market=="perp" {"linear"}else{"spot"}),
                  ("symbol",s),("interval",match i {"1m"=>"1","5m"=>"5","15m"=>"15","1h"=>"60","1d"=>"D",_=>return Err(())}),("limit",&n)]),
-        "OKX" => ("https://www.okx.com","/api/v5/market/candles".into(),
+        "OKX" => ("https://www.okx.com",if req.before.is_some(){
+            "/api/v5/market/history-candles".into()
+        }else{"/api/v5/market/candles".into()},
             vec![("instId",s),("bar",match i {"1h"=>"1H","1d"=>"1Dutc",_=>i}),("limit",&n)]),
         "COINBASE" => ("https://api.exchange.coinbase.com",
             format!("/products/{s}/candles"),
@@ -132,8 +148,8 @@ fn source(req:&Request) -> Result<(String,Option<Value>),()> {
             vec![("category",if req.market=="perp" {"USDT-FUTURES"}else{"SPOT"}),
                  ("symbol",s),("interval",match i {"1h"=>"1H","1d"=>"1D",_=>i}),("limit",&n)]),
         "HYPERLIQUID" => {
-            let end=epoch_ms();
-            let start=end.saturating_sub((req.limit.unwrap_or(250) as u64+2)*step_seconds(i).ok_or(())?*1000);
+            let end=until.as_ref().and_then(|s|s.parse::<u64>().ok()).unwrap_or_else(epoch_ms);
+            let start=end.saturating_sub((provider_page_limit(req) as u64+2)*step_seconds(i).ok_or(())?*1000);
             return Ok(("https://api.hyperliquid.xyz/info".into(),Some(json!({
                 "type":"candleSnapshot","req":{"coin":s,"interval":i,"startTime":start,"endTime":end}
             }))));
@@ -143,6 +159,33 @@ fn source(req:&Request) -> Result<(String,Option<Value>),()> {
     let mut url=reqwest::Url::parse(host).map_err(|_|())?;
     url.set_path(&path);
     url.query_pairs_mut().extend_pairs(params);
+    if let Some(before_ms)=until.as_deref() {
+        let mut query=url.query_pairs_mut();
+        match req.exchange.as_str() {
+            "BINANCE" | "BYBIT" | "BITGET" => {
+                query.append_pair(if req.exchange=="BYBIT" {"end"}
+                    else {"endTime"},before_ms);
+                if req.exchange=="BITGET" {
+                    let start=req.before.unwrap().saturating_sub(
+                        provider_page_limit(req) as u64 * step_seconds(i).ok_or(())?).saturating_mul(1000);
+                    query.append_pair("startTime",&start.to_string());
+                }
+            },
+            "OKX" => { query.append_pair("after",&before_ms.parse::<u64>().unwrap_or(0).saturating_add(1).to_string()); },
+            "COINBASE" => {
+                // Coinbase Exchange candles requires bounded ISO-8601 dates and <=300 slots.
+                let until_sec=req.before.ok_or(())?;
+                let end=chrono::DateTime::from_timestamp(until_sec as i64,0).ok_or(())?;
+                let start=chrono::DateTime::from_timestamp(
+                    until_sec.saturating_sub(provider_page_limit(req) as u64*step_seconds(i).ok_or(())?) as i64,0
+                ).ok_or(())?;
+                query.append_pair("start",&start.to_rfc3339());
+                query.append_pair("end",&end.to_rfc3339());
+            },
+            "KRAKEN" => {}, // Provider only offers the most recent 720; filter locally.
+            _ => return Err(())
+        }
+    }
     Ok((url.to_string(),None))
 }
 fn client() -> &'static reqwest::Client {
@@ -159,9 +202,9 @@ fn cache() -> &'static Cache {
     CACHE.get_or_init(||Mutex::new(HashMap::new()))
 }
 async fn load(req:&Request)->Result<Vec<Bar>,()> {
-    let live = stream::latest(req).await;
-    let coinbase_recent = stream::recent(req).await;
-    let cache_key=format!("{}:{}:{}:{}:{}",req.exchange,req.market,req.symbol,req.interval,req.limit.unwrap_or(250));
+    let live = if req.before.is_none(){stream::latest(req).await}else{None};
+    let coinbase_recent = if req.before.is_none(){stream::recent(req).await}else{Vec::new()};
+    let cache_key=format!("{}:{}:{}:{}:{}:{:?}",req.exchange,req.market,req.symbol,req.interval,req.limit.unwrap_or(250),req.before);
     {
         let guard=cache().lock().await;
         if let Some((since,bars))=guard.get(&cache_key) {
@@ -186,7 +229,7 @@ async fn load(req:&Request)->Result<Vec<Bar>,()> {
     if req.exchange=="KRAKEN" && json["error"].as_array().is_some_and(|v|!v.is_empty()) {return Err(());}
     let bars=parse_rows(req,&json)?;
     if bars.is_empty() {return Err(());}
-    stream::rest_completed(req,&bars).await;
+    if req.before.is_none(){stream::rest_completed(req,&bars).await;}
     let mut guard=cache().lock().await;
     if guard.len()>128 {guard.retain(|_,(when,_)|when.elapsed()<Duration::from_secs(30));}
     guard.insert(cache_key,(Instant::now(),bars.clone()));
@@ -237,7 +280,7 @@ fn reconcile_coinbase(history: &mut Vec<Bar>, ws: &[Bar], limit: usize) {
 }
 fn apply_live(req: &Request, history: &mut Vec<Bar>, latest: Option<Bar>, recent: &[Bar]) {
     let limit=req.limit.unwrap_or(250);
-    if req.exchange=="COINBASE" && req.interval=="1m" {
+    if req.before.is_none() && req.exchange=="COINBASE" && req.interval=="1m" {
         reconcile_coinbase(history,recent,limit);
     } else {
         overlay(history,latest,limit);
@@ -257,12 +300,15 @@ async fn health(Query(req):Query<Request>)->Response {
 }
 async fn bars(Query(req):Query<Request>)->Response {
     if !valid(&req) {return (StatusCode::UNPROCESSABLE_ENTITY,Json(json!({"error":"unsupported_crypto_instrument"}))).into_response();}
-    stream::ensure(&req).await;
+    if req.before.is_none(){stream::ensure(&req).await;}
     match load(&req).await {
         Ok(bars)=>(StatusCode::OK,Json(json!({
             "schema":"QSYN-PUBLIC-CRYPTO-BARS/1","source":"exchange_public",
             "exchange":req.exchange,"market":req.market,"symbol":req.symbol,
-            "interval":req.interval,"bars":bars,"asof_ms":epoch_ms(),
+            "interval":req.interval,"bars":bars,
+            "pagination":{"before":req.before,"next_before":bars.first().map(|b|b.time),
+                "has_more":bars.len()>=provider_page_limit(&req)},
+            "asof_ms":epoch_ms(),
             "feed_transport":stream::status(&req).await,
             "served_history_gaps":stream::history_gaps(&bars,step_seconds(&req.interval).unwrap_or(60)).0,
             "served_missing_history_bars":stream::history_gaps(&bars,step_seconds(&req.interval).unwrap_or(60)).1,
@@ -280,7 +326,7 @@ pub fn router()->Router {
 mod tests {
     use super::*;
     fn query(exchange:&str,market:&str,symbol:&str)->Request {
-        Request{exchange:exchange.into(),market:market.into(),symbol:symbol.into(),interval:"1m".into(),limit:Some(200)}
+        Request{exchange:exchange.into(),market:market.into(),symbol:symbol.into(),interval:"1m".into(),limit:Some(200),before:None}
     }
     #[test] fn strict_catalog() {
         for (e,m,s) in [("BINANCE","spot","BTCUSDT"),("BYBIT","perp","ETHUSDT"),
