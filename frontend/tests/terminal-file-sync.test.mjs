@@ -15,7 +15,11 @@ const response = (status, value) => ({
 });
 
 test('private sync remains unavailable without authenticated private endpoint', async () => {
-  assert.equal((await checkPrivateWorkspace(async () => response(503, {}))).status, 'disabled');
+  assert.equal((await checkPrivateWorkspace(async () =>
+    response(503, {error:'private_terminal_workspace_disabled'}))).status, 'disabled');
+  assert.equal((await checkPrivateWorkspace(async () =>
+    response(503, {error:'private_workspace_modules_unavailable'}))).status, 'offline');
+  assert.equal((await checkPrivateWorkspace(async () => response(503, {}))).status, 'offline');
   assert.equal((await checkPrivateWorkspace(async () => response(401, {}))).status, 'login_required');
   assert.equal((await checkPrivateWorkspace(async () => { throw Error('offline'); })).status, 'offline');
   assert.equal((await checkPrivateWorkspace(async () => response(200, {

@@ -1,13 +1,8 @@
 name: QSYN Public Staging Read-Only Acceptance
 
 on:
-  # Runs when the probe/workflow changes on main. External GET checks only.
-  # Nothing is deployed; the runner sends anonymous read-only GET requests.
-  push:
-    branches: [main]
-    paths:
-      - '.github/workflows/public-stage-acceptance.yml'
-      - 'apps/web-php/tests/PublicStageProbe.py'
+  # Manual only: the operator must supply the exact deployed SHA. An old
+  # hard-coded commit silently tests the wrong release after DigiOps advances.
   workflow_dispatch:
     inputs:
       expected_runtime_commit:
@@ -28,9 +23,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     env:
-      # Push acceptance is pinned to the last operator-confirmed deployed
-      # runtime, #78. Manual invocations continue to take a supplied SHA.
-      EXPECTED_RUNTIME_SHA: ${{ github.event_name == 'workflow_dispatch' && inputs.expected_runtime_commit || 'ccc92c161f5c5d6d45e02808cffabb40b7181bc4' }}
+      EXPECTED_RUNTIME_SHA: ${{ inputs.expected_runtime_commit }}
     steps:
       - uses: actions/checkout@v4
       - name: Run read-only public safety probe

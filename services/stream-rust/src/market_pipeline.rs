@@ -61,30 +61,54 @@ pub struct ScopedBasket {
 }
 
 impl ScopedBasket {
-    pub fn new(scope: Scope, mode: DataMode, legs: Vec<WeightedLeg>, max_age_ms: u64)
-        -> Result<Self, &'static str>
-    {
-        if scope.tenant_id.is_empty() || scope.account_id.is_empty()
-            || scope.source_id.is_empty() || scope.entitlement_id.is_empty()
-            || legs.is_empty() || legs.len() > 8 || max_age_ms > 60_000
+    pub fn new(
+        scope: Scope,
+        mode: DataMode,
+        legs: Vec<WeightedLeg>,
+        max_age_ms: u64,
+    ) -> Result<Self, &'static str> {
+        if scope.tenant_id.is_empty()
+            || scope.account_id.is_empty()
+            || scope.source_id.is_empty()
+            || scope.entitlement_id.is_empty()
+            || legs.is_empty()
+            || legs.len() > 8
+            || max_age_ms > 60_000
         {
             return Err("invalid_source_scope_or_legs");
         }
         let mut ids = std::collections::HashSet::new();
-        if legs.iter().any(|l| l.instrument_id.is_empty() || l.instrument_id.len() > 128
-            || !l.quantity.is_finite() || l.quantity <= 0.0
-            || l.quantity > 100.0 || !ids.insert(l.instrument_id.clone()))
-        {
+        if legs.iter().any(|l| {
+            l.instrument_id.is_empty()
+                || l.instrument_id.len() > 128
+                || !l.quantity.is_finite()
+                || l.quantity <= 0.0
+                || l.quantity > 100.0
+                || !ids.insert(l.instrument_id.clone())
+        }) {
             return Err("duplicate_or_invalid_leg");
         }
-        Ok(Self { scope, mode, legs, max_age_ms, seen: HashMap::new(), current: None })
+        Ok(Self {
+            scope,
+            mode,
+            legs,
+            max_age_ms,
+            seen: HashMap::new(),
+            current: None,
+        })
     }
 
     pub fn on_quote(&mut self, quote: &NormalizedQuote) -> Option<Candle> {
-        if quote.scope != self.scope || quote.mode != self.mode
-            || !quote.price.is_finite() || quote.price <= 0.0
-            || quote.instrument_id.is_empty() || quote.timestamp_ms == 0
-            || !self.legs.iter().any(|l| l.instrument_id == quote.instrument_id)
+        if quote.scope != self.scope
+            || quote.mode != self.mode
+            || !quote.price.is_finite()
+            || quote.price <= 0.0
+            || quote.instrument_id.is_empty()
+            || quote.timestamp_ms == 0
+            || !self
+                .legs
+                .iter()
+                .any(|l| l.instrument_id == quote.instrument_id)
         {
             return None;
         }
@@ -98,8 +122,10 @@ impl ScopedBasket {
                 return None;
             }
         }
-        self.seen.insert(quote.instrument_id.clone(),
-            (quote.timestamp_ms, quote.sequence, quote.price));
+        self.seen.insert(
+            quote.instrument_id.clone(),
+            (quote.timestamp_ms, quote.sequence, quote.price),
+        );
         let mut newest = 0u64;
         let mut oldest = u64::MAX;
         let mut weighted = 0.0;
@@ -115,12 +141,21 @@ impl ScopedBasket {
         let open_time_ms = newest / 60_000 * 60_000;
         let candle = match &self.current {
             Some(c) if c.open_time_ms == open_time_ms => Candle {
-                open_time_ms, open: c.open,
-                high: c.high.max(weighted), low: c.low.min(weighted),
-                close: weighted, observations: c.observations.saturating_add(1),
+                open_time_ms,
+                open: c.open,
+                high: c.high.max(weighted),
+                low: c.low.min(weighted),
+                close: weighted,
+                observations: c.observations.saturating_add(1),
             },
-            _ => Candle { open_time_ms, open: weighted,
-                high: weighted, low: weighted, close: weighted, observations: 1 },
+            _ => Candle {
+                open_time_ms,
+                open: weighted,
+                high: weighted,
+                low: weighted,
+                close: weighted,
+                observations: 1,
+            },
         };
         self.current = Some(candle.clone());
         Some(candle)
@@ -154,7 +189,10 @@ pub struct ReplayJournal;
 impl ReplayJournal {
     pub fn append(path: &Path, quote: &NormalizedQuote) -> std::io::Result<()> {
         if !quote.price.is_finite() || quote.price <= 0.0 {
-            return Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, "invalid_quote"));
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "invalid_quote",
+            ));
         }
         let payload = serde_json::to_vec(quote)?;
         let row = JournalRow {
@@ -176,18 +214,25 @@ impl ReplayJournal {
         let mut output = Vec::new();
         for (i, line) in reader.lines().enumerate() {
             if i >= 100_000 {
-                return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, "journal_limit"));
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "journal_limit",
+                ));
             }
             let line = line?;
             if line.len() > 16_384 {
-                return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, "oversized_row"));
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "oversized_row",
+                ));
             }
             let row: JournalRow = serde_json::from_str(&line)?;
             let content = serde_json::to_vec(&row.quote)?;
-            if row.schema != "QSYN-NORMALIZED-JOURNAL/1"
-                || row.checksum != checksum(&content)
-            {
-                return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, "checksum_mismatch"));
+            if row.schema != "QSYN-NORMALIZED-JOURNAL/1" || row.checksum != checksum(&content) {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "checksum_mismatch",
+                ));
             }
             output.push(row.quote);
         }
@@ -198,9 +243,14 @@ impl ReplayJournal {
         let mut latest = BTreeMap::new();
         for q in events {
             if q.price > 0.0 && q.price.is_finite() {
-                let key = format!("{}:{}:{}:{}:{}", q.scope.tenant_id,
-                    q.scope.account_id, q.scope.source_id,
-                    q.scope.entitlement_id, q.instrument_id);
+                let key = format!(
+                    "{}:{}:{}:{}:{}",
+                    q.scope.tenant_id,
+                    q.scope.account_id,
+                    q.scope.source_id,
+                    q.scope.entitlement_id,
+                    q.instrument_id
+                );
                 let current: Option<&(u64, f64)> = latest.get(&key);
                 if current.is_none_or(|(ts, _)| q.timestamp_ms >= *ts) {
                     latest.insert(key, (q.timestamp_ms, q.price));
@@ -215,21 +265,42 @@ impl ReplayJournal {
 mod tests {
     use super::*;
     fn scope() -> Scope {
-        Scope { tenant_id: "tenant1".into(), account_id: "demoA".into(),
-            source_id: "fixture".into(), entitlement_id: "simulated".into() }
+        Scope {
+            tenant_id: "tenant1".into(),
+            account_id: "demoA".into(),
+            source_id: "fixture".into(),
+            entitlement_id: "simulated".into(),
+        }
     }
     fn q(id: &str, ts: u64, seq: u64, price: f64) -> NormalizedQuote {
-        NormalizedQuote { scope: scope(), instrument_id: id.into(), timestamp_ms: ts,
-            sequence: seq, price, mode: DataMode::Simulated }
+        NormalizedQuote {
+            scope: scope(),
+            instrument_id: id.into(),
+            timestamp_ms: ts,
+            sequence: seq,
+            price,
+            mode: DataMode::Simulated,
+        }
     }
     #[test]
     fn rejects_foreign_scopes_replay_mode_staleness_and_duplicates() {
         let legs = vec![
-            WeightedLeg { instrument_id: "CE".into(), quantity: 2.0 },
-            WeightedLeg { instrument_id: "PE".into(), quantity: 1.0 },
+            WeightedLeg {
+                instrument_id: "CE".into(),
+                quantity: 2.0,
+            },
+            WeightedLeg {
+                instrument_id: "PE".into(),
+                quantity: 1.0,
+            },
         ];
-        assert!(ScopedBasket::new(scope(), DataMode::Simulated,
-            vec![legs[0].clone(), legs[0].clone()], 100).is_err());
+        assert!(ScopedBasket::new(
+            scope(),
+            DataMode::Simulated,
+            vec![legs[0].clone(), legs[0].clone()],
+            100
+        )
+        .is_err());
         let mut engine = ScopedBasket::new(scope(), DataMode::Simulated, legs, 200).unwrap();
         assert!(engine.on_quote(&q("CE", 60_000, 1, 100.0)).is_none());
         let mut foreign = q("PE", 60_000, 1, 120.0);
@@ -258,7 +329,10 @@ mod tests {
     #[test]
     fn integrity_journal_replays_and_fails_on_tampering() {
         let file = std::env::temp_dir().join(format!(
-            "qsyn-replay-{}-{:?}.jsonl", std::process::id(), std::thread::current().id()));
+            "qsyn-replay-{}-{:?}.jsonl",
+            std::process::id(),
+            std::thread::current().id()
+        ));
         let _ = std::fs::remove_file(&file);
         ReplayJournal::append(&file, &q("CE", 60_000, 1, 91.0)).unwrap();
         ReplayJournal::append(&file, &q("PE", 60_010, 1, 120.0)).unwrap();

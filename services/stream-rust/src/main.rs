@@ -1,6 +1,6 @@
 mod binary_activation;
-mod process_control;
 mod crypto_public;
+mod process_control;
 
 use axum::{
     extract::ws::{Message, WebSocket, WebSocketUpgrade},
@@ -10,7 +10,10 @@ use axum::{
     Json, Router,
 };
 use serde_json::{json, Value};
-use std::sync::{atomic::{AtomicU64, Ordering}, OnceLock};
+use std::sync::{
+    atomic::{AtomicU64, Ordering},
+    OnceLock,
+};
 use std::time::Instant;
 use tokio::time::{interval, Duration};
 
@@ -58,7 +61,11 @@ async fn demo_session(mut socket: WebSocket) {
             "timestamp": now,
             "price": price
         });
-        if socket.send(Message::Text(payload.to_string().into())).await.is_err() {
+        if socket
+            .send(Message::Text(payload.to_string().into()))
+            .await
+            .is_err()
+        {
             break;
         }
     }
@@ -68,7 +75,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = std::env::args().skip(1).collect::<Vec<_>>();
     if let Some(result) = process_control::dispatch(&args) {
         println!("{}", result);
-        if result["ok"] == true { return Ok(()); }
+        if result["ok"] == true {
+            return Ok(());
+        }
         std::process::exit(2);
     }
     // Preserve original foreground behavior unless explicitly using

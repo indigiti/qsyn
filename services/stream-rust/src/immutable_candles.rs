@@ -31,7 +31,9 @@ pub struct SeriesDescriptor {
 fn safe_name(input: &str) -> bool {
     !input.is_empty()
         && input.len() <= 80
-        && input.chars().all(|c| c.is_ascii_alphanumeric() || "_-".contains(c))
+        && input
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || "_-".contains(c))
 }
 fn archive_path(root: &Path, series_id: &str, partition: &str) -> io::Result<PathBuf> {
     root_check(root)?;
@@ -39,7 +41,10 @@ fn archive_path(root: &Path, series_id: &str, partition: &str) -> io::Result<Pat
         || partition.len() != 6
         || !partition.bytes().all(|byte| byte.is_ascii_digit())
     {
-        return Err(io::Error::new(io::ErrorKind::InvalidInput, "invalid_series_partition"));
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "invalid_series_partition",
+        ));
     }
     Ok(root.join(format!("{series_id}-{partition}.qcb")))
 }
@@ -52,9 +57,12 @@ fn valid_candle(c: &Candle, interval: u64) -> bool {
         && c.high.is_finite()
         && c.low.is_finite()
         && c.close.is_finite()
-        && c.open >= 0.0 && c.low >= 0.0
-        && c.low <= c.open && c.low <= c.close
-        && c.high >= c.open && c.high >= c.close
+        && c.open >= 0.0
+        && c.low >= 0.0
+        && c.low <= c.open
+        && c.low <= c.close
+        && c.high >= c.open
+        && c.high >= c.close
         && c.observations > 0
 }
 
@@ -97,13 +105,25 @@ fn validate_descriptor(descriptor: &SeriesDescriptor) -> io::Result<()> {
     if !safe_name(&descriptor.series_id)
         || descriptor.interval_ms < 1_000
         || descriptor.interval_ms > 86_400_000
-        || [&descriptor.scope.tenant_id, &descriptor.scope.account_id,
-            &descriptor.scope.source_id, &descriptor.scope.entitlement_id]
-            .iter()
-            .any(|s| s.is_empty() || s.len() > 128
-                || !s.chars().all(|c| c.is_ascii_alphanumeric() || "._:-".contains(c)))
+        || [
+            &descriptor.scope.tenant_id,
+            &descriptor.scope.account_id,
+            &descriptor.scope.source_id,
+            &descriptor.scope.entitlement_id,
+        ]
+        .iter()
+        .any(|s| {
+            s.is_empty()
+                || s.len() > 128
+                || !s
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || "._:-".contains(c))
+        })
     {
-        return Err(io::Error::new(io::ErrorKind::InvalidInput, "invalid_series_descriptor"));
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "invalid_series_descriptor",
+        ));
     }
     Ok(())
 }
@@ -118,19 +138,33 @@ pub fn publish(
     candles: &[Candle],
 ) -> io::Result<()> {
     validate_descriptor(descriptor)?;
-    if candles.is_empty() || candles.len() > MAX_RECORDS
-        || candles.iter().any(|c| !valid_candle(c, descriptor.interval_ms))
-        || candles.windows(2).any(|pair| pair[0].open_time_ms >= pair[1].open_time_ms)
+    if candles.is_empty()
+        || candles.len() > MAX_RECORDS
+        || candles
+            .iter()
+            .any(|c| !valid_candle(c, descriptor.interval_ms))
+        || candles
+            .windows(2)
+            .any(|pair| pair[0].open_time_ms >= pair[1].open_time_ms)
     {
-        return Err(io::Error::new(io::ErrorKind::InvalidInput, "invalid_candle_partition"));
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "invalid_candle_partition",
+        ));
     }
     let destination = archive_path(root, &descriptor.series_id, partition)?;
     if destination.exists() {
-        return Err(io::Error::new(io::ErrorKind::AlreadyExists, "immutable_partition_exists"));
+        return Err(io::Error::new(
+            io::ErrorKind::AlreadyExists,
+            "immutable_partition_exists",
+        ));
     }
     let metadata = serde_json::to_vec(descriptor)?;
     if metadata.len() > 4096 {
-        return Err(io::Error::new(io::ErrorKind::InvalidInput, "oversized_candle_metadata"));
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "oversized_candle_metadata",
+        ));
     }
     let nonce = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -138,12 +172,16 @@ pub fn publish(
         .as_nanos();
     let temporary = root.join(format!(
         ".{}-{}.qcb-{}-{}.tmp",
-        descriptor.series_id, partition, std::process::id(), nonce
+        descriptor.series_id,
+        partition,
+        std::process::id(),
+        nonce
     ));
     let mut opts = OpenOptions::new();
     opts.write(true).create_new(true);
     #[cfg(unix)]
-    opts.mode(0o600).custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC);
+    opts.mode(0o600)
+        .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC);
     let mut file = opts.open(&temporary)?;
     let written = (|| -> io::Result<()> {
         let mut header = [0u8; HEADER_BYTES];
@@ -180,7 +218,10 @@ impl CandlePartition {
         validate_descriptor(expected)?;
         let path = archive_path(root, &expected.series_id, partition)?;
         if path.symlink_metadata()?.file_type().is_symlink() {
-            return Err(io::Error::new(io::ErrorKind::PermissionDenied, "candle_symlink_forbidden"));
+            return Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                "candle_symlink_forbidden",
+            ));
         }
         let mut opts = OpenOptions::new();
         opts.read(true);
@@ -190,10 +231,12 @@ impl CandlePartition {
         #[cfg(unix)]
         {
             let meta = file.metadata()?;
-            if (meta.permissions().mode() & 0o077) != 0
-                || meta.uid() != unsafe { libc::geteuid() }
+            if (meta.permissions().mode() & 0o077) != 0 || meta.uid() != unsafe { libc::geteuid() }
             {
-                return Err(io::Error::new(io::ErrorKind::PermissionDenied, "candle_not_owner_only"));
+                return Err(io::Error::new(
+                    io::ErrorKind::PermissionDenied,
+                    "candle_not_owner_only",
+                ));
             }
         }
         let mut header = [0u8; HEADER_BYTES];
@@ -212,36 +255,65 @@ impl CandlePartition {
         if crc32(&metadata) != expected_crc {
             return Err(bad("corrupt_candle_metadata"));
         }
-        let descriptor: SeriesDescriptor = serde_json::from_slice(&metadata)
-            .map_err(|_| bad("invalid_candle_metadata"))?;
+        let descriptor: SeriesDescriptor =
+            serde_json::from_slice(&metadata).map_err(|_| bad("invalid_candle_metadata"))?;
         if &descriptor != expected {
-            return Err(io::Error::new(io::ErrorKind::PermissionDenied, "series_scope_mismatch"));
+            return Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                "series_scope_mismatch",
+            ));
         }
         let row_start = (HEADER_BYTES + meta_len) as u64;
         if file.metadata()?.len() != row_start + (count * ROW_BYTES) as u64 {
             return Err(bad("candle_partition_size_mismatch"));
         }
-        Ok(Self { file, row_start, count, descriptor })
+        Ok(Self {
+            file,
+            row_start,
+            count,
+            descriptor,
+        })
     }
 
     /// O(log N) fixed-offset candle lookup; verifies CRCs of returned records.
     pub fn range(&mut self, start_ms: u64, end_ms: u64, limit: usize) -> io::Result<Vec<Candle>> {
         if start_ms > end_ms || limit == 0 || limit > 5_000 {
-            return Err(io::Error::new(io::ErrorKind::InvalidInput, "invalid_candle_range"));
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "invalid_candle_range",
+            ));
         }
         let mut low = 0;
         let mut high = self.count;
         while low < high {
             let mid = low + (high - low) / 2;
-            let item = read_row(&mut self.file, self.row_start, mid, self.descriptor.interval_ms)?;
-            if item.open_time_ms < start_ms { low = mid + 1; } else { high = mid; }
+            let item = read_row(
+                &mut self.file,
+                self.row_start,
+                mid,
+                self.descriptor.interval_ms,
+            )?;
+            if item.open_time_ms < start_ms {
+                low = mid + 1;
+            } else {
+                high = mid;
+            }
         }
         let mut out = Vec::new();
         let mut previous = 0;
         for i in low..self.count {
-            if out.len() == limit { break; }
-            let candle = read_row(&mut self.file, self.row_start, i, self.descriptor.interval_ms)?;
-            if candle.open_time_ms > end_ms { break; }
+            if out.len() == limit {
+                break;
+            }
+            let candle = read_row(
+                &mut self.file,
+                self.row_start,
+                i,
+                self.descriptor.interval_ms,
+            )?;
+            if candle.open_time_ms > end_ms {
+                break;
+            }
             if !out.is_empty() && candle.open_time_ms <= previous {
                 return Err(bad("nonmonotonic_candle_series"));
             }
@@ -255,7 +327,12 @@ impl CandlePartition {
     pub fn audit(&mut self) -> io::Result<usize> {
         let mut previous = 0;
         for index in 0..self.count {
-            let candle = read_row(&mut self.file, self.row_start, index, self.descriptor.interval_ms)?;
+            let candle = read_row(
+                &mut self.file,
+                self.row_start,
+                index,
+                self.descriptor.interval_ms,
+            )?;
             if candle.open_time_ms <= previous {
                 return Err(bad("nonmonotonic_candle_series"));
             }
@@ -270,11 +347,17 @@ mod tests {
     use super::*;
     use std::time::{SystemTime, UNIX_EPOCH};
 
-    struct Fixture { dir: PathBuf }
+    struct Fixture {
+        dir: PathBuf,
+    }
     impl Fixture {
         fn new() -> Self {
-            let stamp = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
-            let dir = std::env::temp_dir().join(format!("qsyn-candles-{}-{stamp}", std::process::id()));
+            let stamp = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos();
+            let dir =
+                std::env::temp_dir().join(format!("qsyn-candles-{}-{stamp}", std::process::id()));
             fs::create_dir(&dir).unwrap();
             #[cfg(unix)]
             fs::set_permissions(&dir, fs::Permissions::from_mode(0o700)).unwrap();
@@ -282,20 +365,34 @@ mod tests {
         }
         fn spec(&self, account: &str) -> SeriesDescriptor {
             SeriesDescriptor {
-                scope: Scope { tenant_id: "tenant".into(), account_id: account.into(),
-                    source_id: "fixture".into(), entitlement_id: "simulated".into() },
-                mode: DataMode::Replay, series_id: "straddle-001".into(), interval_ms: 60_000,
+                scope: Scope {
+                    tenant_id: "tenant".into(),
+                    account_id: account.into(),
+                    source_id: "fixture".into(),
+                    entitlement_id: "simulated".into(),
+                },
+                mode: DataMode::Replay,
+                series_id: "straddle-001".into(),
+                interval_ms: 60_000,
             }
         }
         fn bars(&self) -> Vec<Candle> {
-            (1..=250).map(|index| Candle {
-                open_time_ms: index * 60_000, open: 100.0, high: 101.0,
-                low: 99.0, close: 100.5, observations: 2,
-            }).collect()
+            (1..=250)
+                .map(|index| Candle {
+                    open_time_ms: index * 60_000,
+                    open: 100.0,
+                    high: 101.0,
+                    low: 99.0,
+                    close: 100.5,
+                    observations: 2,
+                })
+                .collect()
         }
     }
     impl Drop for Fixture {
-        fn drop(&mut self) { let _ = fs::remove_dir_all(&self.dir); }
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.dir);
+        }
     }
 
     #[test]

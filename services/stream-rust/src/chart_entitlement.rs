@@ -40,9 +40,10 @@ pub struct EntitlementAttestation {
 }
 
 fn ident(s: &str) -> bool {
-    !s.is_empty() && s.len() <= 128
-        && s.bytes().all(|b| b.is_ascii_alphanumeric()
-            || matches!(b, b'_' | b'-' | b'.' | b':' | b'|'))
+    !s.is_empty()
+        && s.len() <= 128
+        && s.bytes()
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'_' | b'-' | b'.' | b':' | b'|'))
 }
 type Hmac256 = Hmac<Sha256>;
 
@@ -52,40 +53,70 @@ pub struct ChartViewer<'a> {
     pub owner: &'a str,
     pub instrument: &'a str,
 }
-pub struct ChartSigner { secret: [u8; 32] }
+pub struct ChartSigner {
+    secret: [u8; 32],
+}
 impl ChartSigner {
-    pub fn new(secret: [u8; 32]) -> Self { Self { secret } }
+    pub fn new(secret: [u8; 32]) -> Self {
+        Self { secret }
+    }
     pub fn issue(
-        &self, attested: &EntitlementAttestation,
+        &self,
+        attested: &EntitlementAttestation,
         instrument: &str,
         now_ms: u64,
         duration_ms: u64,
     ) -> io::Result<String> {
-        if !attested.can_display_to_this_user || !attested.broker_session_verified
+        if !attested.can_display_to_this_user
+            || !attested.broker_session_verified
             || !attested.instruments.iter().any(|s| s == instrument)
-            || ![&attested.tenant, &attested.account, &attested.owner, &attested.broker,
-                &attested.license_id].iter().all(|s| ident(s))
-            || !ident(instrument) || now_ms == 0
+            || ![
+                &attested.tenant,
+                &attested.account,
+                &attested.owner,
+                &attested.broker,
+                &attested.license_id,
+            ]
+            .iter()
+            .all(|s| ident(s))
+            || !ident(instrument)
+            || now_ms == 0
             || !(1_000..=300_000).contains(&duration_ms)
-        { return Err(denied()); }
+        {
+            return Err(denied());
+        }
         let expires = now_ms.checked_add(duration_ms).ok_or_else(denied)?;
-        if expires > attested.valid_until_ms { return Err(denied()); }
+        if expires > attested.valid_until_ms {
+            return Err(denied());
+        }
         let claim = ChartGrant {
-            version: 1, tenant: attested.tenant.clone(), account: attested.account.clone(),
-            owner: attested.owner.clone(), broker: attested.broker.clone(),
-            instrument: instrument.to_string(), license_id: attested.license_id.clone(),
+            version: 1,
+            tenant: attested.tenant.clone(),
+            account: attested.account.clone(),
+            owner: attested.owner.clone(),
+            broker: attested.broker.clone(),
+            instrument: instrument.to_string(),
+            license_id: attested.license_id.clone(),
             audience: "qsyn-private-chart".into(),
-            issued_ms: now_ms, expires_ms: expires,
+            issued_ms: now_ms,
+            expires_ms: expires,
         };
         let payload = serde_json::to_vec(&claim)?;
         let mut mac = Hmac256::new_from_slice(&self.secret).map_err(|_| denied())?;
         mac.update(&payload);
         let tag = mac.finalize().into_bytes();
-        Ok(format!("{}.{}", URL_SAFE_NO_PAD.encode(payload), URL_SAFE_NO_PAD.encode(tag)))
+        Ok(format!(
+            "{}.{}",
+            URL_SAFE_NO_PAD.encode(payload),
+            URL_SAFE_NO_PAD.encode(tag)
+        ))
     }
 
     pub fn verify(
-        &self, token: &str, now_ms: u64, viewer: &ChartViewer<'_>,
+        &self,
+        token: &str,
+        now_ms: u64,
+        viewer: &ChartViewer<'_>,
         current: &EntitlementAttestation,
     ) -> io::Result<ChartGrant> {
         if token.len() > 2048 || token.contains(char::is_whitespace) {
@@ -98,17 +129,28 @@ impl ChartSigner {
         mac.update(&payload);
         mac.verify_slice(&tag).map_err(|_| denied())?;
         let claim: ChartGrant = serde_json::from_slice(&payload).map_err(|_| denied())?;
-        if claim.version != 1 || claim.audience != "qsyn-private-chart"
-            || claim.tenant != viewer.tenant || claim.account != viewer.account || claim.owner != viewer.owner
-            || claim.instrument != viewer.instrument || claim.tenant != current.tenant
-            || claim.account != current.account || claim.owner != current.owner
-            || claim.broker != current.broker || claim.license_id != current.license_id
-            || !current.can_display_to_this_user || !current.broker_session_verified
+        if claim.version != 1
+            || claim.audience != "qsyn-private-chart"
+            || claim.tenant != viewer.tenant
+            || claim.account != viewer.account
+            || claim.owner != viewer.owner
+            || claim.instrument != viewer.instrument
+            || claim.tenant != current.tenant
+            || claim.account != current.account
+            || claim.owner != current.owner
+            || claim.broker != current.broker
+            || claim.license_id != current.license_id
+            || !current.can_display_to_this_user
+            || !current.broker_session_verified
             || !current.instruments.iter().any(|v| v == viewer.instrument)
-            || claim.issued_ms == 0 || claim.issued_ms > now_ms
-            || claim.expires_ms <= now_ms || claim.expires_ms > current.valid_until_ms
+            || claim.issued_ms == 0
+            || claim.issued_ms > now_ms
+            || claim.expires_ms <= now_ms
+            || claim.expires_ms > current.valid_until_ms
             || claim.expires_ms - claim.issued_ms > 300_000
-        { return Err(denied()); }
+        {
+            return Err(denied());
+        }
         Ok(claim)
     }
 }
@@ -117,45 +159,116 @@ mod tests {
     use super::*;
     fn attestation() -> EntitlementAttestation {
         EntitlementAttestation {
-            tenant:"tenantA".into(), account:"upstoxA".into(),
-            owner:"ownerA".into(), broker:"upstox".into(),
-            instruments:vec!["NFO|CE".into(), "NFO|PE".into()],
-            license_id:"user-display-only".into(), can_display_to_this_user:true,
-            broker_session_verified:true, valid_until_ms:900_000,
+            tenant: "tenantA".into(),
+            account: "upstoxA".into(),
+            owner: "ownerA".into(),
+            broker: "upstox".into(),
+            instruments: vec!["NFO|CE".into(), "NFO|PE".into()],
+            license_id: "user-display-only".into(),
+            can_display_to_this_user: true,
+            broker_session_verified: true,
+            valid_until_ms: 900_000,
         }
     }
-    fn viewer<'a>(tenant:&'a str,account:&'a str,owner:&'a str,instrument:&'a str)->ChartViewer<'a>{
-        ChartViewer { tenant,account,owner,instrument }
+    fn viewer<'a>(
+        tenant: &'a str,
+        account: &'a str,
+        owner: &'a str,
+        instrument: &'a str,
+    ) -> ChartViewer<'a> {
+        ChartViewer {
+            tenant,
+            account,
+            owner,
+            instrument,
+        }
     }
     #[test]
     fn verifies_scope_expiry_tamper_and_revocation() {
-        let signer = ChartSigner::new([17;32]);
+        let signer = ChartSigner::new([17; 32]);
         let att = attestation();
-        let t = signer.issue(&att,"NFO|CE",100_000,30_000).unwrap();
-        assert!(signer.verify(&t,110_000,&viewer("tenantA","upstoxA","ownerA","NFO|CE"),&att).is_ok());
-        assert!(signer.verify(&t,110_000,&viewer("tenantA","upstoxB","ownerA","NFO|CE"),&att).is_err());
-        assert!(signer.verify(&t,110_000,&viewer("tenantA","upstoxA","ownerB","NFO|CE"),&att).is_err());
-        assert!(signer.verify(&t,131_000,&viewer("tenantA","upstoxA","ownerA","NFO|CE"),&att).is_err());
-        assert!(signer.verify(&t,110_000,&viewer("tenantA","upstoxA","ownerA","NFO|PE"),&att).is_err());
-        let mut changed = t.clone();changed.push('x');
-        assert!(signer.verify(&changed,110_000,&viewer("tenantA","upstoxA","ownerA","NFO|CE"),&att).is_err());
+        let t = signer.issue(&att, "NFO|CE", 100_000, 30_000).unwrap();
+        assert!(signer
+            .verify(
+                &t,
+                110_000,
+                &viewer("tenantA", "upstoxA", "ownerA", "NFO|CE"),
+                &att
+            )
+            .is_ok());
+        assert!(signer
+            .verify(
+                &t,
+                110_000,
+                &viewer("tenantA", "upstoxB", "ownerA", "NFO|CE"),
+                &att
+            )
+            .is_err());
+        assert!(signer
+            .verify(
+                &t,
+                110_000,
+                &viewer("tenantA", "upstoxA", "ownerB", "NFO|CE"),
+                &att
+            )
+            .is_err());
+        assert!(signer
+            .verify(
+                &t,
+                131_000,
+                &viewer("tenantA", "upstoxA", "ownerA", "NFO|CE"),
+                &att
+            )
+            .is_err());
+        assert!(signer
+            .verify(
+                &t,
+                110_000,
+                &viewer("tenantA", "upstoxA", "ownerA", "NFO|PE"),
+                &att
+            )
+            .is_err());
+        let mut changed = t.clone();
+        changed.push('x');
+        assert!(signer
+            .verify(
+                &changed,
+                110_000,
+                &viewer("tenantA", "upstoxA", "ownerA", "NFO|CE"),
+                &att
+            )
+            .is_err());
         let mut revoked = att.clone();
         revoked.can_display_to_this_user = false;
-        assert!(signer.verify(&t,110_000,&viewer("tenantA","upstoxA","ownerA","NFO|CE"),&revoked).is_err());
+        assert!(signer
+            .verify(
+                &t,
+                110_000,
+                &viewer("tenantA", "upstoxA", "ownerA", "NFO|CE"),
+                &revoked
+            )
+            .is_err());
         let mut switched = att;
-        switched.license_id="different-license".into();
-        assert!(signer.verify(&t,110_000,&viewer("tenantA","upstoxA","ownerA","NFO|CE"),&switched).is_err());
+        switched.license_id = "different-license".into();
+        assert!(signer
+            .verify(
+                &t,
+                110_000,
+                &viewer("tenantA", "upstoxA", "ownerA", "NFO|CE"),
+                &switched
+            )
+            .is_err());
     }
     #[test]
     fn refuses_broker_login_without_actual_exchange_entitlement() {
-        let signer = ChartSigner::new([19;32]);
+        let signer = ChartSigner::new([19; 32]);
         let mut att = attestation();
-        att.can_display_to_this_user=false;
-        assert!(signer.issue(&att,"NFO|CE",100_000,30_000).is_err());
-        att.can_display_to_this_user=true;
-        att.broker_session_verified=false;
-        assert!(signer.issue(&att,"NFO|CE",100_000,30_000).is_err());
-        att.broker_session_verified=true;
-        assert!(signer.issue(&att,"NFO|CE",100_000,301_000).is_err());
+        att.can_display_to_this_user = false;
+        assert!(signer.issue(&att, "NFO|CE", 100_000, 30_000).is_err());
+        att.can_display_to_this_user = true;
+        att.broker_session_verified = false;
+        assert!(signer.issue(&att, "NFO|CE", 100_000, 30_000).is_err());
+        att.broker_session_verified = true;
+        assert!(signer.issue(&att, "NFO|CE", 100_000, 301_000).is_err());
     }
 }
