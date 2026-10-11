@@ -146,8 +146,8 @@ try {
   await page.waitForFunction(()=>document.querySelectorAll('.qd-chart-preview #qsyn-native-chart canvas').length>0);
   await page.getByRole('button',{name:'Tools',exact:true}).first().click();
   await page.getByRole('heading',{name:'Tools'}).waitFor();
-  if(!(await page.locator('a[href="/qsyn/studio"]').count()>0))
-    throw new Error('Synthetic Studio link missing');
+  if(!(await page.getByRole('button',{name:/Strategy Studio/}).count()>0))
+    throw new Error('Unified Strategy Studio tool missing');
   // Public terminal stays browser-only without opt-in identity/private storage.
   await page.getByRole('button',{name:'Trading',exact:true}).first().click();
   await page.getByRole('heading',{name:'Trading charts'}).waitFor();
