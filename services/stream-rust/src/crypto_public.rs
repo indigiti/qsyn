@@ -89,7 +89,7 @@ fn parse_rows(req:&Request, value:&Value) -> Result<Vec<Bar>,()> {
             }
             _ => {
                 let a=row.as_array().ok_or(())?;
-                (a.len()<7 && req.exchange=="KRAKEN") || a.len()<6 {return Err(());}
+                if (a.len()<7 && req.exchange=="KRAKEN") || a.len()<6 {return Err(());}
                 // All remaining providers: time, open, high, low, close;
                 // Kraken volume index 6, the others volume index 5.
                 bar(timestamp(&a[0],req.exchange!="KRAKEN").ok_or(())?,
