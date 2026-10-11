@@ -75,13 +75,22 @@ try {
     throw new Error('Homepage chart must start at top of viewport and span width: '+JSON.stringify(chartBounds));
   if(await page.locator('html').getAttribute('data-qsyn-theme')!=='light')
     throw new Error('First-visit homepage did not match light reference');
-  if(!(await page.getByRole('link',{name:'Dashboard',exact:true}).count()))
-    throw new Error('Dashboard link unavailable below homepage chart');
-  if(!(await page.getByRole('link',{name:'Trading workspace',exact:true}).count()))
-    throw new Error('Full chart workspace link unavailable below homepage chart');
-  const homeNote=await page.locator('.qsyn-home-disclaimer').innerText();
-  if(!homeNote.includes('Illustrative synthetic premium')||!homeNote.includes('No exchange market data'))
-    throw new Error('Full-width homepage lost simulated-source disclosure');
+  // The public homepage must contain ONLY the OpenAlgo chart widget.
+  // The detailed simulation disclosures and navigation remain in /qsyn/terminal.
+  if(await page.locator('.qsyn-homepage .qsyn-home-disclaimer, .qsyn-homepage nav, .qsyn-homepage header').count())
+    throw new Error('Unexpected navigation, heading, or footer on chart-only homepage');
+  if(await page.locator('.qsyn-home-chart .terminal-footnote').filter({visible:true}).count())
+    throw new Error('Homepage chart footnotes should not occupy page space');
+  if(await page.locator('.qsyn-homepage a').count())
+    throw new Error('Homepage should not render shortcut/footer links');
+  const chartHeight=await page.locator('.qsyn-home-chart .terminal-chart-host')
+    .evaluate(node=>node.getBoundingClientRect().height);
+  if(chartHeight<890)throw new Error('Homepage chart does not fill 900px desktop viewport: '+chartHeight);
+  // It is still deterministic simulated market data with execution disabled.
+  const capabilities=await (await page.request.get(origin+'/qsyn/api/v1/studio/capabilities')).json();
+  if(capabilities.market_data!=='simulated' || capabilities.execution_enabled!==false ||
+     capabilities.live_trading_enabled!==false)
+    throw new Error('Clean homepage must not alter simulated-only market/trading contract');
 
   // The /qsyn/terminal route retains existing chart compare, watchlist,
   // private-workspace and broker-safety behavior.
@@ -194,6 +203,11 @@ try {
   const mobileChartTop=await mobile.locator('.qsyn-home-chart .terminal-chart-host')
     .evaluate(node=>node.getBoundingClientRect().top);
   if(mobileChartTop>8)throw new Error('Mobile chart is not at top of page');
+  const mobileChartHeight=await mobile.locator('.qsyn-home-chart .terminal-chart-host')
+    .evaluate(node=>node.getBoundingClientRect().height);
+  if(mobileChartHeight<830)throw new Error('Mobile chart should fill screen: '+mobileChartHeight);
+  if(await mobile.locator('.qsyn-home-chart .terminal-footnote').filter({visible:true}).count())
+    throw new Error('Mobile homepage footnotes are visible');
   if(await mobile.evaluate(()=>document.documentElement.scrollWidth>innerWidth+2))
     throw new Error('Full-width homepage overflows on mobile');
   await mobile.goto(origin+'/qsyn/terminal?view=tools',{waitUntil:'domcontentloaded'});
@@ -208,7 +222,7 @@ try {
   if(browserRequests.some(url=>/(\/api\/v1\/(placeorder|cancelorder|modifyorder)|\/auth\/login|\/socket\.io)/i.test(url)))
     throw new Error('Terminal unexpectedly requested broker, auth or order execution endpoints');
   if(browserErrors.length)throw new Error('Browser exceptions: '+JSON.stringify(browserErrors));
-  console.log('PASS: clean top-aligned /qsyn/ chart-only homepage, legacy rollback, terminal, mobile, CSP and no order calls');
+  console.log('PASS: full-viewport OpenAlgo-only homepage, legacy rollback, terminal, mobile, CSP and no order calls');
 }finally{
   if(browser)await browser.close();
   if(server)server.kill('SIGTERM');
