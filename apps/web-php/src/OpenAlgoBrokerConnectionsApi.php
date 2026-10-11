@@ -169,7 +169,7 @@ final class OpenAlgoBrokerConnectionsApi
             if (strlen($url) > 350 || !is_array($parts)
                 || ($parts['scheme'] ?? null) !== 'https'
                 || ($parts['path'] ?? null) !== '/login'
-                || isset($parts['user'], $parts['pass']) || isset($parts['port'])
+                || isset($parts['user']) || isset($parts['pass']) || isset($parts['port'])
                 || isset($parts['query']) || isset($parts['fragment'])
                 || !is_string($host)
                 || preg_match('/^[a-zA-Z0-9][a-zA-Z0-9.-]{1,251}[a-zA-Z0-9]$/D', $host) !== 1
