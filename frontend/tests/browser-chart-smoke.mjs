@@ -1,7 +1,7 @@
 // Canonical React routing replaces the retired legacy chart and Rust admin
 // documents. Admin APIs remain independently gated by server-side sessions.
 import {spawn} from 'node:child_process';
-import {mkdir,copyFile,rm} from 'node:fs/promises';
+import {mkdir,copyFile,rm,readFile} from 'node:fs/promises';
 import {createServer} from 'node:net';
 import {resolve} from 'node:path';
 import {setTimeout as delay} from 'node:timers/promises';
@@ -46,9 +46,12 @@ try{
     if(await page.locator('iframe').count())throw Error('Embedded old dashboard iframe');
   }
   // Direct PHP entrypoints cannot be used as bypass URLs.
-  const direct=await page.request.get(origin+'/admin-rust.php',{maxRedirects:0});
-  if(direct.status()!==302||direct.headers().location!=='/qsyn/terminal?view=operations')
-    throw Error('Direct Rust admin PHP still serves standalone page');
+  // The PHP -S test router rewrites direct documents through index.php.
+  // Inspect the physical fallback shim independently for Cloudways deployments.
+  const shim=await readFile(resolve(root,'apps/web-php/public/admin-rust.php'),'utf8');
+  if(!shim.includes("Location: /qsyn/terminal?view=operations") ||
+      !shim.includes("no-store") || shim.includes('<!doctype html>'))
+    throw Error('Physical admin-rust.php was not retired');
   const state=await page.request.get(origin+'/qsyn/api/v1/admin/rust/state');
   if(state.status()!==200||(await state.json()).authenticated!==false)
     throw Error('Administrator endpoint unexpectedly authenticated');
