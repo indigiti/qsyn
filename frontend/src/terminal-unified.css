@@ -55,3 +55,8 @@
  .terminal-shell .terminal-market-embedded .qsyn-crypto-grid{height:65vh;min-height:400px}
  .terminal-shell .qt-strategy-canvas{height:370px}
 }
+
+/* Native terminal tool cards can be buttons, never external page links. */
+.terminal-shell button.terminal-tool{width:100%;text-align:left;color:var(--q-fg);cursor:pointer}
+.terminal-shell button.terminal-tool span{color:var(--q-accent)}
+.terminal-shell .qd-ghost-button,.terminal-shell .qd-wide-link{cursor:pointer}
