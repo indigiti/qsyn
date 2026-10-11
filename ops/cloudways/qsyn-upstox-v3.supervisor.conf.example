@@ -68,3 +68,32 @@ stdout_logfile=/ABSOLUTE/PRIVATE/logs/v3-history-A.log
 stdout_logfile_maxbytes=10MB
 stdout_logfile_backups=5
 environment=QSYN_PRIVATE_HISTORY_HTTP_ENABLED="1",QSYN_TRADING_ENABLED="0",QSYN_ENABLE_LIVE_TRADING="0"
+
+
+; QSYN native Upstox NSE/BSE INDEX subscriber; independent of the CE/PE worker.
+; Operator must approve real current-BOD index mapping and separate display
+; AND retention rights; a stored OAuth token or a green app profile alone is
+; NOT enough. This is an executable example, never auto-started by DigiOps.
+[program:qsyn-upstox-v3-index-ACCOUNT_A]
+command=/ABSOLUTE/PRIVATE/app/bin/qsyn-upstox-index-worker run /ABSOLUTE/PRIVATE/config/index-worker-plan.json
+directory=/ABSOLUTE/PRIVATE/app
+user=ACCOUNT_UNIX_OWNER
+autostart=false
+autorestart=unexpected
+exitcodes=0
+startsecs=5
+startretries=3
+stopsignal=TERM
+stopwaitsecs=35
+stopasgroup=true
+killasgroup=true
+redirect_stderr=true
+stdout_logfile=/ABSOLUTE/PRIVATE/logs/v3-index-worker-A.log
+stdout_logfile_maxbytes=10MB
+stdout_logfile_backups=5
+environment=QSYN_UPSTOX_INDEX_WORKER_ENABLE="0",QSYN_TRADING_ENABLED="0",QSYN_ENABLE_LIVE_TRADING="0"
+
+; IMPORTANT: Supervisor service activation requires a separate host-operator
+; change of QSYN_UPSTOX_INDEX_WORKER_ENABLE to "1" AFTER provisioning 0700
+; folders, 0600 files, approved BOD keys, exchange licenses and private
+; authenticated TLS WebSocket chart ingress. No public listener or orders.

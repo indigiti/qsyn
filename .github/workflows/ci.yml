@@ -62,6 +62,8 @@ jobs:
           php apps/web-php/tests/UpstoxOperatorOAuthTest.php
           php -l apps/web-php/src/NativeUpstoxWebApi.php
           python3 apps/web-php/tests/NativeUpstoxWebHttpSmoke.py
+          php -l apps/web-php/src/NativeUpstoxProfileVerifier.php
+          php apps/web-php/tests/NativeUpstoxProfileVerifierTest.php
           php -l apps/web-php/src/FileMockAccountSelection.php
           php -l apps/web-php/src/AccountApi.php
           php -l apps/web-php/src/SimulatedAccountBars.php

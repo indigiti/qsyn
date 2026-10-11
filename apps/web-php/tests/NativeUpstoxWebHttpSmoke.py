@@ -79,6 +79,14 @@ def main():
             code,configured,_=request(admin,origin,API+"status")
             assert code==200 and configured["configured"]
             assert configured["token_stored"] is False
+            assert request(guest,origin,API+"verify","POST",{})[0]==401
+            assert request(admin,origin,API+"verify","POST",{})[0]==403
+            assert request(admin,origin,API+"verify","POST",{},'0'*64)[0]==403
+            assert request(admin,origin,API+"verify","POST",{},csrf,
+                           "http://attacker.invalid")[0]==403
+            code,not_ready,_=request(admin,origin,API+"verify","POST",{},csrf)
+            assert code==200 and not not_ready["session_verified"]
+            assert not not_ready["index_feed_activated"] and not not_ready["trading_enabled"]
             assert SECRET not in json.dumps(configured)
             assert request(admin,origin,API+"begin","POST",{},csrf,
                            "http://attacker.invalid")[0]==403

@@ -153,6 +153,7 @@ async function openAlgoAdminPost(operation, account_id, csrf){
 const NATIVE_UPSTOX_API='/qsyn/api/v1/admin/upstox/';
 function NativeUpstoxPanel(){
   const [status,setStatus]=useState(null),[busy,setBusy]=useState(false);
+  const [profileCheck,setProfileCheck]=useState(null);
   const [notice,setNotice]=useState('Checking native Upstox authorization readiness…');
   const [form,setForm]=useState({client_id:'',client_secret:'',expected_user_id:'',confirmed:false});
   const load=useCallback(async()=>{
@@ -160,6 +161,7 @@ function NativeUpstoxPanel(){
       const data=await jsonGet(NATIVE_UPSTOX_API+'status');
       if(data.schema!=='QSYN-NATIVE-UPSTOX-WEB/1')throw Error('unexpected_schema');
       setStatus(data);
+      setProfileCheck(null);
       setNotice(data.token_stored
         ?'A provider-identity-checked Upstox token is stored privately. Current validity, index display rights and live feed remain unverified.'
         :data.configured?'Upstox app configured. Authorize using your Upstox login.':'Set up your Upstox Developer App before authorizing.');
@@ -181,6 +183,11 @@ function NativeUpstoxPanel(){
         setForm({client_id:'',client_secret:'',expected_user_id:'',confirmed:false});
         await load();
         setNotice('Upstox application saved privately. Register the exact callback URL in Upstox, then select Connect Upstox.');
+      }else if(operation==='verify'){
+        setProfileCheck(data);
+        setNotice(data.session_verified
+          ?'Upstox profile verified for the expected account on this check. Exchange display licensing, Rust V3 feed and live index charts remain separately gated.'
+          :'Upstox profile could not be verified. The token may have expired or the account is inactive; reauthorize if necessary.');
       }else if(operation==='begin'){
         const url=new URL(data.authorization_url);
         if(url.protocol!=='https:'||url.hostname!=='api.upstox.com'
@@ -195,7 +202,7 @@ function NativeUpstoxPanel(){
   return <div className="qt-openalgo-setup">
     <p role="status" className="qt-message">{notice}</p>
     <div className="qt-summary">
-      <div><strong>Upstox OAuth token</strong><p>{status?.token_stored?'Stored privately · session validity not checked':status?.configured?'Authorization required':'Not configured'}</p></div>
+      <div><strong>Upstox OAuth token</strong><p>{profileCheck?.session_verified?'Profile verified now · not continuously monitored':status?.token_stored?'Stored privately · verify current session':status?.configured?'Authorization required':'Not configured'}</p></div>
       <div><strong>Index feed / license</strong><p>Not activated · no live prices</p></div>
       <div><strong>QSYN order execution</strong><p>Disabled</p></div>
     </div>
@@ -228,6 +235,9 @@ function NativeUpstoxPanel(){
     {status?.configured&&<div className="qt-actions">
       <button type="button" className="terminal-action" disabled={busy}
         onClick={()=>void action('begin',{})}>Connect Upstox (OAuth)</button>
+      <button type="button" className="terminal-action terminal-secondary-action"
+        disabled={busy||!status.token_stored} onClick={()=>void action('verify',{})}>
+        <ShieldCheck size={16}/> Verify current Upstox session</button>
       <button type="button" className="terminal-action terminal-secondary-action" disabled={busy}
         onClick={()=>void load()}><RefreshCw size={16}/> Refresh OAuth status</button>
     </div>}

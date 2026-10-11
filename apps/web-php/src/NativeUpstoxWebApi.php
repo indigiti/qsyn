@@ -62,7 +62,7 @@ final class NativeUpstoxWebApi
                 return [503, ['error' => 'private_upstox_configuration_unavailable']];
             }
         }
-        if (!in_array($operation, ['setup', 'begin'], true)) {
+        if (!in_array($operation, ['setup', 'begin', 'verify'], true)) {
             return [404, ['error' => 'not_found']];
         }
         if (!RustAdmin::verifyCsrf((string)($server['HTTP_X_CSRF_TOKEN'] ?? ''))) {
@@ -83,10 +83,30 @@ final class NativeUpstoxWebApi
         }
         if (!is_array($body)
             || ($operation === 'setup' && array_is_list($body))
-            || ($operation === 'begin' && trim($raw) !== '{}')) {
+            || (in_array($operation, ['begin', 'verify'], true) && trim($raw) !== '{}')) {
             return [422, ['error' => 'invalid_upstox_request']];
         }
 
+        if ($operation === 'verify') {
+            if (trim($raw) !== '{}') {
+                return [422, ['error' => 'invalid_upstox_request']];
+            }
+            try {
+                $root = self::privateDir(false);
+                if ($root === null) throw new \RuntimeException('private_oauth_missing');
+                $config = self::config($root);
+                if ($config === null) throw new \RuntimeException('upstox_app_missing');
+                $check = NativeUpstoxProfileVerifier::verify(
+                    $root, $config['expected_user_id'], $exchange
+                );
+                return [200, array_merge([
+                    'schema' => self::SCHEMA,
+                    'token_stored' => (new UpstoxOperatorOAuth($root))->status()['token_stored'],
+                ], $check)];
+            } catch (\Throwable) {
+                return [503, ['error' => 'upstox_profile_check_unavailable']];
+            }
+        }
         if ($operation === 'setup') {
             if (array_keys($body) !== ['client_id', 'client_secret', 'expected_user_id', 'confirmed']
                 || $body['confirmed'] !== true
