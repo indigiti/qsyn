@@ -62,5 +62,21 @@ assert.equal(f.shortArmed[60],null);
 // Missing candles do not contribute to the statistical lookback.
 const missing=bars.filter((_,i)=>i!==1);
 const m=calculateWickScience(missing,opts,context);
-assert.ok(m.values.upperZone.every(x=>x===null));
+// 19 intact prior setup candles are not enough; after another full setup
+// candle, the history rewarms and zones may legitimately return.
+assert.ok(m.values.upperZone.slice(0,-1).every(x=>x===null));
+assert.ok(Number.isFinite(m.values.upperZone.at(-1)));
+
+// Long reversal must use the same cross-open confirmation and opposite target.
+const longBars=bars.map(x=>({...x}));
+longBars[60]={...longBars[60],open:100,high:101,low:97,close:99};
+longBars[61]={...longBars[61],open:99,high:101,low:98,close:101};
+longBars[62]={...longBars[62],open:101,high:102,low:99,close:102};
+const l=calculateWickScience(longBars,opts,context).values;
+assert.equal(l.longArmed[60],1);
+assert.equal(l.longEntry[61],1);
+assert.ok(Math.abs(l.activeStop[61]-96.9)<1e-9);
+assert.equal(l.longTP[62],1);
+assert.equal(l.longSL[62],null);
+assert.equal(l.shortEntry[61],null);
 console.log('Wick Science MFE state machine: PASS');
