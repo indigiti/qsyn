@@ -27,8 +27,12 @@ pub fn active() -> bool {
 }
 
 fn replaced_on_disk(path: &Path) -> bool {
-    let Ok(running) = fs::metadata("/proc/self/exe") else { return false };
-    let Ok(published) = fs::symlink_metadata(path) else { return false };
+    let Ok(running) = fs::metadata("/proc/self/exe") else {
+        return false;
+    };
+    let Ok(published) = fs::symlink_metadata(path) else {
+        return false;
+    };
     if !published.file_type().is_file() || published.file_type().is_symlink() {
         return false;
     }
