@@ -247,28 +247,35 @@ button:focus-visible,a:focus-visible{outline:2px solid var(--q-accent);outline-o
 .qsyn-home-chart .oac-topbar__layouts .oac-glyph { flex:none; }
 
 
-/* QSYN chart-first homepage: native symbol search and watchlist only.
-   The official grid's layout and saved-workspace buttons are reparented next to
-   Watchlist without changing their native menu and persistence handlers. */
+/* Keep OpenAlgo's menu-owning layout buttons in the native grid bar.
+   An in-flow, noninteractive slot beside Watchlist reserves the same row
+   space; a floated bar is aligned to the slot without moving click handlers. */
 .qsyn-homepage{position:relative;min-height:100dvh}
 .qsyn-homepage .qsyn-crypto-grid{width:100%;height:100dvh;min-height:420px}
-.qsyn-homepage .oac-widget.oac-grid__bar{
-  height:0;min-height:0;padding:0;border:0;overflow:visible;
-  opacity:0;pointer-events:none
+.qsyn-homepage .qsyn-grid-toolbar-slot{
+  display:inline-block;width:72px;min-width:72px;height:32px;flex:none;
+  pointer-events:none
 }
-.qsyn-homepage .oac-topbar .qsyn-native-chart-action,
+.qsyn-homepage .oac-widget.oac-grid__bar{
+  position:absolute;z-index:65;left:0;top:0;
+  display:flex;align-items:center;gap:4px;
+  min-height:32px;height:32px;width:72px;
+  padding:0;border:0;background:transparent;overflow:visible;
+}
+.qsyn-homepage .oac-grid__bar:not([data-placed="true"]){visibility:hidden}
+.qsyn-homepage .oac-grid__bar > :not(.oac-grid__layout):not(.oac-grid__saved){display:none!important}
+.qsyn-homepage .oac-grid__bar .oac-grid__layout,
+.qsyn-homepage .oac-grid__bar .oac-grid__saved,
 .qsyn-homepage .oac-topbar__watchlist{
   display:inline-flex;align-items:center;justify-content:center;
-  width:32px;min-width:32px;height:32px;padding:0;gap:0;position:relative;
-  font-size:0;flex:none
+  width:32px;min-width:32px;height:32px;flex:none;
+  padding:0;gap:0;font-size:0;position:relative
 }
-.qsyn-homepage .oac-topbar .qsyn-native-chart-action .oac-glyph,
+.qsyn-homepage .oac-grid__bar .oac-grid__bar-text,
+.qsyn-homepage .oac-grid__bar .oac-chev{display:none}
+.qsyn-homepage .oac-grid__bar .oac-glyph,
 .qsyn-homepage .oac-topbar__watchlist .oac-glyph{
-  display:inline-flex;font-size:14px;flex:none
-}
-.qsyn-homepage .oac-topbar .qsyn-native-chart-action .oac-grid__bar-text,
-.qsyn-homepage .oac-topbar .qsyn-native-chart-action .oac-chev{
-  display:none
+  display:inline-flex;flex:none;font-size:14px
 }
 .qsyn-screenreader-status{
   position:absolute;width:1px;height:1px;padding:0;margin:-1px;
