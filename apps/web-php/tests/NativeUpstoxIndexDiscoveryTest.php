@@ -26,10 +26,10 @@ file_put_contents($file,json_encode($session,JSON_THROW_ON_ERROR));
 chmod($file,0600);
 
 $rows=[
-    'NIFTY'=>['NSE_INDEX','NSE','NIFTY','Nifty 50','NSE_INDEX|Nifty 50'],
-    'BANK NIFTY'=>['NSE_INDEX','NSE','BANKNIFTY','Nifty Bank','NSE_INDEX|Nifty Bank'],
-    'FINNIFTY'=>['NSE_INDEX','NSE','FINNIFTY','Nifty Fin Service','NSE_INDEX|Nifty Fin Service'],
-    'MIDCPNIFTY'=>['NSE_INDEX','NSE','MIDCPNIFTY','Nifty Mid Select','NSE_INDEX|Nifty Mid Select'],
+    'Nifty 50'=>['NSE_INDEX','NSE','NIFTY','Nifty 50','NSE_INDEX|Nifty 50'],
+    'Nifty Bank'=>['NSE_INDEX','NSE','BANKNIFTY','Nifty Bank','NSE_INDEX|Nifty Bank'],
+    'Nifty Fin Service'=>['NSE_INDEX','NSE','FINNIFTY','Nifty Fin Service','NSE_INDEX|Nifty Fin Service'],
+    'Nifty Mid Select'=>['NSE_INDEX','NSE','MIDCPNIFTY','Nifty Mid Select','NSE_INDEX|Nifty Mid Select'],
     'India VIX'=>['NSE_INDEX','NSE','INDIA VIX','India VIX','NSE_INDEX|India VIX'],
     'SENSEX'=>['BSE_INDEX','BSE','SENSEX','SENSEX','BSE_INDEX|SENSEX'],
 ];
@@ -103,7 +103,7 @@ try {
     }
     $ambiguous=static function($url,$bearer) use ($mock) {
         $resp=$mock($url,$bearer);
-        if (str_contains($url,'query=NIFTY&')) {
+        if (str_contains($url,'query=Nifty%2050&')) {
             $resp['body']['data'][]=[
                 'segment'=>'NSE_INDEX','exchange'=>'NSE','instrument_type'=>'INDEX',
                 'trading_symbol'=>'NIFTY',
@@ -120,7 +120,7 @@ try {
     }
     $multipage=static function($url,$bearer) use ($mock) {
         $resp=$mock($url,$bearer);
-        if (str_contains($url,'query=NIFTY&')) {
+        if (str_contains($url,'query=Nifty%2050&')) {
             $resp['body']['meta_data']['page']['total_pages']=2;
         }
         return $resp;
