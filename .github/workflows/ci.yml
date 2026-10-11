@@ -74,6 +74,8 @@ jobs:
           python3 apps/web-php/tests/PrivateIngressProbeTest.py
           python3 -m py_compile apps/web-php/tests/PrivateBaselineProbe.py apps/web-php/tests/PrivateBaselineProbeTest.py
           python3 apps/web-php/tests/PrivateBaselineProbeTest.py
+          php -l apps/web-php/src/IndiaIndexCatalog.php
+          php apps/web-php/tests/IndiaIndexCatalogTest.php
           php -l apps/web-php/src/SimulatedOptionsStudio.php
           php -l apps/web-php/public/studio.php
           php apps/web-php/tests/SimulatedOptionsStudioTest.php
@@ -125,6 +127,10 @@ jobs:
           curl --fail --silent http://127.0.0.1:18080/qsyn/api/v1/diagnostics/rust-stream | grep -q '"status":"offline"'
           curl --fail --silent http://127.0.0.1:18080/qsyn/api/v1/admin/rust/state | grep -q '"configured":false'
           curl --fail --silent http://127.0.0.1:18080/qsyn/admin/rust | grep -q 'Rust service control'
+          curl --fail --silent http://127.0.0.1:18080/qsyn/api/v1/india/indexes | grep -q 'QSYN-INDIA-INDEX-CATALOG/1'
+          test "$(curl --silent -o /tmp/qsyn-india.json -w '%{http_code}' 'http://127.0.0.1:18080/qsyn/api/v1/india/bars?exchange=NSE_INDEX&symbol=NIFTY&interval=1m')" = 503
+          grep -q 'india_index_feed_not_authorized' /tmp/qsyn-india.json
+          test "$(curl --silent -o /tmp/qsyn-india.json -w '%{http_code}' 'http://127.0.0.1:18080/qsyn/api/v1/india/bars?exchange=NSE_INDEX&symbol=../etc&interval=1m')" = 422
           # Health checks do not trigger new exchange subscriptions.
           test "$(curl --silent -o /tmp/qsyn-crypto-health.json -w '%{http_code}' 'http://127.0.0.1:18080/qsyn/api/v1/crypto/health?exchange=BINANCE&market=spot&symbol=../bad&interval=1m')" = 422
           grep -q 'invalid_crypto_request' /tmp/qsyn-crypto-health.json
@@ -174,6 +180,9 @@ jobs:
       - run: node --check src/main.js
         working-directory: frontend
       - run: npm run build
+        working-directory: frontend
+      - name: Verify India index native discovery and strict license gates
+        run: node tests/india-index-contract.mjs
         working-directory: frontend
       - run: |
           test -s frontend/dist/chart.js
