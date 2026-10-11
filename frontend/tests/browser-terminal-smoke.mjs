@@ -63,28 +63,24 @@ try {
     throw new Error('Duplicate homepage exchange and grid dropdowns remain');
   await page.waitForFunction(()=>document.querySelectorAll('.qsyn-crypto-grid canvas').length>0,null,{timeout:12000});
   await page.locator('.qsyn-home-chart .oac-sym input').first().waitFor({timeout:12000});
-  const arrange=page.locator('.qsyn-home-chart .oac-topbar .oac-grid__layout').first();
-  const saved=page.locator('.qsyn-home-chart .oac-topbar .oac-grid__saved').first();
+  const arrange=page.locator('.qsyn-home-chart .oac-grid__bar .oac-grid__layout').first();
+  const saved=page.locator('.qsyn-home-chart .oac-grid__bar .oac-grid__saved').first();
   const watchlist=page.locator('.qsyn-home-chart .oac-topbar .oac-topbar__watchlist').first();
   await arrange.waitFor({state:'visible',timeout:15000});
   await saved.waitFor({state:'visible',timeout:15000});
   await watchlist.waitFor({state:'visible',timeout:15000});
-  const joined=await arrange.evaluate(el=>({
-    saved:el.nextElementSibling?.classList.contains('oac-grid__saved'),
-    watchlist:el.nextElementSibling?.nextElementSibling?.classList.contains('oac-topbar__watchlist'),
-    textVisible:getComputedStyle(el.querySelector('.oac-grid__bar-text')).display,
-    tooltip:el.getAttribute('aria-label')
-  }));
-  if(!joined.saved || !joined.watchlist || joined.textVisible!=='none' || !joined.tooltip)
-    throw new Error('Native Layouts icons were not placed beside Watchlist: '+JSON.stringify(joined));
+  const joined=await arrange.evaluate(el=>{
+    const a=el.getBoundingClientRect();
+    const s=el.parentElement.querySelector('.oac-grid__saved').getBoundingClientRect();
+    const w=document.querySelector('.qsyn-home-chart .oac-topbar__watchlist').getBoundingClientRect();
+    return {near:s.right<=w.left+4&&w.left-s.right<20,
+      sameRow:Math.abs(a.top-w.top)<5,
+      textVisible:getComputedStyle(el.querySelector('.oac-grid__bar-text')).display,
+      tooltip:el.getAttribute('aria-label')};
+  });
+  if(!joined.near || !joined.sameRow || joined.textVisible!=='none' || !joined.tooltip)
+    throw new Error('Native icon-only Layouts not beside Watchlist: '+JSON.stringify(joined));
   await arrange.click();
-  await page.waitForTimeout(750);
-  console.log('LAYOUT-DIAGNOSTICS',JSON.stringify(await page.evaluate(()=>({
-    pickerCount:document.querySelectorAll('.oac-grid__picker').length,
-    pickerBoxes:[...document.querySelectorAll('.oac-grid__picker')].map(el=>({display:getComputedStyle(el).display,visibility:getComputedStyle(el).visibility,opacity:getComputedStyle(el).opacity,rect:el.getBoundingClientRect().toJSON()})),
-    overlays:[...document.querySelectorAll('.oac-grid__overlay')].map(el=>({children:el.children.length,html:el.outerHTML.slice(0,400)})),
-    layoutButton:document.querySelector('.oac-topbar .oac-grid__layout')?.outerHTML.slice(0,500)
-  }))));
   await page.locator('.oac-grid__picker[role="menu"]').waitFor({timeout:12000});
   await page.keyboard.press('Escape');
   await watchlist.click();
