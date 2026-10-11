@@ -1,5 +1,5 @@
 import React, {useEffect,useState,useCallback} from 'react';
-import {Activity,AlertTriangle,CheckCircle2,ClipboardCopy,LockKeyhole,RefreshCw,Server,ShieldCheck,Wallet,Wifi,WifiOff} from 'lucide-react';
+import {Activity,AlertTriangle,CheckCircle2,ClipboardCopy,LockKeyhole,RefreshCw,Search,Server,ShieldCheck,Wallet,Wifi,WifiOff} from 'lucide-react';
 import {CRYPTO_MARKETS} from './crypto-catalog.js';
 import {INDIA_INDEX_MARKETS} from './india-index-catalog.js';
 import './terminal-unified.css';

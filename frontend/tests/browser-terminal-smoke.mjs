@@ -54,7 +54,7 @@ try {
   // script-src 'self' is deliberately strict, so host-injected inline script
   // blocks should be diagnosed outside the QSYN bundle, not whitelisted.
   const firstHtml=await response.text();
-  const inlineScript=/<script\\b(?![^>]*\\bsrc\\s*=)[^>]*>/i;
+  const inlineScript=/<script\b(?![^>]*\bsrc\s*=)[^>]*>/i;
   if(inlineScript.test(firstHtml))
     throw new Error('QSYN homepage emitted an inline script prohibited by its own CSP');
   if(!String(response.headers()['content-security-policy']||'').includes("script-src 'self'"))
@@ -273,10 +273,75 @@ try {
   if(await page.locator('.qt-table tbody tr').count()!==7)
     throw new Error('Seven crypto worker diagnostics not rendered');
   if(await page.locator('iframe').count())throw new Error('Unified terminal used iframe');
+  // Reproduce the real configured Upstox operator state. Without this mock,
+  // unconfigured CI never renders the gated Search icon, and an undefined
+  // component name can break the entire Brokers page on a real deployment.
+  let indexDiscoverCalls=0;
+  await page.route('**/qsyn/api/v1/admin/upstox/status',async route=>{
+    await route.fulfill({status:200,contentType:'application/json',
+      body:JSON.stringify({
+        schema:'QSYN-NATIVE-UPSTOX-WEB/1',
+        configured:true,token_stored:true,
+        csrf:'f'.repeat(64),
+        provider_user_id_checked_at_exchange:true,
+        index_feed_activated:false,trading_enabled:false,
+      })});
+  });
+  await page.route('**/qsyn/api/v1/admin/upstox/discover',async route=>{
+    const req=route.request(); indexDiscoverCalls++;
+    if(req.method()!=='POST'||req.headers()['x-csrf-token']!=='f'.repeat(64)
+      ||req.postData()!=='{}')
+      throw new Error('Native Upstox index lookup lost POST / CSRF / empty object contract');
+    await route.fulfill({status:200,contentType:'application/json',
+      headers:{'X-QSYN-Request-ID':'0123456789abcdef'},
+      body:JSON.stringify({
+        schema:'QSYN-UPSTOX-INDEX-DISCOVERY/1',
+        status:'incomplete',code:'UPSTOX_INDEX_KEYS_INCOMPLETE',
+        session_verified_now:true,mapping_fully_resolved:false,
+        current_bod_attested:false,
+        exchange_display_entitlement_verified:false,
+        index_feed_activated:false,trading_enabled:false,
+        instruments:[{symbol:'NIFTY',exchange:'NSE_INDEX',
+          status:'not_found',instrument_key:null}],
+      })});
+  });
   await page.getByRole('button',{name:'Brokers',exact:true}).first().click();
   await page.getByRole('heading',{name:'Accounts & authorizations'}).waitFor();
-  if(!new URL(page.url()).pathname==='/qsyn/terminal/brokers')throw new Error('Broker view not routed in React');
+  if(new URL(page.url()).pathname!=='/qsyn/terminal/brokers')
+    throw new Error('Broker view not routed in React');
   await page.getByRole('button',{name:'Refresh broker status'}).waitFor({timeout:12000});
+  const lookupButton=page.getByRole('button',{name:'Discover index instrument keys'});
+  await lookupButton.waitFor({state:'visible',timeout:12000});
+  if(!await lookupButton.isEnabled())
+    throw new Error('Configured Upstox failed to render enabled instrument discovery');
+  if(browserErrors.length)
+    throw new Error('Configured broker produced a JavaScript exception: '+JSON.stringify(browserErrors));
+  await lookupButton.click();
+  await page.getByRole('heading',{name:'Upstox NSE/BSE index lookup'}).waitFor();
+  if(indexDiscoverCalls!==1)
+    throw new Error('Upstox browser discovery action did not send exactly one request');
+  if(await page.getByText('UPSTOX_INDEX_KEYS_INCOMPLETE').count()<1)
+    throw new Error('Redacted Upstox discovery diagnostic not rendered');
+  if(browserErrors.length)
+    throw new Error('Upstox discovery UI crashed: '+JSON.stringify(browserErrors));
+
+  // The actual failure occurred on a direct pretty-URL reload after the
+  // account was already configured. Keep the mock while testing deep-link.
+  const brokerResponse=await page.goto(origin+'/qsyn/terminal/brokers',{waitUntil:'domcontentloaded'});
+  if(brokerResponse.status()!==200)
+    throw new Error('Protected Brokers HTML returned '+brokerResponse.status());
+  const brokerHtml=await brokerResponse.text();
+  if(/<script\b(?![^>]*\bsrc\s*=)[^>]*>/i.test(brokerHtml))
+    throw new Error('QSYN Brokers HTML includes an inline script prohibited by its CSP');
+  if(!String(brokerResponse.headers()['content-security-policy']||'')
+      .includes("script-src 'self'"))
+    throw new Error('Brokers HTML lost its strict script-src CSP');
+  await page.getByRole('heading',{name:'Accounts & authorizations'}).waitFor();
+  await page.getByRole('button',{name:'Discover index instrument keys'}).waitFor({state:'visible'});
+  if(browserErrors.length)
+    throw new Error('Brokers deep-link crashed: '+JSON.stringify(browserErrors));
+  await page.unroute('**/qsyn/api/v1/admin/upstox/status');
+  await page.unroute('**/qsyn/api/v1/admin/upstox/discover');
   await page.getByRole('button',{name:'Operations',exact:true}).first().click();
   await page.getByRole('heading',{name:'Service administration'}).waitFor();
   if(await page.getByRole('button',{name:'Restart',exact:true}).count() &&
