@@ -245,3 +245,14 @@ button:focus-visible,a:focus-visible{outline:2px solid var(--q-accent);outline-o
 }
 .qsyn-home-chart .oac-topbar__layouts-name { display:none; }
 .qsyn-home-chart .oac-topbar__layouts .oac-glyph { flex:none; }
+
+
+/* Chart-first crypto homepage: native OpenAlgo grid and toolbar remain functional. */
+.qsyn-homepage{position:relative;min-height:100dvh}
+.qsyn-homepage .qsyn-crypto-grid{width:100%;height:100dvh;min-height:420px}
+.qsyn-crypto-selector{position:absolute;top:7px;left:8px;z-index:35;display:flex;align-items:center;gap:6px;max-width:calc(100% - 16px)}
+.qsyn-crypto-selector select{max-width:260px;font:12px system-ui;color:var(--q-fg);background:var(--q-card);border:1px solid var(--q-line);border-radius:5px;padding:7px 9px;cursor:pointer}
+.qsyn-crypto-source{font:11px system-ui;color:var(--q-muted);background:var(--q-card);border-radius:4px;padding:6px 8px;max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+@media(max-width:850px){.qsyn-crypto-source{display:none}.qsyn-crypto-selector select{max-width:165px}}
+/* Leave sufficient room for exchange selection without hiding native toolbar actions. */
+.qsyn-homepage .oac-gridbar{padding-left:min(390px,40vw)}
