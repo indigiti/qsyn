@@ -217,6 +217,9 @@ jobs:
         working-directory: frontend
       - name: Verify India index native discovery and strict license gates
         run: node tests/india-index-contract.mjs
+      - name: Confirm chart-cancellation guard never masks app errors
+        working-directory: frontend
+        run: node tests/chart-cancellation-contract.mjs
         working-directory: frontend
       - run: |
           test -s frontend/dist/chart.js
