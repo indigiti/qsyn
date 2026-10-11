@@ -39,13 +39,15 @@ fn supported(exchange: &str, market: &str, symbol: &str) -> bool {
         _ => false,
     }
 }
+const MAX_HISTORY_CANDLES:u64=15_016;
 fn valid(req: &Request) -> bool {
     req.exchange.len() <= 16 && req.symbol.len() <= 32 &&
     req.limit.unwrap_or(250) >= 1 && req.limit.unwrap_or(250) <= 300 &&
     req.before.is_none_or(|before| {
         let step=step_seconds(&req.interval).unwrap_or(1);
-        before>=1_500_000_000 && before<=epoch_ms()/1000+step &&
-        before.is_multiple_of(step)
+        before>=1_500_000_000 &&
+        before>=epoch_ms()/1000_u64 - (MAX_HISTORY_CANDLES+300)*step &&
+        before<=epoch_ms()/1000+step && before.is_multiple_of(step)
     }) &&
     step_seconds(&req.interval).is_some() &&
     supported(&req.exchange,&req.market,&req.symbol)
@@ -208,7 +210,7 @@ async fn load(req:&Request)->Result<Vec<Bar>,()> {
     {
         let guard=cache().lock().await;
         if let Some((since,bars))=guard.get(&cache_key) {
-            if since.elapsed()<Duration::from_secs(if live.is_some() {60} else {4}) {
+            if since.elapsed()<Duration::from_secs(if req.before.is_some() || live.is_some() {60} else {4}) {
                 let mut merged=bars.clone();
                 apply_live(req,&mut merged,live,&coinbase_recent);
 
@@ -330,7 +332,7 @@ mod tests {
     }
     #[test]
     fn older_history_cursor_is_bounded_and_provider_specific() {
-        let before=1_696_982_400_u64;
+        let before=(epoch_ms()/1000/86_400)*86_400-86_400;
         for (exchange,market,symbol) in [
             ("BINANCE","spot","BTCUSDT"),
             ("BYBIT","spot","BTCUSDT"),
@@ -370,6 +372,8 @@ mod tests {
             assert!(!valid(&q),"reject unaligned cursor");
             q.before=Some(epoch_ms()/1000 + 604800);
             assert!(!valid(&q),"reject future cursor");
+            q.before=Some(1_696_982_400);
+            assert!(!valid(&q),"reject unbounded history from remote users");
         }
     }
     #[test] fn strict_catalog() {
