@@ -83,6 +83,35 @@ try {
        appearance.content==='none' || !appearance.mask.includes('data:image/svg+xml'))
       throw new Error(name+' lost native accessibility or icon: '+JSON.stringify(appearance));
     if(!await control.isEnabled())throw new Error(name+' control was disabled');
+    const compact=await control.evaluate(el=>{
+      const box=el.getBoundingClientRect();
+      const style=getComputedStyle(el);
+      const tooltip=getComputedStyle(el,'::after');
+      return {width:box.width,fontSize:style.fontSize,text:el.textContent?.trim(),
+        tooltip:tooltip.content,tooltipVisibility:tooltip.visibility,tooltipOpacity:tooltip.opacity};
+    });
+    if(compact.width>36 || compact.fontSize!=='0px' || compact.tooltip!=='"'+name[0].toUpperCase()+name.slice(1)+'"')
+      throw new Error(name+' is not icon-only with a named tooltip: '+JSON.stringify(compact));
+    if(compact.tooltipVisibility!=='hidden' || Number(compact.tooltipOpacity)!==0)
+      throw new Error(name+' tooltip visible without interaction');
+    await control.hover();
+    const hovered=await control.evaluate(el=>{
+      const tooltip=getComputedStyle(el,'::after');
+      return {visibility:tooltip.visibility,opacity:tooltip.opacity};
+    });
+    if(hovered.visibility!=='visible' || Number(hovered.opacity)!==1)
+      throw new Error(name+' tooltip not shown on hover: '+JSON.stringify(hovered));
+    await page.mouse.move(900,300);
+    // Keyboard input must expose exactly the same tooltip for accessibility.
+    await page.keyboard.press('Tab');
+    await control.focus();
+    const focused=await control.evaluate(el=>{
+      const tooltip=getComputedStyle(el,'::after');
+      return {focusVisible:el.matches(':focus-visible'),visibility:tooltip.visibility};
+    });
+    if(!focused.focusVisible || focused.visibility!=='visible')
+      throw new Error(name+' tooltip missing on keyboard focus: '+JSON.stringify(focused));
+    await control.blur();
   }
   if(await page.locator('.qsyn-home-topbar, .qsyn-home-heading, .qsyn-home-chart .terminal-card-head').filter({visible:true}).count())
     throw new Error('Removed homepage topbars/headings reappeared');
