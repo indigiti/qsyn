@@ -173,30 +173,36 @@ struct CoinbaseTrades {
 }
 impl CoinbaseTrades {
     fn on_message(&mut self,req:&Request,v:&Value)->Option<Bar> {
-        if v["type"]!="match" || v["product_id"]!=req.symbol{return None;}
+        if v["type"]!="match" || v["product_id"]!=req.symbol {return None;}
         let price=number(&v["price"])?;
         let volume=number(&v["size"])?;
         let timestamp=chrono::DateTime::parse_from_rfc3339(v["time"].as_str()?).ok()?.timestamp();
         let timestamp=u64::try_from(timestamp).ok()?;
         let minute=timestamp/60*60;
-        if volume<=0.0||price<=0.0||minute>epoch_ms()/1000+60{return None;}
-        let new=match self.latest.take(){
-            Some(mut existing) if existing.time==minute=>{
+        if volume<=0.0 || price<=0.0 || minute>epoch_ms()/1000+60 {return None;}
+        match self.latest.take() {
+            Some(mut existing) if existing.time==minute => {
                 existing.high=existing.high.max(price);
                 existing.low=existing.low.min(price);
                 existing.close=price;
                 existing.volume+=volume;
-                existing
+                self.latest=Some(existing.clone());
+                if self.warmup { None } else { Some(existing) }
             }
-            _=>{
-                self.warmup=true;
-                Bar{time:minute,open:price,high:price,low:price,close:price,volume}
+            Some(existing) if existing.time>minute => {
+                self.latest=Some(existing);
+                None
             }
-        };
-        self.latest=Some(new.clone());
-        // Do not expose a partial first minute as authoritative history.
-        // A reconnect resets the state and begins a fresh warmup.
-        if !self.warmup {Some(new)} else {None}
+            prior => {
+                let next=Bar{time:minute,open:price,high:price,low:price,close:price,volume};
+                // First observed bucket cannot have full-minute trade volume.
+                // Once time crosses into the next bucket with an uninterrupted
+                // subscription, subsequent trade accumulation is complete.
+                self.warmup=prior.is_none();
+                self.latest=Some(next.clone());
+                if self.warmup { None } else { Some(next) }
+            }
+        }
     }
 }
 async fn worker(req:Request) {
