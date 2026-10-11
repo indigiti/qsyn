@@ -256,7 +256,7 @@ export function BrokersWorkspace({openView}){
     setAdmin(auth);
     setIndexCatalog(indexes);
     setLoginTarget(null);setStatuses({});
-    if(auth?.authenticated){
+    if(auth?.authenticated&&selected!=='upstox'){
       try{
         const data=await jsonGet(OPENALGO_ADMIN+'accounts',signal);
         if(signal?.aborted)return;
@@ -270,7 +270,7 @@ export function BrokersWorkspace({openView}){
         setMessage('Private OpenAlgo not provisioned or unavailable. No broker session verified.');
       }
     }else{setInventory(null);setMessage('No production broker session verified');}
-  },[]);
+  },[selected]);
   useEffect(()=>{
     const ctl=new AbortController();void refresh(ctl.signal);
     return()=>ctl.abort();
@@ -339,7 +339,7 @@ export function BrokersWorkspace({openView}){
       description="Native Upstox V3 index market data uses the QSYN Rust WebSocket engine. Other broker plugins remain separately gated."/>
     <div className="qt-summary">
       <section className="terminal-surface"><Wallet size={19}/><span>Configured accounts</span>
-        <strong>{selected==='upstox'?'OAuth pending':(hasAdmin?(inventory?.accounts?.length??'Not provisioned'):'Restricted')}</strong></section>
+        <strong>{selected==='upstox'?'Native Upstox':(hasAdmin?(inventory?.accounts?.length??'Not provisioned'):'Restricted')}</strong></section>
       <section className="terminal-surface"><LockKeyhole size={19}/><span>Exchange display rights</span>
         <strong>Not verified</strong></section>
       <section className="terminal-surface"><ShieldCheck size={19}/><span>QSYN order execution</span>
