@@ -47,14 +47,24 @@ fn ident(s: &str) -> bool {
 }
 // Canonical NSE/BSE index keys may contain spaces; rights must still match exactly.
 fn valid_instrument(s: &str) -> bool {
-    if ident(s) { return true; }
-    let Some((segment, name)) = s.split_once('|') else { return false; };
-    matches!(segment, "NSE_INDEX" | "BSE_INDEX")
-        && !name.is_empty() && name.len() <= 100 && s.len() <= 128
-        && name.as_bytes()[0].is_ascii_alphanumeric()
-        && name.bytes().all(|b| b.is_ascii_alphanumeric()
-            || matches!(b, b' ' | b'.' | b'_' | b'-'))
+    // Check index-like keys before generic identifiers: the generic grammar
+    // accepts pipes and must not bypass canonical index validation.
+    if s.starts_with("NSE_INDEX|") || s.starts_with("BSE_INDEX|") {
+        let Some((segment, name)) = s.split_once('|') else {
+            return false;
+        };
+        return matches!(segment, "NSE_INDEX" | "BSE_INDEX")
+            && !name.is_empty()
+            && name.len() <= 100
+            && s.len() <= 128
+            && name.as_bytes()[0].is_ascii_alphanumeric()
+            && name
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || matches!(b, b' ' | b'.' | b'_' | b'-'));
+    }
+    ident(s)
 }
+
 type Hmac256 = Hmac<Sha256>;
 
 pub struct ChartViewer<'a> {
@@ -276,13 +286,29 @@ mod tests {
         let index = "NSE_INDEX|Nifty 50";
         rights.instruments = vec![index.into()];
         let ticket = signer.issue(&rights, index, 100_000, 30_000).unwrap();
-        assert!(signer.verify(&ticket, 110_000,
-            &viewer("tenantA", "upstoxA", "ownerA", index), &rights).is_ok());
+        assert!(signer
+            .verify(
+                &ticket,
+                110_000,
+                &viewer("tenantA", "upstoxA", "ownerA", index),
+                &rights
+            )
+            .is_ok());
         rights.instruments.clear();
-        assert!(signer.verify(&ticket, 110_000,
-            &viewer("tenantA", "upstoxA", "ownerA", index), &rights).is_err());
-        for bad in ["NSE_INDEX|../secret", "NSE_INDEX|Nifty/50", "NSE_INDEX|",
-                    "OTHER_INDEX|Nifty 50"] {
+        assert!(signer
+            .verify(
+                &ticket,
+                110_000,
+                &viewer("tenantA", "upstoxA", "ownerA", index),
+                &rights
+            )
+            .is_err());
+        for bad in [
+            "NSE_INDEX|../secret",
+            "NSE_INDEX|Nifty/50",
+            "NSE_INDEX|",
+            "OTHER_INDEX|Nifty 50",
+        ] {
             rights.instruments = vec![bad.into()];
             assert!(signer.issue(&rights, bad, 100_000, 30_000).is_err());
         }
