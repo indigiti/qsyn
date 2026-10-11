@@ -221,7 +221,7 @@ button:focus-visible,a:focus-visible{outline:2px solid var(--q-accent);outline-o
   pointer-events:none;
   opacity:0;
   visibility:hidden;
-  transition:opacity 120ms ease;
+  transition:none; /* Immediate and deterministic for pointer/keyboard access. */
 }
 .qsyn-home-chart .oac-topbar__objects:is(:hover,:focus-visible)::after,
 .qsyn-home-chart .oac-topbar__data:is(:hover,:focus-visible)::after,
