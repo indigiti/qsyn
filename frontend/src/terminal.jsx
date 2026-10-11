@@ -127,13 +127,6 @@ function HomepageChart({ theme }) {
       <ChartPanel pane={HOME_PANE} theme={theme} savedState={null}
         revision={0} onMount={ignoreHomepageWidget}/>
     </div>
-    <p className="qsyn-home-disclaimer" role="note">
-      <ShieldAlert size={15}/>
-      Illustrative synthetic premium candles only. No exchange market data, connected broker, executable orders or real-money P&amp;L.
-      <a href="/qsyn/terminal?view=trading">Trading workspace</a>
-      <a href="/qsyn/terminal?view=dashboard">Dashboard</a>
-      <a href="/qsyn/studio">Synthetic Studio</a>
-    </p>
   </main>;
 }
 
