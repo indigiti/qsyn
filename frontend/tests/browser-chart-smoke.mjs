@@ -1,4 +1,5 @@
-// Browser regression for real candlestick painting, not only OHLC footer data.
+// Legacy diagnostic chart regression; the new /qsyn/ homepage uses the React terminal.
+// Verify real candlestick painting, not only OHLC footer data.
 // Run after npm run build with Chromium installed: node tests/browser-chart-smoke.mjs
 import { spawn } from 'node:child_process';
 import { mkdir, mkdtemp, readFile, stat, rm, copyFile, unlink } from 'node:fs/promises';
@@ -95,7 +96,7 @@ try {
         directive: event.violatedDirective, sample: event.sample });
     });
   });
-  await page.goto(origin + '/qsyn/', { waitUntil: 'networkidle', timeout: 20000 });
+  await page.goto(origin + '/qsyn/legacy-chart', { waitUntil: 'networkidle', timeout: 20000 });
   await page.waitForFunction(() => document.body.innerText.includes('120 bars'),
     null, { timeout: 12000 });
   await page.waitForTimeout(1200);
@@ -239,7 +240,7 @@ try {
     viewport: { width: 1600, height: 920 }, deviceScaleFactor: 1.25,
   });
   scaledPage.on('pageerror', err => errors.push(err.stack || err.message));
-  await scaledPage.goto(origin + '/qsyn/', { waitUntil: 'networkidle', timeout: 20000 });
+  await scaledPage.goto(origin + '/qsyn/legacy-chart', { waitUntil: 'networkidle', timeout: 20000 });
   await scaledPage.waitForFunction(() => document.body.innerText.includes('120 bars'),
     null, { timeout: 12000 });
   await scaledPage.waitForTimeout(400);
