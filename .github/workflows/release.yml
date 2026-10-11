@@ -92,6 +92,8 @@ jobs:
           php -l apps/web-php/src/PrivateOpenAlgoReader.php
           php -l apps/web-php/tools/private-broker-gateway.php
           python3 apps/web-php/tests/PrivateBrokerGatewayTest.py
+          php -l apps/web-php/tools/openalgo-upstox-readiness.php
+          python3 apps/web-php/tests/OpenAlgoUpstoxReadinessTest.py
           php -l apps/web-php/tools/private-history-export.php
           python3 apps/web-php/tests/PrivateHistoryExportTest.py
           php -l apps/web-php/tools/private-demo-fixtures.php
@@ -162,6 +164,7 @@ jobs:
           cp apps/web-php/src/PrivateOpenAlgoReader.php staging/private/app/src/PrivateOpenAlgoReader.php
           cp apps/web-php/src/OpenAlgoBrokerConnectionsApi.php staging/private/app/src/OpenAlgoBrokerConnectionsApi.php
           cp apps/web-php/tools/private-broker-gateway.php staging/private/app/tools/private-broker-gateway.php
+          cp apps/web-php/tools/openalgo-upstox-readiness.php staging/private/app/tools/openalgo-upstox-readiness.php
           cp apps/web-php/tools/upstox-oauth.php staging/private/app/tools/upstox-oauth.php
           cp apps/web-php/tools/private-history-export.php staging/private/app/tools/private-history-export.php
           cp apps/web-php/tools/openalgo-local-probe.php staging/private/app/tools/openalgo-local-probe.php
@@ -214,6 +217,7 @@ jobs:
           cp services/stream-rust/target/release/qsyn-private-history staging/private/app/bin/qsyn-private-history
           cp ops/cloudways/qsyn-upstox-v3.supervisor.conf.example staging/private/app/ops/qsyn-upstox-v3.supervisor.conf.example
           cp ops/cloudways/qsyn-private-feed.supervisor.conf.example staging/private/app/ops/qsyn-private-feed.supervisor.conf.example
+          cp ops/openalgo/qsyn-openalgo-upstox.supervisor.conf.example staging/private/app/ops/qsyn-openalgo-upstox.supervisor.conf.example
           cat > staging/RELEASE.json <<EOF
           {
             "schema": "DIGIOPS-BUILD/1",
@@ -246,6 +250,9 @@ jobs:
           test -s staging/private/app/src/OpenAlgoBrokerConnectionsApi.php
           php -l staging/private/app/src/OpenAlgoBrokerConnectionsApi.php
           test -s staging/private/app/tools/private-broker-gateway.php
+          test -s staging/private/app/tools/openalgo-upstox-readiness.php
+          php -l staging/private/app/tools/openalgo-upstox-readiness.php
+          test -s staging/private/app/ops/qsyn-openalgo-upstox.supervisor.conf.example
           test -s staging/private/app/tools/upstox-oauth.php
           test -s staging/private/app/bin/qsyn-upstox-worker
           test -s staging/private/app/bin/qsyn-upstox-history
@@ -343,6 +350,9 @@ jobs:
           test -s verified-release/private/app/src/OpenAlgoBrokerConnectionsApi.php
           php -l verified-release/private/app/src/OpenAlgoBrokerConnectionsApi.php
           test -s verified-release/private/app/tools/private-broker-gateway.php
+          test -s verified-release/private/app/tools/openalgo-upstox-readiness.php
+          php -l verified-release/private/app/tools/openalgo-upstox-readiness.php
+          test -s verified-release/private/app/ops/qsyn-openalgo-upstox.supervisor.conf.example
           test -s verified-release/private/app/tools/private-history-export.php
           test ! -e verified-release/private/runtime/market-license.json
           test ! -e verified-release/private/runtime/openalgo-registry.json

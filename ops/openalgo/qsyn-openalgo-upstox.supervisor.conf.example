@@ -1,0 +1,28 @@
+; QSYN #262: example ONLY — requires Cloudways authorization.
+; Never installed/enabled automatically by DigiOps. The user and paths are placeholders.
+; One segregated OpenAlgo instance per account. Upstream is a full trading
+; application: QSYN's trading flag does NOT disable upstream order endpoints.
+; Lock down native OpenAlgo roles/network independently; use no production
+; Upstox credentials without explicit broker-owner and risk approval.
+[program:qsyn-openalgo-upstox-ACCOUNT]
+command=/bin/bash /ABSOLUTE/PRIVATE/openalgo-upstox/install/openalgo-gunicorn.sh --venv /ABSOLUTE/PRIVATE/openalgo-upstox/.venv --bind 127.0.0.1:5000 --app-dir /ABSOLUTE/PRIVATE/openalgo-upstox --env-file /ABSOLUTE/PRIVATE/openalgo-upstox/.env --proxy-mode subprocess --log-level warning
+directory=/ABSOLUTE/PRIVATE/openalgo-upstox
+user=ISOLATED_NONROOT_USER
+autostart=false
+autorestart=unexpected
+exitcodes=0
+startsecs=15
+startretries=3
+stopsignal=TERM
+stopwaitsecs=35
+stopasgroup=true
+killasgroup=true
+redirect_stderr=true
+stdout_logfile=/ABSOLUTE/PRIVATE/openalgo-upstox-logs/app.log
+stdout_logfile_maxbytes=20MB
+stdout_logfile_backups=5
+environment=FLASK_HOST_IP="127.0.0.1",FLASK_DEBUG="False",QSYN_TRADING_ENABLED="0",QSYN_ENABLE_LIVE_TRADING="0"
+
+; The installer/service owner must independently verify the upstream WS process
+; and root-origin HTTPS reverse proxy with /socket.io upgrade/callback support.
+; Never bind Flask, WSS or ZMQ directly to a public address. No auto-login.
