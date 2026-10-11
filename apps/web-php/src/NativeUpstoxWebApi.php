@@ -62,7 +62,7 @@ final class NativeUpstoxWebApi
                 return [503, ['error' => 'private_upstox_configuration_unavailable']];
             }
         }
-        if (!in_array($operation, ['setup', 'begin', 'verify'], true)) {
+        if (!in_array($operation, ['setup', 'begin', 'verify', 'discover'], true)) {
             return [404, ['error' => 'not_found']];
         }
         if (!RustAdmin::verifyCsrf((string)($server['HTTP_X_CSRF_TOKEN'] ?? ''))) {
@@ -83,10 +83,28 @@ final class NativeUpstoxWebApi
         }
         if (!is_array($body)
             || ($operation === 'setup' && array_is_list($body))
-            || (in_array($operation, ['begin', 'verify'], true) && trim($raw) !== '{}')) {
+            || (in_array($operation, ['begin', 'verify', 'discover'], true) && trim($raw) !== '{}')) {
             return [422, ['error' => 'invalid_upstox_request']];
         }
 
+        if ($operation === 'discover') {
+            if (trim($raw) !== '{}') {
+                return [422, ['error' => 'invalid_upstox_request']];
+            }
+            try {
+                $root = self::privateDir(false);
+                if ($root === null) throw new \RuntimeException('private_oauth_missing');
+                $config = self::config($root);
+                if ($config === null) throw new \RuntimeException('app_not_configured');
+                // Read-only search, with fresh provider profile verification.
+                // Never persists mapping or changes any exchange display right.
+                return [200, NativeUpstoxIndexDiscovery::discover(
+                    $root, $config['expected_user_id'], $exchange
+                )];
+            } catch (\Throwable) {
+                return [503, ['error' => 'upstox_index_discovery_unavailable']];
+            }
+        }
         if ($operation === 'verify') {
             if (trim($raw) !== '{}') {
                 return [422, ['error' => 'invalid_upstox_request']];

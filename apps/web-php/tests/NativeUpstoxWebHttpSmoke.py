@@ -80,6 +80,16 @@ def main():
             assert code==200 and configured["configured"]
             assert configured["token_stored"] is False
             assert request(guest,origin,API+"verify","POST",{})[0]==401
+            assert request(guest,origin,API+"discover","POST",{})[0]==401
+            assert request(admin,origin,API+"discover","POST",{})[0]==403
+            assert request(admin,origin,API+"discover","POST",{},'0'*64)[0]==403
+            assert request(admin,origin,API+"discover","POST",{},csrf,
+                           "http://attacker.invalid")[0]==403
+            code,missing,_=request(admin,origin,API+"discover","POST",{},csrf)
+            assert code==200 and missing["schema"]=="QSYN-UPSTOX-INDEX-DISCOVERY/1"
+            assert not missing["mapping_fully_resolved"]
+            assert not missing["exchange_display_entitlement_verified"]
+            assert not missing["index_feed_activated"] and not missing["trading_enabled"]
             assert request(admin,origin,API+"verify","POST",{})[0]==403
             assert request(admin,origin,API+"verify","POST",{},'0'*64)[0]==403
             assert request(admin,origin,API+"verify","POST",{},csrf,
