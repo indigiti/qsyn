@@ -59,7 +59,11 @@ export async function verifyPublicBackfill({
         await sleep(1000*(attempt+1));
         continue;
       }
-      if(!response.ok)throw failure('HTTP_ERROR','Public candle API returned HTTP '+response.status);
+      if(!response.ok){
+        if(response.status===403)
+          throw failure('STAGE_ACCESS_DENIED','Public candle API returned HTTP 403 before candle validation; check stage-access-report.json for possible hosting/WAF or application authorization controls');
+        throw failure('HTTP_ERROR','Public candle API returned HTTP '+response.status);
+      }
       try{body=await response.json();}catch{throw failure('NON_JSON','Expected a JSON candle response');}
       break;
     }
