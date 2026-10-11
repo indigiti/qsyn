@@ -83,6 +83,8 @@ jobs:
           php apps/web-php/tests/UpstoxIndexV3Test.php
           php -l apps/web-php/src/NativeUpstoxWebApi.php
           python3 apps/web-php/tests/NativeUpstoxWebHttpSmoke.py
+          php -l apps/web-php/src/NativeUpstoxProfileVerifier.php
+          php apps/web-php/tests/NativeUpstoxProfileVerifierTest.php
           php -l apps/web-php/src/SimulatedOptionsStudio.php
           php -l apps/web-php/public/studio.php
           php apps/web-php/tests/SimulatedOptionsStudioTest.php
@@ -211,6 +213,7 @@ jobs:
           cp apps/web-php/src/PrivateChartGrantApi.php staging/private/app/src/PrivateChartGrantApi.php
           cp apps/web-php/src/UpstoxOperatorOAuth.php staging/private/app/src/UpstoxOperatorOAuth.php
           cp apps/web-php/src/NativeUpstoxWebApi.php staging/private/app/src/NativeUpstoxWebApi.php
+          cp apps/web-php/src/NativeUpstoxProfileVerifier.php staging/private/app/src/NativeUpstoxProfileVerifier.php
           cp apps/web-php/src/FileMockAccountSelection.php staging/private/app/src/FileMockAccountSelection.php
           cp apps/web-php/src/AccountApi.php staging/private/app/src/AccountApi.php
           cp apps/web-php/src/SimulatedAccountBars.php staging/private/app/src/SimulatedAccountBars.php
@@ -228,6 +231,7 @@ jobs:
           cp services/stream-rust/target/release/qsyn-history-import staging/private/app/bin/qsyn-history-import
           cp services/stream-rust/target/release/qsyn-private-chart staging/private/app/bin/qsyn-private-chart
           cp services/stream-rust/target/release/qsyn-upstox-worker staging/private/app/bin/qsyn-upstox-worker
+          cp services/stream-rust/target/release/qsyn-upstox-index-worker staging/private/app/bin/qsyn-upstox-index-worker
           cp services/stream-rust/target/release/qsyn-upstox-history staging/private/app/bin/qsyn-upstox-history
           cp services/stream-rust/target/release/qsyn-private-history staging/private/app/bin/qsyn-private-history
           cp ops/cloudways/qsyn-upstox-v3.supervisor.conf.example staging/private/app/ops/qsyn-upstox-v3.supervisor.conf.example
@@ -277,6 +281,7 @@ jobs:
           test -s staging/private/app/ops/qsyn-openalgo-upstox.supervisor.conf.example
           test -s staging/private/app/tools/upstox-oauth.php
           test -s staging/private/app/bin/qsyn-upstox-worker
+          test -s staging/private/app/bin/qsyn-upstox-index-worker
           test -s staging/private/app/bin/qsyn-upstox-history
           test -s staging/private/app/bin/qsyn-private-history
           test -s staging/private/app/ops/qsyn-upstox-v3.supervisor.conf.example
@@ -318,6 +323,8 @@ jobs:
           test -s staging/private/app/src/PrivateChartGrantApi.php
           test -s staging/private/app/src/UpstoxOperatorOAuth.php
           test -s staging/private/app/src/NativeUpstoxWebApi.php
+          test -s staging/private/app/src/NativeUpstoxProfileVerifier.php
+          php -l staging/private/app/src/NativeUpstoxProfileVerifier.php
           php -l staging/private/app/src/NativeUpstoxWebApi.php
           test -s staging/private/app/src/FileMockAccountSelection.php
           test -s staging/private/app/src/AccountApi.php
@@ -426,6 +433,8 @@ jobs:
           test -s verified-release/private/app/src/PrivateChartGrantApi.php
           test -s verified-release/private/app/src/UpstoxOperatorOAuth.php
           test -s verified-release/private/app/src/NativeUpstoxWebApi.php
+          test -s verified-release/private/app/src/NativeUpstoxProfileVerifier.php
+          php -l verified-release/private/app/src/NativeUpstoxProfileVerifier.php
           php -l verified-release/private/app/src/NativeUpstoxWebApi.php
           test -s verified-release/private/app/src/FileMockAccountSelection.php
           test -s verified-release/private/app/src/AccountApi.php
@@ -442,6 +451,7 @@ jobs:
           test -s verified-release/private/app/bin/qsyn-history-import
           test -s verified-release/private/app/bin/qsyn-private-chart
           test -s verified-release/private/app/bin/qsyn-upstox-worker
+          test -s verified-release/private/app/bin/qsyn-upstox-index-worker
           test -s verified-release/private/app/bin/qsyn-upstox-history
           test -s verified-release/private/app/bin/qsyn-private-history
           test -s verified-release/private/app/ops/qsyn-upstox-v3.supervisor.conf.example
