@@ -138,98 +138,155 @@ export function DiagnosticsWorkspace(){
   </div>;
 }
 const OPENALGO_API='/qsyn/api/v1/brokers/openalgo/';
-const BROKER_LABELS={upstox:'Upstox',zerodha:'Zerodha',angel:'Angel One',dhan:'Dhan',fyers:'Fyers',shoonya:'Shoonya',groww:'Groww',aliceblue:'Alice Blue',flattrade:'FlatTrade',fivepaisa:'5paisa'};
+const OPENALGO_ADMIN='/qsyn/api/v1/admin/openalgo/';
+const BROKER_LABELS={upstox:'Upstox',zerodha:'Zerodha',angel:'Angel One',dhan:'Dhan',
+  fyers:'Fyers',shoonya:'Shoonya',groww:'Groww',aliceblue:'Alice Blue',flattrade:'FlatTrade',
+  fivepaisa:'5paisa'};
+async function openAlgoAdminPost(operation, account_id, csrf){
+  const res=await fetch(OPENALGO_ADMIN+operation,{method:'POST',credentials:'same-origin',
+    cache:'no-store',headers:{'Content-Type':'application/json','Accept':'application/json',
+      'X-CSRF-Token':csrf},body:JSON.stringify({account_id})});
+  const json=await res.json();
+  if(!res.ok)throw Error(json.error||'operator_action_denied');
+  return json;
+}
 export function BrokersWorkspace({openView}){
-  const [catalog,setCatalog]=useState(null),[privateState,setPrivateState]=useState(null);
-  const [indexCatalog,setIndexCatalog]=useState(null),[message,setMessage]=useState('No production broker session verified');
-  const [busy,setBusy]=useState(false),[selected,setSelected]=useState('upstox');
+  const [catalog,setCatalog]=useState(null),[admin,setAdmin]=useState(null);
+  const [inventory,setInventory]=useState(null),[selected,setSelected]=useState('upstox');
+  const [message,setMessage]=useState('No production broker session verified');
+  const [statuses,setStatuses]=useState({}),[loginTarget,setLoginTarget]=useState(null);
+  const [busy,setBusy]=useState(false),[indexCatalog,setIndexCatalog]=useState(null);
   const refresh=useCallback(async(signal)=>{
-    const [brokers,accounts,indexes]=await Promise.all([
+    const [names,auth,indexes]=await Promise.all([
       jsonGet(OPENALGO_API+'catalog',signal).catch(()=>null),
-      jsonGet(OPENALGO_API+'accounts',signal).catch(()=>null),
+      jsonGet(ADMIN_API+'state',signal).catch(()=>null),
       jsonGet('/qsyn/api/v1/india/indexes',signal).catch(()=>null),
     ]);
     if(signal?.aborted)return;
-    setCatalog(brokers?.schema==='QSYN-OPENALGO-CONNECTIONS/1'?brokers:null);
-    setPrivateState(accounts?.schema==='QSYN-OPENALGO-CONNECTIONS/1' &&
-      accounts?.profile==='private_development_only'?accounts:null);
+    setCatalog(names?.schema==='QSYN-OPENALGO-CONNECTIONS/1'?names:null);
+    setAdmin(auth);
     setIndexCatalog(indexes);
+    setLoginTarget(null);setStatuses({});
+    if(auth?.authenticated){
+      try{
+        const data=await jsonGet(OPENALGO_ADMIN+'accounts',signal);
+        if(signal?.aborted)return;
+        setInventory(data?.schema==='QSYN-OPENALGO-ADMIN-READINESS/1'?data:null);
+        setMessage(data?.accounts?.length
+          ?'Choose an approved account to check its OpenAlgo session.'
+          :'No private OpenAlgo account registered.');
+      }catch(e){
+        if(signal?.aborted)return;
+        setInventory(null);
+        setMessage('Private OpenAlgo not provisioned or unavailable. No broker session verified.');
+      }
+    }else{setInventory(null);setMessage('No production broker session verified');}
   },[]);
-  useEffect(()=>{const controller=new AbortController();void refresh(controller.signal);return()=>controller.abort();},[refresh]);
+  useEffect(()=>{
+    const ctl=new AbortController();void refresh(ctl.signal);
+    return()=>ctl.abort();
+  },[refresh]);
   const brokers=catalog?.brokers||[];
-  const accounts=(privateState?.accounts||[]).filter(x=>x.broker===selected);
-  async function connect(account){
-    if(busy||!account?.login_available||!privateState?.csrf)return;
-    setBusy(true);setMessage('Requesting an approved private OpenAlgo login…');
+  const accounts=(inventory?.accounts||[]).filter(a=>a.broker===selected);
+  const hasAdmin=Boolean(admin?.authenticated);
+  async function inspect(account){
+    if(busy||!inventory?.csrf)return;
+    setBusy(true);setLoginTarget(null);
     try{
-      const r=await fetch(OPENALGO_API+'connect',{method:'POST',credentials:'same-origin',
-        cache:'no-store',headers:{'Content-Type':'application/json','Accept':'application/json',
-          'X-CSRF-Token':privateState.csrf},body:JSON.stringify({account_id:account.account_id})});
-      const data=await r.json();
-      if(!r.ok||data.schema!=='QSYN-OPENALGO-CONNECTIONS/1'||data.account_id!==account.account_id||
-        typeof data.login_url!=='string')throw Error(data.error||'connection_not_available');
-      const target=new URL(data.login_url);
-      if(target.protocol!=='https:'||target.pathname!=='/login'||target.search||target.hash)
-        throw Error('invalid_login_destination');
-      // OpenAlgo owns the actual session and broker consent in a separate secure tab.
-      window.open(target.href,'_blank','noopener,noreferrer');
-      setMessage('OpenAlgo login opened where your browser permits popups. Return here and verify the session.');
-    }catch(e){setMessage('Connection unavailable: '+String(e.message).slice(0,100));}
+      const data=await openAlgoAdminPost('inspect',account.account_id,inventory.csrf);
+      if(data.schema!=='QSYN-OPENALGO-ADMIN-READINESS/1'
+        || data.account_id!==account.account_id)throw Error('unverified_server_response');
+      setStatuses(old=>({...old,[account.account_id]:data.session_state}));
+      setMessage(data.openalgo_application_session_responding
+        ?'OpenAlgo session responds for '+account.account_id+
+          '. Upstox account identity, OAuth callback and exchange display rights are NOT verified.'
+        :'OpenAlgo session unavailable or expired for '+account.account_id+'.');
+    }catch(e){setMessage('Verification denied: '+String(e.message).slice(0,90));}
     finally{setBusy(false);}
   }
-  async function verify(account){
-    if(busy)return;
-    setBusy(true);
+  async function connect(account){
+    if(busy||!account.login_available||!inventory?.csrf)return;
+    setBusy(true);setLoginTarget(null);
     try{
-      const data=await jsonGet(OPENALGO_API+'status?account_id='+encodeURIComponent(account.account_id));
-      setMessage(data.session_state==='openalgo_session_responding'
-        ?'OpenAlgo broker session responds for '+account.account_id+'. Broker identity and market-data rights remain unverified.'
-        :'No responding broker session for '+account.account_id+'. Sign in to its approved OpenAlgo instance.');
-    }catch{setMessage('Broker verification unavailable; private identity or OpenAlgo runtime may not be enabled.');}
+      const result=await openAlgoAdminPost('connect',account.account_id,inventory.csrf);
+      if(result.schema!=='QSYN-OPENALGO-ADMIN-READINESS/1'
+        || result.account_id!==account.account_id)throw Error('invalid_connection_response');
+      const url=new URL(result.login_url);
+      if(url.protocol!=='https:'||url.pathname!=='/login'||url.search||url.hash||
+        url.username||url.password||url.port)throw Error('unsafe_login_destination');
+      setLoginTarget({account_id:account.account_id,url:url.href});
+      setMessage('Approved OpenAlgo login is ready for '+account.account_id+
+        '. Sign in there, return here and select Verify session.');
+    }catch(e){setMessage('OpenAlgo login unavailable: '+String(e.message).slice(0,95));}
     finally{setBusy(false);}
   }
   return <div className="terminal-page qt-unified">
     <PanelTitle eyebrow="BROKER CONNECTIONS · OPENALGO" title="Accounts & authorizations"
-      description="Choose a supported Indian broker. Actual sign-in stays within an independently managed OpenAlgo instance."/>
+      description="Select your broker, sign in to QSYN Operations as administrator, then open its approved OpenAlgo login and check the read-only session."/>
     <div className="qt-summary">
-      <section className="terminal-surface"><Wallet size={19}/><span>Private accounts</span><strong>{privateState?.accounts?.length??'Not available'}</strong></section>
-      <section className="terminal-surface"><LockKeyhole size={19}/><span>Exchange display rights</span><strong>Not verified</strong></section>
-      <section className="terminal-surface"><ShieldCheck size={19}/><span>Order execution</span><strong>Disabled</strong></section>
+      <section className="terminal-surface"><Wallet size={19}/><span>Configured accounts</span>
+        <strong>{hasAdmin?(inventory?.accounts?.length??'Not provisioned'):'Restricted'}</strong></section>
+      <section className="terminal-surface"><LockKeyhole size={19}/><span>Exchange display rights</span>
+        <strong>Not verified</strong></section>
+      <section className="terminal-surface"><ShieldCheck size={19}/><span>QSYN order execution</span>
+        <strong>Disabled</strong></section>
     </div>
     <section className="terminal-surface">
       <div className="terminal-card-head"><h2>Select broker</h2><ShieldCheck size={18}/></div>
       <div className="qt-broker-grid">
-        {brokers.map(b=><button type="button" key={b} onClick={()=>setSelected(b)}
-          className={'qt-broker-card'+(b===selected?' selected':'')}
-          aria-pressed={b===selected}>
+        {brokers.map(b=><button type="button" key={b} onClick={()=>{setSelected(b);setLoginTarget(null);}}
+          className={'qt-broker-card'+(b===selected?' selected':'')} aria-pressed={b===selected}>
           <span className="qt-broker-avatar">{(BROKER_LABELS[b]||b).slice(0,2).toUpperCase()}</span>
           <span>{BROKER_LABELS[b]||b}</span>
         </button>)}
       </div>
-      {!catalog&&<p className="terminal-footnote">Broker catalog unavailable. No account connection is implied.</p>}
+      {!catalog&&<p>Broker catalog is temporarily unavailable.</p>}
       <p role="status" className="qt-message">{message}</p>
-      <div className="qt-actions"><button className="terminal-action terminal-secondary-action" disabled={busy}
-        onClick={()=>void refresh(new AbortController().signal)}><RefreshCw size={16}/> Refresh accounts</button></div>
+      <button className="terminal-action terminal-secondary-action" disabled={busy}
+        onClick={()=>void refresh(new AbortController().signal)}>
+        <RefreshCw size={16}/> Refresh broker status
+      </button>
     </section>
     <section className="terminal-surface">
-      <div className="terminal-card-head"><h2>{BROKER_LABELS[selected]||selected} connections</h2><LockKeyhole size={18}/></div>
-      {accounts.length===0?<p>No authorized private OpenAlgo instance is configured for this broker and your account. Broker selection does not grant access.</p>:
-        <div className="qt-broker-accounts">{accounts.map(account=><div key={account.account_id} className="qt-broker-account">
-          <strong>{account.account_id}</strong><span>Session: {account.session_state||'Not checked'}</span>
-          <div className="qt-actions"><button className="terminal-action" disabled={busy||!account.login_available}
-            onClick={()=>void connect(account)}>Connect with OpenAlgo</button>
-            <button className="terminal-action terminal-secondary-action" disabled={busy}
-              onClick={()=>void verify(account)}>Verify session</button></div>
-        </div>)}</div>}
-      <p className="terminal-footnote">This workflow is disabled by default and uses development-private QSYN identity only. OpenAlgo receives broker credentials on its own authenticated site; QSYN never accepts a browser-supplied broker token, port or redirect target.</p>
+      <div className="terminal-card-head"><h2>{BROKER_LABELS[selected]||selected} · web connection</h2>
+        <LockKeyhole size={18}/></div>
+      {!hasAdmin&&<div>
+        <p>Use your existing QSYN administrator login to access private broker connections. No terminal commands are needed to check a provisioned session.</p>
+        <div className="qt-actions"><button className="terminal-action"
+          onClick={()=>openView('operations')}>Sign in through Operations</button></div>
+      </div>}
+      {hasAdmin&&accounts.length===0&&<p>No approved OpenAlgo account is registered for this broker. Cloudways/OpenAlgo provisioning is still required before login can work.</p>}
+      {hasAdmin&&accounts.length>0&&<div className="qt-broker-accounts">
+        {accounts.map(account=><div key={account.account_id} className="qt-broker-account">
+          <strong>{account.account_id}</strong>
+          <span>Session: {statuses[account.account_id]||'Not checked'}</span>
+          <div className="qt-actions">
+            <button type="button" className="terminal-action" disabled={busy||!account.login_available}
+              onClick={()=>void connect(account)}>Connect with OpenAlgo</button>
+            <button type="button" className="terminal-action terminal-secondary-action" disabled={busy}
+              onClick={()=>void inspect(account)}>Verify session</button>
+          </div>
+        </div>)}
+      </div>}
+      {loginTarget&&<p className="qt-login-link">
+        <a href={loginTarget.url} target="_blank" rel="noopener noreferrer">
+          Open approved OpenAlgo login for {loginTarget.account_id}
+        </a>
+      </p>}
+      <p className="terminal-footnote">A responding OpenAlgo application API does not prove which Upstox trading account is logged in or confirm exchange data licenses. Native OpenAlgo order permissions must be restricted separately. Neither QSYN nor this screen can install or activate the Python broker service.</p>
       <div className="qt-actions">
-        <button className="terminal-action terminal-secondary-action" onClick={()=>openView('private-live')}>Private chart readiness</button>
-        <button className="terminal-action terminal-secondary-action" onClick={()=>openView('diagnostics')}>Feed diagnostics</button>
+        <button className="terminal-action terminal-secondary-action" onClick={()=>openView('private-live')}>
+          Private chart readiness</button>
+        <button className="terminal-action terminal-secondary-action" onClick={()=>openView('diagnostics')}>
+          Feed diagnostics</button>
       </div>
     </section>
     <section className="terminal-surface"><h2>NSE / BSE index catalog</h2>
-      <div className="qt-market-tags">{INDIA_INDEX_MARKETS.map(x=><span key={x.id}>{x.name} · {x.exchange==='BSE_INDEX'?'BSE':'NSE'}</span>)}</div>
-      <p className="terminal-footnote">{indexCatalog?.indexes?.length===6?'Index discovery operational.':'Index discovery unavailable.'} Live candles remain blocked until account-specific exchange display rights and real provider data are verified.</p>
+      <div className="qt-market-tags">{INDIA_INDEX_MARKETS.map(x=><span key={x.id}>
+        {x.name} · {x.exchange==='BSE_INDEX'?'BSE':'NSE'}</span>)}</div>
+      <p className="terminal-footnote">{indexCatalog?.indexes?.length===6
+        ?'Index discovery operational.':'Index discovery unavailable.'}
+        {' '}Live candles remain gated by exchange display entitlement and separately verified broker access.</p>
     </section>
   </div>;
 }
