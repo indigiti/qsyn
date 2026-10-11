@@ -1,4 +1,4 @@
-name: QSYN Staging Access Diagnostics
+name: QSYN Staging HTML Cache and App Signature
 on:
   push:
     branches: [probe/unified-terminal-stage-246]
@@ -9,22 +9,36 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 3
     steps:
-      - name: Inspect stage HTTP status, headers, and 403 signature
+      - name: Inspect homepage cache vs origin and verify terminal entrypoint
         run: |
           python3 - <<'PY'
-          import urllib.request,urllib.error
-          paths=['/qsyn/','/qsyn/terminal','/qsyn/api/v1/health','/qsyn/api/v1/crypto/health?exchange=BINANCE&market=spot&symbol=BTCUSDT&interval=1m&limit=5']
+          import urllib.request,urllib.error,hashlib,re
+          paths=[
+              '/qsyn/','/qsyn/?qsyn_verify=246','/qsyn/terminal',
+              '/qsyn/terminal?view=markets','/qsyn/api/v1/health',
+              '/qsyn/api/v1/india/indexes',
+              '/qsyn/api/v1/crypto/health?exchange=BINANCE&market=spot&symbol=BTCUSDT&interval=1m&limit=5'
+          ]
           for path in paths:
-              print('\nREQUEST',path)
-              req=urllib.request.Request('https://stage.digiti.in'+path,headers={'Accept':'text/html,application/json','User-Agent':'QSYN-stage-246-http-diagnostics/1'})
+              print('REQUEST',path)
+              req=urllib.request.Request('https://stage.digiti.in'+path,
+                headers={'Accept':'text/html,application/json','User-Agent':'QSYN-stage-246-http-diagnostics/1',
+                  'Cache-Control':'no-cache'})
               try:
                   with urllib.request.urlopen(req,timeout=15) as res:
-                      status=res.status; headers=dict(res.headers); body=res.read(320)
+                      status=res.status;headers=dict(res.headers);body=res.read(60000)
               except urllib.error.HTTPError as err:
-                  status=err.code;headers=dict(err.headers);body=err.read(320)
+                  status=err.code;headers=dict(err.headers);body=err.read(60000)
               except Exception as err:
-                  print('NETWORK_ERROR',str(err)[:220]);continue
-              print('HTTP_STATUS',status)
-              print('HEADER_SIGNATURE',{key:value for key,value in headers.items() if key.lower() in ('server','via','content-type','x-powered-by','cf-ray','x-sucuri-id','x-cache','location','www-authenticate','x-frame-options')})
-              print('BODY_START',body.decode('utf-8',errors='replace')[:320].replace('\n',' '))
+                  print('NETWORK_ERROR',str(err)[:180]);continue
+              text=body.decode('utf-8',errors='replace')
+              title=re.search('<title[^>]*>(.*?)</title>',text,re.I|re.S)
+              print('HTTP_STATUS',status,'CACHE',headers.get('x-cache'), 'AGE',headers.get('Age'),
+                    'BYTES',len(body),'HASH',hashlib.sha256(body).hexdigest()[:12])
+              print('TITLE',title.group(1) if title else 'none',
+                    'REACT_ROOT', 'id="qsyn-root"' in text,
+                    'TERMINAL_BUNDLE', '/qsyn/assets/terminal.js' in text,
+                    'OLD_DEMO_HEADER','QSYN — Development Terminal' in text)
+              if path.startswith('/qsyn/api/v1/'):
+                  print('API_START',text[:250].replace('\n',' '))
           PY
