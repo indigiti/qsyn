@@ -54,7 +54,7 @@ try {
   // script-src 'self' is deliberately strict, so host-injected inline script
   // blocks should be diagnosed outside the QSYN bundle, not whitelisted.
   const firstHtml=await response.text();
-  const inlineScript=/<script\\b(?![^>]*\\bsrc\\s*=)[^>]*>/i;
+  const inlineScript=/<script\b(?![^>]*\bsrc\s*=)[^>]*>/i;
   if(inlineScript.test(firstHtml))
     throw new Error('QSYN homepage emitted an inline script prohibited by its own CSP');
   if(!String(response.headers()['content-security-policy']||'').includes("script-src 'self'"))
@@ -331,7 +331,7 @@ try {
   if(brokerResponse.status()!==200)
     throw new Error('Protected Brokers HTML returned '+brokerResponse.status());
   const brokerHtml=await brokerResponse.text();
-  if(/<script\\b(?![^>]*\\bsrc\\s*=)[^>]*>/i.test(brokerHtml))
+  if(/<script\b(?![^>]*\bsrc\s*=)[^>]*>/i.test(brokerHtml))
     throw new Error('QSYN Brokers HTML includes an inline script prohibited by its CSP');
   if(!String(brokerResponse.headers()['content-security-policy']||'')
       .includes("script-src 'self'"))
