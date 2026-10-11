@@ -62,7 +62,7 @@ final class OpenAlgoBrokerConnectionsApi
         $registryPath = (string) (getenv('QSYN_OPENALGO_REGISTRY_FILE') ?: '');
         try {
             $accounts = PrivateBrokerRegistry::loadForPrivateBrowser($registryPath);
-            $links = self::loginLinks((string) (getenv('QSYN_OPENALGO_LOGIN_URLS_FILE') ?: ''));
+            $links = self::configuredLoginUrls((string) (getenv('QSYN_OPENALGO_LOGIN_URLS_FILE') ?: ''));
         } catch (\Throwable) {
             return [503, ['error' => 'private_broker_registry_unavailable']];
         }
@@ -145,7 +145,7 @@ final class OpenAlgoBrokerConnectionsApi
     }
 
     /** Separate 0600 operator-managed mapping. No browser-supplied targets. */
-    private static function loginLinks(string $path): array
+    public static function configuredLoginUrls(string $path): array
     {
         if ($path === '') return [];
         $raw = file_get_contents(PrivateBrokerRegistry::privateFile($path));
