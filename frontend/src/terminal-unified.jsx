@@ -156,6 +156,8 @@ export function BrokersWorkspace({openView}){
   const [message,setMessage]=useState('No production broker session verified');
   const [statuses,setStatuses]=useState({}),[loginTarget,setLoginTarget]=useState(null);
   const [busy,setBusy]=useState(false),[indexCatalog,setIndexCatalog]=useState(null);
+  const [setup,setSetup]=useState({account_id:'upstox-a',rest_port:'5000',
+    ws_port:'8765',login_url:'',application_api_key:'',confirmed:false});
   const refresh=useCallback(async(signal)=>{
     const [names,auth,indexes]=await Promise.all([
       jsonGet(OPENALGO_API+'catalog',signal).catch(()=>null),
@@ -220,6 +222,31 @@ export function BrokersWorkspace({openView}){
     }catch(e){setMessage('OpenAlgo login unavailable: '+String(e.message).slice(0,95));}
     finally{setBusy(false);}
   }
+  async function saveSetup(e){
+    e.preventDefault();
+    if(busy||!inventory?.setup_available||!inventory.csrf)return;
+    setBusy(true);
+    try{
+      const payload={
+        account_id:setup.account_id.trim(),broker:selected,
+        rest_port:Number(setup.rest_port),ws_port:Number(setup.ws_port),
+        login_url:setup.login_url.trim(),
+        application_api_key:setup.application_api_key.trim(),
+        confirmed:setup.confirmed,
+      };
+      const r=await fetch(OPENALGO_ADMIN+'setup',{method:'POST',
+        credentials:'same-origin',cache:'no-store',headers:{
+          'Content-Type':'application/json','Accept':'application/json',
+          'X-CSRF-Token':inventory.csrf},body:JSON.stringify(payload)});
+      const data=await r.json();
+      if(!r.ok||data.schema!=='QSYN-OPENALGO-ADMIN-SETUP/1'
+        ||!data.configuration_saved)throw Error(data.error||'setup_rejected');
+      setSetup(old=>({...old,application_api_key:'',confirmed:false}));
+      await refresh(new AbortController().signal);
+      setMessage('Private QSYN connection profile saved. OpenAlgo must already be installed on the configured private service; use Verify session to check it.');
+    }catch(e){setMessage('Private setup failed: '+String(e.message).slice(0,100));}
+    finally{setBusy(false);}
+  }
   return <div className="terminal-page qt-unified">
     <PanelTitle eyebrow="BROKER CONNECTIONS · OPENALGO" title="Accounts & authorizations"
       description="Select your broker, sign in to QSYN Operations as administrator, then open its approved OpenAlgo login and check the read-only session."/>
@@ -256,6 +283,52 @@ export function BrokersWorkspace({openView}){
           onClick={()=>openView('operations')}>Sign in through Operations</button></div>
       </div>}
       {hasAdmin&&accounts.length===0&&<p>No approved OpenAlgo account is registered for this broker. Cloudways/OpenAlgo provisioning is still required before login can work.</p>}
+      {hasAdmin&&inventory?.configuration_state==='not_provisioned'&&
+        inventory?.setup_available&&<form className="qt-form qt-openalgo-setup"
+        onSubmit={e=>void saveSetup(e)} autoComplete="off">
+        <h3>Configure first OpenAlgo connection</h3>
+        <p>This creates QSYN's private, one-time operator account profile. An isolated
+          OpenAlgo Python service and its HTTPS login must already be installed and approved.
+          This form does not install OpenAlgo or authorize Upstox.</p>
+        <label>QSYN account label
+          <input required maxLength={48} pattern="[A-Za-z0-9_-]+"
+            value={setup.account_id} onChange={e=>setSetup(x=>({...x,account_id:e.target.value}))}
+            placeholder="upstox-a"/></label>
+        <label>OpenAlgo HTTPS login address
+          <input required type="url" maxLength={350}
+            value={setup.login_url} onChange={e=>setSetup(x=>({...x,login_url:e.target.value}))}
+            placeholder="https://your-approved-openalgo-domain/login"/></label>
+        <div className="qt-setup-ports">
+          <label>Private REST port
+            <input required type="number" min={1025} max={65535} value={setup.rest_port}
+              onChange={e=>setSetup(x=>({...x,rest_port:e.target.value}))}/></label>
+          <label>Private WebSocket port
+            <input required type="number" min={1025} max={65535} value={setup.ws_port}
+              onChange={e=>setSetup(x=>({...x,ws_port:e.target.value}))}/></label>
+        </div>
+        <label>OpenAlgo application API key (not the Upstox API secret)
+          <input required type="password" minLength={16} maxLength={256}
+            value={setup.application_api_key}
+            onChange={e=>setSetup(x=>({...x,application_api_key:e.target.value}))}
+            autoComplete="off" placeholder="Enter the API key from your approved OpenAlgo instance"/></label>
+        <label className="qt-setup-confirm">
+          <input type="checkbox" checked={setup.confirmed}
+            onChange={e=>setSetup(x=>({...x,confirmed:e.target.checked}))}/>
+          I confirm the OpenAlgo service and HTTPS login belong to my approved private installation,
+          and understand that saving this profile does not verify Upstox OAuth or enable trading.
+        </label>
+        <button className="terminal-action" type="submit" disabled={busy||!setup.confirmed}>
+          <ShieldCheck size={16}/> Save private connection profile
+        </button>
+        <p className="terminal-footnote">This one-time setup writes owner-only 0600 files
+          outside public_html. Keys are never returned to the browser.
+          Existing profiles cannot be overwritten by this form.</p>
+      </form>}
+      {hasAdmin&&inventory?.configuration_state==='not_provisioned'&&
+        !inventory?.setup_available&&<p className="terminal-footnote">
+        Configuration is managed externally or the private runtime is not writable by
+        QSYN. An authorized Cloudways operator must approve the private service and storage.
+      </p>}
       {hasAdmin&&accounts.length>0&&<div className="qt-broker-accounts">
         {accounts.map(account=><div key={account.account_id} className="qt-broker-account">
           <strong>{account.account_id}</strong>
