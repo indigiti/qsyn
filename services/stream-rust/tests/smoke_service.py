@@ -128,6 +128,21 @@ def run_instance_with_runtime(enable_demo: bool, runtime: str) -> None:
             "demo_ws_enabled": enable_demo,
         }, f"Unexpected Rust health response: {health}"
 
+        # Read-only crypto telemetry cannot start an upstream worker or return
+        # fabricated candles. Invalid instruments fail before any network I/O.
+        crypto = ("exchange=BINANCE&market=spot&symbol=BTCUSDT&interval=1m&limit=5")
+        code, body = http_status(f"http://127.0.0.1:{port}/api/v1/crypto/health?{crypto}")
+        assert code == 200, (code, body)
+        diag = json.loads(body)
+        assert diag["schema"] == "QSYN-PUBLIC-CRYPTO-HEALTH/1"
+        assert diag["trading_enabled"] is False
+        assert diag["feed"]["state"] == "not_started"
+        assert diag["feed"]["websocket_candle_updates"] == 0
+        assert http_status(f"http://127.0.0.1:{port}/api/v1/crypto/health?"
+            "exchange=BINANCE&market=spot&symbol=../../secret&interval=1m")[0] == 422
+        assert http_status(f"http://127.0.0.1:{port}/api/v1/crypto/health?"
+            "exchange=COINBASE&market=perp&symbol=BTC-USD&interval=1m")[0] == 422
+        print("PASS: public crypto feed health is read-only, isolated and allowlisted")
         assert http_status(f"http://127.0.0.1:{port}/unknown")[0] == 404
         sock, reader, status = open_websocket(port)
         try:

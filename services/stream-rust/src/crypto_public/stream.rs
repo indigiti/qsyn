@@ -16,6 +16,15 @@ struct Slot {
     last: Option<Bar>,
     last_at: Option<Instant>,
     reconnects: u64,
+    updates: u64,
+    last_update_ms: Option<u64>,
+    last_connection_ms: Option<u64>,
+    last_disconnection_ms: Option<u64>,
+    last_rest_ms: Option<u64>,
+    rest_successes: u64,
+    rest_recoveries: u64,
+    last_rest_gap_count: usize,
+    last_rest_missing_bars: u64,
 }
 type Slots = Mutex<HashMap<String, Slot>>;
 fn slots() -> &'static Slots {
@@ -49,6 +58,10 @@ pub(super) async fn ensure(req: &Request) {
     if guard.contains_key(&k) { return; }
     guard.insert(k, Slot {
         connected: false, last: None, last_at: None, reconnects: 0,
+        updates: 0, last_update_ms: None, last_connection_ms: None,
+        last_disconnection_ms: None, last_rest_ms: None,
+        rest_successes: 0, rest_recoveries: 0,
+        last_rest_gap_count: 0, last_rest_missing_bars: 0,
     });
     let selected = req.clone();
     tokio::spawn(async move { worker(selected).await });
@@ -62,6 +75,8 @@ async fn publish(req: &Request, next: Bar) {
         slot.last=Some(next);
         slot.connected=true;
         slot.last_at=Some(Instant::now());
+        slot.last_update_ms=Some(epoch_ms());
+        slot.updates=slot.updates.saturating_add(1);
     }
 }
 async fn disconnected(req: &Request) {
@@ -69,8 +84,70 @@ async fn disconnected(req: &Request) {
         slot.connected=false;
         slot.last_at=None;
         slot.last=None; // never reuse a bar from a dead source
+        slot.last_disconnection_ms=Some(epoch_ms());
         slot.reconnects=slot.reconnects.saturating_add(1);
     }
+}
+/// Count gaps in the returned exchange history without manufacturing prices.
+/// A missing candle can mean real illiquidity; report it rather than filling.
+pub(super) fn history_gaps(bars: &[Bar], step: u64) -> (usize,u64) {
+    let mut events=0usize;
+    let mut missing=0u64;
+    for pair in bars.windows(2) {
+        if pair[1].time > pair[0].time.saturating_add(step) {
+            events+=1;
+            missing=missing.saturating_add((pair[1].time-pair[0].time)/step-1);
+        }
+    }
+    (events,missing)
+}
+pub(super) async fn rest_completed(req: &Request, bars: &[Bar]) {
+    let (gaps,missing)=history_gaps(bars,super::step_seconds(&req.interval).unwrap_or(60));
+    let mut guard=slots().lock().await;
+    if let Some(slot)=guard.get_mut(&key(req)) {
+        slot.last_rest_ms=Some(epoch_ms());
+        slot.rest_successes=slot.rest_successes.saturating_add(1);
+        if slot.reconnects>0 {
+            slot.rest_recoveries=slot.rest_recoveries.saturating_add(1);
+        }
+        slot.last_rest_gap_count=gaps;
+        slot.last_rest_missing_bars=missing;
+    }
+}
+fn telemetry(_req: &Request, slot: Option<&Slot>) -> Value {
+    let now=epoch_ms();
+    let Some(s)=slot else {
+        return json!({"state":"not_started","feed_transport":"rest","reconnect_count":0,
+            "websocket_candle_updates":0,"last_exchange_candle_sec":null,
+            "last_websocket_update_ms":null,"websocket_lag_seconds":null,
+            "last_connection_ms":null,"last_disconnection_ms":null,
+            "rest_successes":0,"rest_refreshes_after_reconnect":0,
+            "last_rest_ms":null,"history_gap_events":null,"missing_history_bars":null,
+            "fresh":false});
+    };
+    let fresh=s.connected && s.last_at.is_some_and(|t|t.elapsed()<Duration::from_secs(20));
+    let state=if fresh {"websocket"} else if s.connected {"stale"} else {"reconnecting"};
+    json!({
+        "state":state,
+        "feed_transport":if fresh {"websocket"}else{"rest"},
+        "fresh":fresh,
+        "reconnect_count":s.reconnects,
+        "websocket_candle_updates":s.updates,
+        "last_exchange_candle_sec":s.last.as_ref().map(|b|b.time),
+        "last_websocket_update_ms":s.last_update_ms,
+        "websocket_lag_seconds":s.last_update_ms.map(|ms|now.saturating_sub(ms)/1000),
+        "last_connection_ms":s.last_connection_ms,
+        "last_disconnection_ms":s.last_disconnection_ms,
+        "rest_successes":s.rest_successes,
+        "rest_refreshes_after_reconnect":s.rest_recoveries,
+        "last_rest_ms":s.last_rest_ms,
+        "history_gap_events":if s.last_rest_ms.is_some(){Some(s.last_rest_gap_count)}else{None},
+        "missing_history_bars":if s.last_rest_ms.is_some(){Some(s.last_rest_missing_bars)}else{None}
+    })
+}
+pub(super) async fn health(req: &Request) -> Value {
+    let guard=slots().lock().await;
+    telemetry(req,guard.get(&key(req)))
 }
 fn endpoint(req:&Request)->(String,Option<Value>) {
     let symbol=&req.symbol;
@@ -213,6 +290,8 @@ async fn worker(req:Request) {
         // Rebuild from REST on every connection and retry. Source timestamps
         // and volumes come only from provider bars, never from quote close.
         super::invalidate(&req).await;
+        // A REST refresh on connect/reconnect rebuilds the authoritative
+        // window; failure stays observable (do not fabricate a missing bar).
         let _=super::load(&req).await;
         let result=tokio::time::timeout(Duration::from_secs(12),connect_async(&url)).await;
         if let Ok(Ok((mut socket,_)))=result {
@@ -225,6 +304,9 @@ async fn worker(req:Request) {
                 }
             }
             delay=1;
+            if let Some(slot)=slots().lock().await.get_mut(&key(&req)) {
+                slot.last_connection_ms=Some(epoch_ms());
+            }
             let mut ping=tokio::time::interval(Duration::from_secs(20));
             let mut coinbase=CoinbaseTrades::default();
             loop {
@@ -279,4 +361,31 @@ mod tests {
         assert_eq!(parse_candle(&req("HYPERLIQUID","perp","BTC"),&hl),Some(b));
         assert_eq!(parse_candle(&req("BINANCE","spot","ETHUSDT"),&bin),None);
     }
+    #[test]
+    fn candle_gap_diagnostics_detect_missing_minute_without_filling() {
+        let b=|time|Bar{time,open:10.0,high:11.0,low:9.0,close:10.0,volume:1.0};
+        let xs=vec![b(1_696_982_400),b(1_696_982_460),b(1_696_982_640)];
+        assert_eq!(history_gaps(&xs,60),(1,2));
+        assert_eq!(xs.len(),3);
+        assert_eq!(history_gaps(&xs[..2],60),(0,0));
+        assert_eq!(history_gaps(&[],60),(0,0));
+    }
+    #[test]
+    fn diagnostics_never_report_websocket_without_fresh_update() {
+        let req=req("BINANCE","spot","BTCUSDT");
+        let unknown=telemetry(&req,None);
+        assert_eq!(unknown["state"],"not_started");
+        assert_eq!(unknown["fresh"],false);
+        let no_candle=Slot{connected:true,last:None,last_at:None,reconnects:1,
+            updates:0,last_update_ms:None,last_connection_ms:Some(1),
+            last_disconnection_ms:None,last_rest_ms:None,rest_successes:0,
+            rest_recoveries:0,last_rest_gap_count:0,last_rest_missing_bars:0};
+        assert_eq!(telemetry(&req,Some(&no_candle))["state"],"stale");
+        let fresh=Slot{connected:true,last:Some(Bar{time:1_696_982_400,open:1.0,
+            high:2.0,low:0.5,close:1.0,volume:4.0}),
+            last_at:Some(Instant::now()),last_update_ms:Some(epoch_ms()),
+            ..no_candle};
+        assert_eq!(telemetry(&req,Some(&fresh))["state"],"websocket");
+    }
+
 }

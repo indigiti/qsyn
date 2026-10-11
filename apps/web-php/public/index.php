@@ -15,7 +15,7 @@ function respond(array $payload, int $status = 200): never
     exit;
 }
 
-if (str_ends_with($route, '/health') || str_ends_with($route, '/api/v1/health')) {
+if (in_array($route, ['/health', '/qsyn/health', '/api/v1/health', '/qsyn/api/v1/health'], true)) {
     respond(['status' => 'ok', 'app' => 'qsyn-web', 'phase' => 0, 'market_feed' => 'demo-only', 'app_store' => 'file']);
 }
 
@@ -56,7 +56,8 @@ if ($route === '/qsyn/api/v1/diagnostics/rust' || $route === '/api/v1/diagnostic
 
 // Public crypto candles: strict query allowlist and loopback Rust only.
 // No client-chosen host, port, URL, API token, private account, or order route.
-if ($route === '/qsyn/api/v1/crypto/bars') {
+if ($route === '/qsyn/api/v1/crypto/bars' || $route === '/qsyn/api/v1/crypto/health') {
+    $cryptoHealth = $route === '/qsyn/api/v1/crypto/health';
     if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'GET') {
         header('Allow: GET'); respond(['error' => 'method_not_allowed'], 405);
     }
@@ -75,7 +76,7 @@ if ($route === '/qsyn/api/v1/crypto/bars') {
         respond(['error' => 'invalid_crypto_request'], 422);
     }
     $params = http_build_query(compact('exchange', 'market', 'symbol', 'interval', 'limit'), '', '&', PHP_QUERY_RFC3986);
-    $ch = curl_init('http://127.0.0.1:10251/api/v1/crypto/bars?' . $params);
+    $ch = curl_init('http://127.0.0.1:10251/api/v1/crypto/' . ($cryptoHealth ? 'health' : 'bars') . '?' . $params);
     if ($ch === false) respond(['error' => 'crypto_gateway_unavailable'], 503);
     curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER => true, CURLOPT_CONNECTTIMEOUT => 2,
@@ -89,12 +90,12 @@ if ($route === '/qsyn/api/v1/crypto/bars') {
         respond(['error' => 'crypto_market_data_unavailable'], 503);
     }
     $data = json_decode($body, true);
-    if (!is_array($data) || ($data['schema'] ?? '') !== 'QSYN-PUBLIC-CRYPTO-BARS/1'
+    if (!is_array($data) || ($data['schema'] ?? '') !== ($cryptoHealth ? 'QSYN-PUBLIC-CRYPTO-HEALTH/1' : 'QSYN-PUBLIC-CRYPTO-BARS/1')
         || ($data['source'] ?? '') !== 'exchange_public'
         || ($data['trading_enabled'] ?? true) !== false
         || ($data['exchange'] ?? '') !== $exchange || ($data['market'] ?? '') !== $market
         || ($data['symbol'] ?? '') !== $symbol || ($data['interval'] ?? '') !== $interval
-        || !is_array($data['bars'] ?? null)) {
+        || ($cryptoHealth ? !is_array($data['feed'] ?? null) : !is_array($data['bars'] ?? null))) {
         respond(['error' => 'crypto_gateway_invalid_response'], 502);
     }
     respond($data);
