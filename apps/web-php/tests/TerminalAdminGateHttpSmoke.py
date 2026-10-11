@@ -67,6 +67,8 @@ def run():
             status, home, headers = page(guest, origin, "/qsyn/")
             assert status == 200 and 'id="qsyn-root"' in home, (status, repr(home[:700]), dict(headers))
             assert "/qsyn/assets/terminal.js" in home
+            assert "no-transform" in headers.get("Cache-Control", ""), "public HTML allows edge rewrite"
+            assert "script-src 'self'" in headers.get("Content-Security-Policy", "")
             for path in [
                 "/qsyn/terminal", "/qsyn/terminal/",
                 "/qsyn/terminal/trading", "/qsyn/terminal/brokers",
@@ -82,6 +84,7 @@ def run():
             assert status==200 and "Administrator sign-in" in login
             assert "terminal.js" not in login
             assert "unsafe-inline" not in headers.get("Content-Security-Policy","")
+            assert "no-transform" in headers.get("Cache-Control", ""), "login HTML allows script injection"
             csrf = re.search(r'name="csrf" value="([a-f0-9]{64})"', login).group(1)
             assert any(cookie.name=="QSYN_ADMIN_SESSION" for cookie in cookiejar)
             code,_,_=page(guest,origin,"/qsyn/terminal/login","POST",
@@ -100,6 +103,8 @@ def run():
                          "/qsyn/terminal/private-live","/qsyn/terminal/trading"]:
                 code,body,headers=page(guest,origin,path)
                 assert code==200 and "/qsyn/assets/terminal.js" in body, (path,code)
+                assert "no-transform" in headers.get("Cache-Control", ""), path
+                assert "script-src 'self'" in headers.get("Content-Security-Policy", ""), path
             code,_,headers=page(guest,origin,"/qsyn/studio")
             assert code==302 and headers.get("Location")=="/qsyn/terminal/strategy"
             code,_,headers=page(guest,origin,"/qsyn/terminal")
