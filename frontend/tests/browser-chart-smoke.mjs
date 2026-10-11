@@ -30,6 +30,9 @@ try{
   browser=await chromium.launch({headless:true,args:['--disable-dev-shm-usage']});
   const page=await browser.newPage({viewport:{width:1440,height:900}});
   const errors=[];page.on('pageerror',e=>errors.push(e.message));
+  page.on('request',req=>{if(req.method()==='POST'&&req.url().includes('/qsyn/terminal/login')){
+    const h=req.headers();console.log('TEST LOGIN REQUEST metadata',JSON.stringify({origin:h.origin||null,fetchSite:h['sec-fetch-site']||null,host:h.host||null}));
+  }});
   // Anonymous legacy URLs must NOT serve React or redirect into unlocked workspaces.
   for(const old of ['/qsyn/admin/rust','/qsyn/legacy-chart']){
     const blocked=await page.request.get(origin+old,{maxRedirects:0});
