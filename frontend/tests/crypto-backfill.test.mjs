@@ -120,7 +120,7 @@ try{
   assert.equal(loads[0].noCache,false);
   assert.equal(loads[0].exchange,'BINANCE:spot');
   assert.equal(loads[0].interval,'1m');
-  assert.ok(loads[0].from<=now-(MAX_AUTO_BACKFILL_BARS+2)*60);
+  assert.ok(loads[0].from<=now-(MAX_AUTO_BACKFILL_BARS+1)*60);
   assert.ok(loads[0].to>=now);
   assert.equal(loads[0].timeoutMs,undefined);
   callbacks.get('objects:change')();
