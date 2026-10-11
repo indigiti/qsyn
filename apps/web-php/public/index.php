@@ -54,6 +54,23 @@ if ($route === '/qsyn/api/v1/diagnostics/rust' || $route === '/api/v1/diagnostic
     respond(\QSYN\Diagnostics\RustProbe::inspect());
 }
 
+// Indian indexes are discoverable but never expose unlicensed NSE/BSE candles.
+// A future authorized account-scoped Upstox adapter must replace the closed
+// read-only contract after exchange display entitlement is verified.
+if ($route === '/qsyn/api/v1/india/indexes' || $route === '/qsyn/api/v1/india/bars') {
+    $source = dirname(__DIR__) . '/src/IndiaIndexCatalog.php';
+    if (!is_file($source)) {
+        $source = dirname(__DIR__, 2) . '/private_html/qsyn/app/src/IndiaIndexCatalog.php';
+    }
+    if (!is_file($source)) respond(['error' => 'india_index_catalog_unavailable'], 503);
+    require_once $source;
+    [$status, $payload] = \\QSYN\\MarketData\\IndiaIndexCatalog::dispatch(
+        str_ends_with($route, '/indexes') ? 'indexes' : 'bars', $_GET, $_SERVER
+    );
+    if ($status === 405) header('Allow: GET');
+    respond($payload, $status);
+}
+
 // Public crypto candles: strict query allowlist and loopback Rust only.
 // No client-chosen host, port, URL, API token, private account, or order route.
 if ($route === '/qsyn/api/v1/crypto/bars' || $route === '/qsyn/api/v1/crypto/health') {
