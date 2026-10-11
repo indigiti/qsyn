@@ -158,7 +158,6 @@ function HomepageChart({ theme, embedded = false }) {
     let active=true;
     // Upstream ChartGrid can reject an obsolete internal load when it cancels
     // a refresh or changes interval; a known AbortError is not an app fault.
-    const stopAbortObservation=observeChartCancellations(window);
     const feed=new QsynMarketsFeed(s=>{if(active)setMessage(s);});
     const grid=createChartGrid(host.current,{
       feed,symbol:cryptoDefault.symbol,
@@ -223,8 +222,6 @@ function HomepageChart({ theme, embedded = false }) {
       host.current?.removeEventListener('scroll',syncToolbar,true);
       slot?.remove();
       grid.destroy();feed.destroy();
-      // Let chart teardown's settled canceled tasks flush before uninstall.
-      queueMicrotask(stopAbortObservation);
     };
   },[theme,nativeWorkspaces,nativeWatchlists]);
   return <main className={embedded ? 'qsyn-homepage terminal-market-embedded' : 'qsyn-homepage'} aria-label="QSYN crypto and India index charts">
@@ -243,7 +240,7 @@ function ChartWorkspace({ theme }) {
   const templateStore = useMemo(() => publicNativeWorkspaceStore(), []);
   const [saved, setSaved] = useState(() => loadBrowserWorkspace(browserStorage()));
   const [scope, setScope] = useState('browser');
-  const [remote, setRemote] = useState({ status: 'checking' });
+  const [remote, setRemote] = useState({ status: 'not_checked' });
   const [remoteBusy, setRemoteBusy] = useState(false);
   const [panes, setPanes] = useState(DEFAULT_PANES);
   const [active, setActive] = useState('primary');
@@ -253,13 +250,8 @@ function ChartWorkspace({ theme }) {
   const [revision, setRevision] = useState(0);
   const [notice, setNotice] = useState('Watchlist and layouts stay in this browser only.');
   const chartRefs = useRef(new Map());
-  useEffect(() => {
-    const controller = new AbortController();
-    checkPrivateWorkspace(fetch, controller.signal).then(next => {
-      if (!controller.signal.aborted) setRemote(next);
-    });
-    return () => controller.abort();
-  }, []);
+  // Optional private development storage is probed ONLY after an explicit
+  // operator click. Avoid 503 traffic on ordinary browser-only workspaces.
   async function refreshRemote() {
     setRemoteBusy(true);
     try {
@@ -407,7 +399,8 @@ function ChartWorkspace({ theme }) {
           Storage: {scope === 'private' ? 'private session memory · save manually' : 'browser only'}
           {' · '}{remote.status === 'ready' ? 'private development file available'
             : remote.status === 'login_required' ? 'test login required'
-            : remote.status === 'checking' ? 'checking private storage'
+            : remote.status === 'not_checked' ? 'private storage not checked'
+            : remote.status === 'offline' ? 'private storage unavailable'
             : 'private sync disabled'}
         </span>
         {remote.status === 'ready' && <>
@@ -418,10 +411,10 @@ function ChartWorkspace({ theme }) {
           {scope === 'private' && <button type="button" className="terminal-action terminal-secondary-action"
             onClick={returnToBrowser}>Return to browser</button>}
         </>}
-        {remote.status !== 'checking' && <button type="button" className="terminal-icon"
+        <button type="button" className="terminal-icon"
           disabled={remoteBusy} aria-label="Refresh private file status" onClick={refreshRemote}>
           <Activity size={15}/>
-        </button>}
+        </button>
       </div>
       <p className="terminal-footnote" role="status">{notice}</p>
     </section>
@@ -800,5 +793,11 @@ function App() {
     </nav>
   </div>;
 }
+// Keep the narrowly scoped cancellation listener for the entire React lifetime.
+// Removing it in a chart effect cleanup can race the browser's later
+// unhandledrejection dispatch from OpenAlgo grid.destroy().
 const root = document.getElementById('qsyn-root');
-if (root) createRoot(root).render(<App />);
+if (root) {
+  observeChartCancellations(window);
+  createRoot(root).render(<App />);
+}
