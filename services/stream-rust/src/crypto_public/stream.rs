@@ -6,7 +6,7 @@
 use super::{bar, epoch_ms, number, timestamp, Bar, Request};
 use futures_util::{SinkExt, StreamExt};
 use serde_json::{json, Value};
-use std::{collections::HashMap, sync::OnceLock, time::{Duration, Instant}};
+use std::{collections::{HashMap, VecDeque}, sync::OnceLock, time::{Duration, Instant}};
 use tokio::sync::Mutex;
 use tokio_tungstenite::{connect_async, tungstenite::Message};
 
@@ -14,6 +14,8 @@ use tokio_tungstenite::{connect_async, tungstenite::Message};
 struct Slot {
     connected: bool,
     last: Option<Bar>,
+    // Bounded authoritative WS candle snapshots, never synthetic fills.
+    recent: VecDeque<Bar>,
     last_at: Option<Instant>,
     reconnects: u64,
     updates: u64,
@@ -43,6 +45,14 @@ pub(super) async fn latest(req: &Request) -> Option<Bar> {
         None
     }
 }
+/// Validated exchange candles observed within this Rust process. Historical
+/// Coinbase fills are only possible for buckets seen since subscription.
+/// A reconnect never turns these snapshots into fabricated forward candles.
+pub(super) async fn recent(req: &Request) -> Vec<Bar> {
+    let guard=slots().lock().await;
+    if req.exchange!="COINBASE" || req.interval!="1m" {return Vec::new();}
+    guard.get(&key(req)).map_or_else(Vec::new,|s|s.recent.iter().cloned().collect())
+}
 pub(super) async fn status(req: &Request) -> &'static str {
     let guard = slots().lock().await;
     match guard.get(&key(req)) {
@@ -57,7 +67,7 @@ pub(super) async fn ensure(req: &Request) {
     let mut guard = slots().lock().await;
     if guard.contains_key(&k) { return; }
     guard.insert(k, Slot {
-        connected: false, last: None, last_at: None, reconnects: 0,
+        connected: false, last: None, recent: VecDeque::new(), last_at: None, reconnects: 0,
         updates: 0, last_update_ms: None, last_connection_ms: None,
         last_disconnection_ms: None, last_rest_ms: None,
         rest_successes: 0, rest_recoveries: 0,
@@ -72,6 +82,13 @@ async fn publish(req: &Request, next: Bar) {
         if let Some(ref previous)=slot.last {
             if next.time < previous.time { return; }
         }
+        // Hold the last 32 distinct minutes so lagged Coinbase REST candles
+        // can be reconciled against real observed trade-derived bars.
+        if slot.recent.back().is_some_and(|b| b.time == next.time) {
+            slot.recent.pop_back();
+        }
+        slot.recent.push_back(next.clone());
+        while slot.recent.len() > 32 { slot.recent.pop_front(); }
         slot.last=Some(next);
         slot.connected=true;
         slot.last_at=Some(Instant::now());
@@ -123,7 +140,7 @@ fn telemetry(_req: &Request, slot: Option<&Slot>) -> Value {
             "last_connection_ms":null,"last_disconnection_ms":null,
             "rest_successes":0,"rest_refreshes_after_reconnect":0,
             "last_rest_ms":null,"history_gap_events":null,"missing_history_bars":null,
-            "fresh":false});
+            "ws_recent_candles":0,"fresh":false});
     };
     let fresh=s.connected && s.last_at.is_some_and(|t|t.elapsed()<Duration::from_secs(20));
     let state=if fresh {"websocket"} else if s.connected {"stale"} else {"reconnecting"};
@@ -133,6 +150,7 @@ fn telemetry(_req: &Request, slot: Option<&Slot>) -> Value {
         "fresh":fresh,
         "reconnect_count":s.reconnects,
         "websocket_candle_updates":s.updates,
+        "ws_recent_candles":s.recent.len(),
         "last_exchange_candle_sec":s.last.as_ref().map(|b|b.time),
         "last_websocket_update_ms":s.last_update_ms,
         "websocket_lag_seconds":s.last_update_ms.map(|ms|now.saturating_sub(ms)/1000),
@@ -259,16 +277,23 @@ struct CoinbaseTrades {
     // Do not publish until the worker observes the next UTC minute.
     latest: Option<Bar>,
     warmup: bool,
+    last_trade_id: Option<u64>,
 }
 impl CoinbaseTrades {
     fn on_message(&mut self,req:&Request,v:&Value)->Option<Bar> {
         if v["type"]!="match" || v["product_id"]!=req.symbol {return None;}
+        // Duplicate/reordered matches must not double-count trading volume.
+        // Exchange trade_id is monotonically increasing for this product.
+        let trade_id=v["trade_id"].as_u64().or_else(||v["trade_id"].as_str()?.parse().ok())?;
+        if self.last_trade_id.is_some_and(|previous|trade_id<=previous) {return None;}
         let price=number(&v["price"])?;
         let volume=number(&v["size"])?;
         let timestamp=chrono::DateTime::parse_from_rfc3339(v["time"].as_str()?).ok()?.timestamp();
         let timestamp=u64::try_from(timestamp).ok()?;
         let minute=timestamp/60*60;
         if volume<=0.0 || price<=0.0 || minute>epoch_ms()/1000+60 {return None;}
+        if self.latest.as_ref().is_some_and(|last|minute<last.time) {return None;}
+        self.last_trade_id=Some(trade_id);
         match self.latest.take() {
             Some(mut existing) if existing.time==minute => {
                 existing.high=existing.high.max(price);
@@ -393,7 +418,7 @@ mod tests {
         let unknown=telemetry(&req,None);
         assert_eq!(unknown["state"],"not_started");
         assert_eq!(unknown["fresh"],false);
-        let no_candle=Slot{connected:true,last:None,last_at:None,reconnects:1,
+        let no_candle=Slot{connected:true,last:None,recent:VecDeque::new(),last_at:None,reconnects:1,
             updates:0,last_update_ms:None,last_connection_ms:Some(1),
             last_disconnection_ms:None,last_rest_ms:None,rest_successes:0,
             rest_recoveries:0,last_rest_gap_count:0,last_rest_missing_bars:0};
@@ -403,6 +428,33 @@ mod tests {
             last_at:Some(Instant::now()),last_update_ms:Some(epoch_ms()),
             ..no_candle};
         assert_eq!(telemetry(&req,Some(&fresh))["state"],"websocket");
+    }
+
+    #[test]
+    fn coinbase_trade_buckets_are_complete_after_warmup_and_deduplicated() {
+        let req=req("COINBASE","spot","BTC-USD");
+        let mut trades=CoinbaseTrades::default();
+        let base=epoch_ms()/60_000*60;
+        let msg=|id:u64,time:u64,price:&str|{
+            let when=chrono::DateTime::from_timestamp(time as i64,0).unwrap().to_rfc3339();
+            json!({"type":"match","product_id":"BTC-USD","trade_id":id,
+                "price":price,"size":"2","time":when})
+        };
+        assert!(trades.on_message(&req,&msg(10,base,"100")).is_none());
+        assert!(trades.on_message(&req,&msg(10,base,"100")).is_none());
+        assert!(trades.on_message(&req,&msg(11,base,"101")).is_none());
+        // A complete new bucket starts at its first observed trade.
+        let next=base+60;
+        // A fake future timestamp would be rejected; use a past minute.
+        let mut historic=CoinbaseTrades::default();
+        let first=base.saturating_sub(120);
+        assert!(historic.on_message(&req,&msg(100,first,"100")).is_none());
+        let ready=historic.on_message(&req,&msg(101,first+60,"102")).unwrap();
+        assert_eq!((ready.open,ready.volume),(102.0,2.0));
+        assert!(historic.on_message(&req,&msg(101,first+60,"102")).is_none());
+        let grown=historic.on_message(&req,&msg(102,first+61,"103")).unwrap();
+        assert_eq!((grown.open,grown.high,grown.volume),(102.0,103.0,4.0));
+        let _=next;
     }
 
 }
