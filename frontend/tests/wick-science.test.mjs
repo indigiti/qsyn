@@ -54,6 +54,15 @@ const b=calculateWickScience(both,opts,context).values;
 assert.equal(b.shortSL[62],1);
 assert.equal(b.shortTP[62],null);
 
+// A dropped bar inside the active setup invalidates the entire flip path:
+// the otherwise qualifying 3rd one-minute candle cannot manufacture a trade.
+const inSetupGap=bars.filter((_,i)=>i!==61).map(x=>({...x}));
+inSetupGap[61]={...inSetupGap[61],open:101,high:102,low:99,close:99};
+const invalidated=calculateWickScience(inSetupGap,opts,context).values;
+assert.equal(invalidated.shortArmed[60],1);
+assert.equal(invalidated.shortEntry[61],null);
+assert.equal(invalidated.longEntry[61],null);
+
 // No new signal on unconfirmed forming tail.
 const forming=bars.slice(0,61);
 const f=calculateWickScience(forming,opts,context).values;
