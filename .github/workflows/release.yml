@@ -96,6 +96,8 @@ jobs:
           python3 apps/web-php/tests/OpenAlgoUpstoxReadinessTest.py
           php -l apps/web-php/src/OpenAlgoAdminWebApi.php
           python3 apps/web-php/tests/OpenAlgoAdminWebHttpSmoke.py
+          php -l apps/web-php/src/OpenAlgoAdminSetup.php
+          python3 apps/web-php/tests/OpenAlgoAdminWebSetupHttpSmoke.py
           php -l apps/web-php/tools/private-history-export.php
           python3 apps/web-php/tests/PrivateHistoryExportTest.py
           php -l apps/web-php/tools/private-demo-fixtures.php
@@ -166,6 +168,7 @@ jobs:
           cp apps/web-php/src/PrivateOpenAlgoReader.php staging/private/app/src/PrivateOpenAlgoReader.php
           cp apps/web-php/src/OpenAlgoBrokerConnectionsApi.php staging/private/app/src/OpenAlgoBrokerConnectionsApi.php
           cp apps/web-php/src/OpenAlgoAdminWebApi.php staging/private/app/src/OpenAlgoAdminWebApi.php
+          cp apps/web-php/src/OpenAlgoAdminSetup.php staging/private/app/src/OpenAlgoAdminSetup.php
           cp apps/web-php/tools/private-broker-gateway.php staging/private/app/tools/private-broker-gateway.php
           cp apps/web-php/tools/openalgo-upstox-readiness.php staging/private/app/tools/openalgo-upstox-readiness.php
           cp apps/web-php/tools/upstox-oauth.php staging/private/app/tools/upstox-oauth.php
@@ -252,6 +255,8 @@ jobs:
           test -s staging/private/app/src/PrivateOpenAlgoReader.php
           test -s staging/private/app/src/OpenAlgoBrokerConnectionsApi.php
           test -s staging/private/app/src/OpenAlgoAdminWebApi.php
+          test -s staging/private/app/src/OpenAlgoAdminSetup.php
+          php -l staging/private/app/src/OpenAlgoAdminSetup.php
           php -l staging/private/app/src/OpenAlgoAdminWebApi.php
           php -l staging/private/app/src/OpenAlgoBrokerConnectionsApi.php
           test -s staging/private/app/tools/private-broker-gateway.php
@@ -354,6 +359,8 @@ jobs:
           test -s verified-release/private/app/src/PrivateOpenAlgoReader.php
           test -s verified-release/private/app/src/OpenAlgoBrokerConnectionsApi.php
           test -s verified-release/private/app/src/OpenAlgoAdminWebApi.php
+          test -s verified-release/private/app/src/OpenAlgoAdminSetup.php
+          php -l verified-release/private/app/src/OpenAlgoAdminSetup.php
           php -l verified-release/private/app/src/OpenAlgoAdminWebApi.php
           php -l verified-release/private/app/src/OpenAlgoBrokerConnectionsApi.php
           test -s verified-release/private/app/tools/private-broker-gateway.php

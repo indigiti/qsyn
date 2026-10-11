@@ -66,6 +66,23 @@ final class OpenAlgoAdminWebApi
             $runtime = (string)(getenv('QSYN_RUNTIME_DIR') ?: dirname(__DIR__, 2) . '/runtime');
             $registry = (string)(getenv('QSYN_OPENALGO_REGISTRY_FILE')
                 ?: rtrim($runtime, '/') . '/openalgo-registry.json');
+            if (!is_file($registry) && !is_link($registry) && $operation === 'accounts') {
+                // No installed OpenAlgo profile is normal for a first launch.
+                // Avoid repeated 503s and report the actionable setup state.
+                $setup = OpenAlgoAdminSetup::state();
+                return [200, [
+                    'schema' => self::SCHEMA,
+                    'accounts' => [],
+                    'csrf' => RustAdmin::csrf(),
+                    'configuration_state' => 'not_provisioned',
+                    'setup_available' => $setup['available'],
+                    'setup_mode' => $setup['mode'],
+                    'trading_enabled_in_qsyn' => false,
+                    'market_entitlement_verified' => false,
+                    'broker_identity_verified' => false,
+                    'upstream_order_permissions_verified' => false,
+                ]];
+            }
             $accounts = PrivateBrokerRegistry::loadForAdminWeb($registry);
             $loginFile = (string)(getenv('QSYN_OPENALGO_LOGIN_URLS_FILE')
                 ?: rtrim($runtime, '/') . '/openalgo-login-urls.json');
@@ -90,6 +107,8 @@ final class OpenAlgoAdminWebApi
                 'schema' => self::SCHEMA,
                 'accounts' => $list,
                 'csrf' => RustAdmin::csrf(),
+                'configuration_state' => 'registered',
+                'setup_available' => false,
                 'trading_enabled_in_qsyn' => false,
                 'market_entitlement_verified' => false,
                 'broker_identity_verified' => false,
