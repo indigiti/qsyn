@@ -197,12 +197,12 @@ if ($route === '/qsyn/api/v1/admin/diagnostics/report') {
 // Native Upstox operator OAuth. No OpenAlgo Python or API key is involved.
 // The callback accepts a one-use 256-bit state instead of an admin cookie:
 // external Upstox redirects will not carry our SameSite=Strict admin session.
-if (preg_match('#^/qsyn/api/v1/admin/upstox/(status|setup|begin|verify|callback)$#', $route, $nativeUpstox)) {
+if (preg_match('#^/qsyn/api/v1/admin/upstox/(status|setup|begin|verify|discover|callback)$#', $route, $nativeUpstox)) {
     $src = dirname(__DIR__) . '/src';
     if (!is_file($src . '/NativeUpstoxWebApi.php')) {
         $src = dirname(__DIR__, 2) . '/private_html/qsyn/app/src';
     }
-    foreach (['RustAdmin','UpstoxOperatorOAuth','NativeUpstoxProfileVerifier','NativeUpstoxWebApi'] as $unit) {
+    foreach (['RustAdmin','UpstoxOperatorOAuth','NativeUpstoxProfileVerifier','NativeUpstoxIndexDiscovery','NativeUpstoxWebApi'] as $unit) {
         if (!is_file($src . '/' . $unit . '.php')) {
             respond(['error' => 'upstox_web_unavailable'], 503);
         }
