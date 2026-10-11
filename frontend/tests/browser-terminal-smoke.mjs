@@ -43,7 +43,7 @@ try {
   const page=await browser.newPage({viewport:{width:1440,height:900}});
   page.on('pageerror',e=>browserErrors.push(e.message));
   page.on('request',r=>browserRequests.push(r.url()));
-  // New public homepage directly renders the existing trading workspace: no redirect.
+  // The public homepage renders a dedicated full-width OpenAlgo widget; no redirect.
   const response=await page.goto(origin+'/qsyn/',{waitUntil:'domcontentloaded',timeout:25000});
   if(response.status()!==200)throw new Error('QSYN homepage returned '+response.status());
   if(new URL(page.url()).pathname!=='/qsyn/')
@@ -60,6 +60,27 @@ try {
     throw new Error('Terminal lost same-origin API CSP');
   if(!String(response.headers()['x-robots-tag']).includes('noindex'))
     throw new Error('Terminal staging was unexpectedly indexable');
+  // The homepage is a standalone full-width OpenAlgo widget, not the
+  // smaller trading workspace with sidebar controls.
+  await page.getByRole('heading',{name:'Premium chart'}).waitFor();
+  await page.waitForFunction(()=>document.querySelectorAll('.qsyn-home-chart #qsyn-native-chart canvas').length>0,
+    null,{timeout:12000});
+  const homeWidth=await page.locator('.qsyn-home-chart .terminal-chart-host')
+    .evaluate(node=>node.getBoundingClientRect().width);
+  if(homeWidth<1200)throw new Error('OpenAlgo homepage chart is not full-width: '+homeWidth);
+  if(await page.locator('html').getAttribute('data-qsyn-theme')!=='light')
+    throw new Error('First-visit homepage did not match light reference');
+  if(!(await page.getByRole('link',{name:'Dashboard',exact:true}).count()))
+    throw new Error('Premium dashboard is not reachable from homepage');
+  if(!(await page.getByRole('link',{name:'Trading workspace',exact:true}).count()))
+    throw new Error('Full chart workspace is not reachable from homepage');
+  const homeNote=await page.locator('.qsyn-home-disclaimer').innerText();
+  if(!homeNote.includes('Illustrative synthetic premium')||!homeNote.includes('No exchange market data'))
+    throw new Error('Full-width homepage lost simulated-source disclosure');
+
+  // The /qsyn/terminal route retains existing chart compare, watchlist,
+  // private-workspace and broker-safety behavior.
+  await page.goto(origin+'/qsyn/terminal',{waitUntil:'domcontentloaded'});
   await page.getByRole('heading',{name:'Trading charts'}).waitFor();
   await page.waitForFunction(()=>document.querySelectorAll('#qsyn-native-chart canvas').length>0,
     null,{timeout:12000});
@@ -163,6 +184,11 @@ try {
   await privatePage.close();
   const mobile=await browser.newPage({viewport:{width:390,height:844}});
   mobile.on('pageerror',e=>browserErrors.push(e.message));
+  await mobile.goto(origin+'/qsyn/',{waitUntil:'domcontentloaded'});
+  await mobile.getByRole('heading',{name:'Premium chart'}).waitFor();
+  await mobile.waitForFunction(()=>document.querySelectorAll('.qsyn-home-chart canvas').length>0);
+  if(await mobile.evaluate(()=>document.documentElement.scrollWidth>innerWidth+2))
+    throw new Error('Full-width homepage overflows on mobile');
   await mobile.goto(origin+'/qsyn/terminal?view=tools',{waitUntil:'domcontentloaded'});
   await mobile.getByRole('button',{name:'Open menu'}).click();
   if(!(await mobile.locator('.terminal-sidebar').getAttribute('class')).includes('show'))
@@ -175,7 +201,7 @@ try {
   if(browserRequests.some(url=>/(\/api\/v1\/(placeorder|cancelorder|modifyorder)|\/auth\/login|\/socket\.io)/i.test(url)))
     throw new Error('Terminal unexpectedly requested broker, auth or order execution endpoints');
   if(browserErrors.length)throw new Error('Browser exceptions: '+JSON.stringify(browserErrors));
-  console.log('PASS: /qsyn/ chart-first homepage, legacy rollback, React terminal, charts, mobile, CSP, no order calls');
+  console.log('PASS: full-width /qsyn/ OpenAlgo homepage, legacy rollback, terminal, mobile, CSP and no order calls');
 }finally{
   if(browser)await browser.close();
   if(server)server.kill('SIGTERM');
