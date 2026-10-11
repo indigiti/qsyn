@@ -213,6 +213,7 @@ const NATIVE_UPSTOX_API='/qsyn/api/v1/admin/upstox/';
 function NativeUpstoxPanel({refreshTick=0}){
   const [status,setStatus]=useState(null),[busy,setBusy]=useState(false);
   const [profileCheck,setProfileCheck]=useState(null);
+  const [indexDiscovery,setIndexDiscovery]=useState(null);
   const [lastDiagnostic,setLastDiagnostic]=useState(null);
   const [notice,setNotice]=useState('Checking native Upstox authorization readiness…');
   const [form,setForm]=useState({client_id:'',client_secret:'',expected_user_id:'',confirmed:false});
@@ -222,6 +223,7 @@ function NativeUpstoxPanel({refreshTick=0}){
       if(data.schema!=='QSYN-NATIVE-UPSTOX-WEB/1')throw Error('unexpected_schema');
       setStatus(data);
       setProfileCheck(null);
+      setIndexDiscovery(null);
       setNotice(data.token_stored
         ?'A provider-identity-checked Upstox token is stored privately. Current validity, index display rights and live feed remain unverified.'
         :data.configured?'Upstox app configured. Authorize using your Upstox login.':'Set up your Upstox Developer App before authorizing.');
@@ -233,10 +235,11 @@ function NativeUpstoxPanel({refreshTick=0}){
     setBusy(true);
     const started=Date.now();
     const ctl=new AbortController();
-    const timeout=setTimeout(()=>ctl.abort(),15000);
+    const timeout=setTimeout(()=>ctl.abort(),operation==='discover'?45000:15000);
     let httpStatus=0,requestId=null;
     try{
-      setNotice(operation==='verify'
+      setNotice(operation==='discover'?'Checking the current Upstox index instrument catalog…'
+        :operation==='verify'
         ?'Contacting the official Upstox profile API…'
         :operation==='begin'?'Preparing secure Upstox authorization…':'Saving the Upstox app privately…');
       const r=await fetch(NATIVE_UPSTOX_API+operation,{
@@ -267,6 +270,20 @@ function NativeUpstoxPanel({refreshTick=0}){
         setNotice(data.session_verified
           ?'Upstox profile verified at this instant. Index feeds, licensing and chart subscriptions remain independently gated.'
           :'Upstox verification failed: '+code+'. Copy the JSON report below for diagnosis.');
+      }else if(operation==='discover'){
+        if(data.schema!=='QSYN-UPSTOX-INDEX-DISCOVERY/1')
+          throw Error('INVALID_INDEX_DISCOVERY_SCHEMA');
+        setIndexDiscovery(data);
+        setLastDiagnostic({schema:'QSYN-UPSTOX-BROWSER-DIAGNOSTIC/1',
+          checked_at_utc:new Date().toISOString(),component:'native_upstox_index_instruments',
+          operation:'discover',http_status:r.status,request_id:requestId,
+          duration_ms:Date.now()-started,code:data.code||'UPSTOX_INDEX_SEARCH_UNAVAILABLE',
+          session_verified:data.session_verified_now===true,
+          index_feed_activated:false,trading_enabled:false});
+        setNotice(data.mapping_fully_resolved
+          ?'Six Upstox index instrument keys found for review. This is NOT a current BOD attestation, market-data license or live stream.'
+          :'Instrument lookup incomplete: '+(data.code||'UPSTOX_INDEX_SEARCH_UNAVAILABLE')+
+           '. Inspect the instrument table and copy the safe report.');
       }else if(operation==='begin'){
         const url=new URL(data.authorization_url);
         if(url.protocol!=='https:'||url.hostname!=='api.upstox.com'
@@ -337,9 +354,31 @@ function NativeUpstoxPanel({refreshTick=0}){
       <button type="button" className="terminal-action terminal-secondary-action"
         disabled={busy||!status.token_stored} onClick={()=>void action('verify',{})}>
         <ShieldCheck size={16}/> Verify current Upstox session</button>
+      <button type="button" className="terminal-action terminal-secondary-action"
+        disabled={busy||!status.token_stored} onClick={()=>void action('discover',{})}>
+        <Search size={16}/> Discover index instrument keys</button>
       <button type="button" className="terminal-action terminal-secondary-action" disabled={busy}
         onClick={()=>void load()}><RefreshCw size={16}/> Refresh OAuth status</button>
     </div>}
+    {indexDiscovery&&<section className="terminal-surface" aria-label="Upstox index instrument lookup">
+      <div className="terminal-card-head"><h3>Upstox NSE/BSE index lookup</h3>
+        <button type="button" className="terminal-action terminal-secondary-action"
+          onClick={()=>void navigator.clipboard?.writeText(JSON.stringify(indexDiscovery,null,2))}>
+          <ClipboardCopy size={15}/> Copy mapping JSON</button>
+      </div>
+      <p role="status">Lookup: {indexDiscovery.status} · {indexDiscovery.code}</p>
+      <div className="qt-table-wrap"><table className="qt-table">
+        <thead><tr><th>QSYN index</th><th>Exchange</th><th>Lookup</th><th>Instrument key</th></tr></thead>
+        <tbody>{(indexDiscovery.instruments||[]).map(item=><tr key={item.symbol}>
+          <td>{item.symbol}</td><td>{item.exchange}</td><td>{item.status}</td>
+          <td><code>{item.instrument_key||'Unresolved'}</code></td>
+        </tr>)}</tbody>
+      </table></div>
+      <p className="terminal-footnote">Read-only provider search. Keys are candidates
+        for independent operator/BOD verification only. Current-BOD attestation,
+        exchange display/retention rights, licensed Rust index streaming, public
+        redistribution and trading all remain disabled or unverified.</p>
+    </section>}
     <p className="terminal-footnote">Provider login and consent happen on Upstox.
       QSYN checks the returned user ID and stores the access token in a 0600 private file.
       A stored token is not proof of a currently active WebSocket, an exchange data license,
