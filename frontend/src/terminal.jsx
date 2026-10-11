@@ -18,6 +18,7 @@ import {
 import { createWidget } from 'openalgo-charts/widget';
 import 'openalgo-charts/indicators';
 import { QsynWorkspaceFeed } from './terminal-feed.js';
+import { publicNativeWorkspaceStore } from './native-workspaces.js';
 import { PrivateAuthorizedChartFeed, validatePrivateChartScope } from './private-live-chart.js';
 import { checkPrivateWorkspace, savePrivateWorkspace } from './terminal-file-sync.js';
 import {
@@ -53,7 +54,7 @@ function currentTheme() {
   // explicit light/dark preference and the original terminal defaults.
   return ['/qsyn/', '/qsyn', '/'].includes(window.location.pathname) ? 'light' : 'dark';
 }
-function ChartPanel({ pane, theme, savedState, revision, onMount, hideBranding = false }) {
+function ChartPanel({ pane, theme, savedState, revision, onMount, hideBranding = false, nativeWorkspaces = null, nativeLayouts = true }) {
   const host = useRef(null);
   const [message, setMessage] = useState('Loading simulated candles…');
   const [problem, setProblem] = useState('');
@@ -70,6 +71,7 @@ function ChartPanel({ pane, theme, savedState, revision, onMount, hideBranding =
         // Apache-2.0 library supports host-owned branding. Restrict removal
         // of its visible link to the chart-only homepage.
         ...(hideBranding ? { branding: false } : {}),
+        ...(nativeWorkspaces ? { workspaces: nativeWorkspaces, ...(nativeLayouts ? {} : { layouts: false }) } : {}),
         navigation: { defaultVisibleBars: 95, mousePan: 'horizontal' },
       });
       onMount(pane.id, widget);
@@ -92,7 +94,7 @@ function ChartPanel({ pane, theme, savedState, revision, onMount, hideBranding =
       try { widget?.destroy(); } catch {}
       feed.destroy();
     };
-  }, [pane.id, pane.symbol, theme, revision, onMount, hideBranding]);
+  }, [pane.id, pane.symbol, theme, revision, onMount, hideBranding, nativeWorkspaces, nativeLayouts]);
   const definition = instrumentFor(pane.symbol);
   return (
     <section className="terminal-chart-card" aria-label={pane.id === 'primary' ? 'Primary candlestick chart' : 'Comparison candlestick chart'}>
@@ -125,10 +127,11 @@ const ignoreHomepageWidget = () => {};
  * Keep the simulated-data disclosure below the chart, outside its controls.
  */
 function HomepageChart({ theme }) {
+  const nativeWorkspaces = useMemo(() => publicNativeWorkspaceStore(), []);
   return <main className="qsyn-homepage" aria-label="QSYN simulated chart homepage">
     <div className="qsyn-home-chart">
       <ChartPanel pane={HOME_PANE} theme={theme} savedState={null}
-        revision={0} onMount={ignoreHomepageWidget} hideBranding/>
+        revision={0} onMount={ignoreHomepageWidget} hideBranding nativeWorkspaces={nativeWorkspaces}/>
     </div>
   </main>;
 }
@@ -137,6 +140,7 @@ function browserStorage() {
   try { return window.localStorage; } catch { return null; }
 }
 function ChartWorkspace({ theme }) {
+  const templateStore = useMemo(() => publicNativeWorkspaceStore(), []);
   const [saved, setSaved] = useState(() => loadBrowserWorkspace(browserStorage()));
   const [scope, setScope] = useState('browser');
   const [remote, setRemote] = useState({ status: 'checking' });
@@ -334,7 +338,9 @@ function ChartWorkspace({ theme }) {
               </select>
             </label>
           </div>
-          <ChartPanel pane={p} theme={theme} savedState={snapshots[p.id]} revision={revision} onMount={onMount}/>
+          <ChartPanel pane={p} theme={theme} savedState={snapshots[p.id]} revision={revision} onMount={onMount}
+            nativeLayouts={false}
+            nativeWorkspaces={scope === 'browser' ? templateStore : null}/>
         </div>)}
       </div>
       <aside className="terminal-watchlist terminal-surface" aria-label="Browser watchlist">

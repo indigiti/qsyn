@@ -132,6 +132,37 @@ try {
   // Do not mistake provider-owned chart links/controls for removed QSYN UI.
   if(await page.locator('.qsyn-homepage a[href^="/qsyn/terminal"], .qsyn-homepage a[href="/qsyn/studio"]').count())
     throw new Error('Homepage should not render QSYN shortcut/footer links');
+  // Native OpenAlgo workspace repository uses IndexedDB, NOT QSYN's
+  // legacy localStorage layout schema. The real widget owns the Layouts UI.
+  const layoutsIcon=page.locator('.qsyn-home-chart .oac-topbar__layouts');
+  await layoutsIcon.waitFor({timeout:12000});
+  if(await layoutsIcon.evaluate(node=>node.getBoundingClientRect().width)>40)
+    throw new Error('Homepage native Layouts control should be icon-only');
+  await layoutsIcon.click();
+  await page.locator('.oac-layouts [data-action="save-as"]').waitFor();
+  await page.locator('.oac-layouts [data-action="save-as"]').click();
+  const nativeName='QSYN Native Workspace Smoke';
+  await page.locator('.oac-layouts__input').fill(nativeName);
+  await page.locator('.oac-layouts__input').press('Enter');
+  await page.waitForFunction(name => {
+    const el=document.querySelector('.oac-layouts__name');
+    return el?.textContent?.includes(name);
+  },nativeName,{timeout:12000});
+  await page.keyboard.press('Escape');
+  await page.reload({waitUntil:'domcontentloaded'});
+  await page.waitForFunction(()=>document.querySelectorAll('.qsyn-home-chart #qsyn-native-chart canvas').length>0);
+  await page.locator('.qsyn-home-chart .oac-topbar__layouts').click();
+  await page.waitForFunction(name => {
+    const el=document.querySelector('.oac-layouts__name');
+    return el?.textContent?.includes(name);
+  },nativeName,{timeout:12000});
+  await page.keyboard.press('Escape');
+  // Native template library is exposed by the real OpenAlgo Indicators picker.
+  await page.locator('.qsyn-home-chart .oac-topbar button[aria-label="Indicators"]').click();
+  await page.locator('[data-action="templates"]').waitFor({timeout:12000});
+  await page.locator('[data-action="templates"]').click();
+  await page.locator('.oac-templates [data-action="save-template"]').waitFor({timeout:12000});
+  await page.keyboard.press('Escape');
   const chartHeight=await page.locator('.qsyn-home-chart .terminal-chart-host')
     .evaluate(node=>node.getBoundingClientRect().height);
   if(chartHeight<890)throw new Error('Homepage chart does not fill 900px desktop viewport: '+chartHeight);
