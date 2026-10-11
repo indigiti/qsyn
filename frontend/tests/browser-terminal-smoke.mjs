@@ -203,8 +203,7 @@ try {
   await page.getByRole('button',{name:'Brokers',exact:true}).first().click();
   await page.getByRole('heading',{name:'Accounts & authorizations'}).waitFor();
   if(!page.url().includes('view=brokers'))throw new Error('Broker view not routed in React');
-  if(await page.getByText('No production broker session verified').count()===0)
-    throw new Error('Broker readiness falsely authenticated');
+  await page.getByText('No production broker session verified').waitFor({timeout:12000});
   await page.getByRole('button',{name:'Operations',exact:true}).first().click();
   await page.getByRole('heading',{name:'Service administration'}).waitFor();
   if(await page.getByRole('button',{name:'Restart',exact:true}).count() &&
