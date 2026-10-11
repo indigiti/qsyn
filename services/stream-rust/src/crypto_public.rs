@@ -121,7 +121,7 @@ fn source(req:&Request) -> Result<(String,Option<Value>),()> {
             vec![("category",if req.market=="perp" {"linear"}else{"spot"}),
                  ("symbol",s),("interval",match i {"1m"=>"1","5m"=>"5","15m"=>"15","1h"=>"60","1d"=>"D",_=>return Err(())}),("limit",&n)]),
         "OKX" => ("https://www.okx.com","/api/v5/market/candles".into(),
-            vec![("instId",s),("bar",match i {"1d"=>"1D",_=>i}),("limit",&n)]),
+            vec![("instId",s),("bar",match i {"1h"=>"1H","1d"=>"1Dutc",_=>i}),("limit",&n)]),
         "COINBASE" => ("https://api.exchange.coinbase.com",
             format!("/products/{s}/candles"),
             vec![("granularity",match i {"1m"=>"60","5m"=>"300","15m"=>"900","1h"=>"3600","1d"=>"86400",_=>return Err(())})]),
