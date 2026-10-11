@@ -13,8 +13,8 @@ $chartJsVersion = (string) (@filemtime(__DIR__ . '/assets/account-chart.js') ?: 
   <meta name="robots" content="noindex,nofollow">
   <title>QSYN — Mock Account Workspace</title>
   <link rel="stylesheet" href="/qsyn/assets/account-dashboard.css?v=<?= rawurlencode($dashboardCssVersion) ?>">
-  <script src="/qsyn/assets/account-chart.js?v=<?= rawurlencode($chartJsVersion) ?>" defer></script>
-  <script src="/qsyn/assets/account-dashboard.js?v=<?= rawurlencode($dashboardJsVersion) ?>" defer></script>
+  <script nonce="<?= htmlspecialchars($qsynCspNonce, ENT_QUOTES, 'UTF-8') ?>" src="/qsyn/assets/account-chart.js?v=<?= rawurlencode($chartJsVersion) ?>" defer></script>
+  <script nonce="<?= htmlspecialchars($qsynCspNonce, ENT_QUOTES, 'UTF-8') ?>" src="/qsyn/assets/account-dashboard.js?v=<?= rawurlencode($dashboardJsVersion) ?>" defer></script>
 </head>
 <body>
   <div class="app-shell">

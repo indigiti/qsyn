@@ -376,11 +376,14 @@ if (in_array($route, ['/', '/qsyn', '/qsyn/'], true)
         respond(['error' => 'terminal_bundle_unavailable'], 503);
     }
     header('Content-Type: text/html; charset=utf-8');
+    // A fresh response nonce is also used by Cloudflare's JSD injection.
+    // Keep bot detection available without permitting arbitrary inline JS.
+    $qsynCspNonce = base64_encode(random_bytes(18));
     header('Cache-Control: no-store');
     header('X-Frame-Options: DENY');
     header('X-Robots-Tag: noindex, nofollow');
     header('Content-Security-Policy: default-src ' . "'self'" .
-        '; script-src ' . "'self'" . '; style-src ' . "'self' 'unsafe-inline'" .
+        '; script-src ' . "'self' 'nonce-" . $qsynCspNonce . "'" . '; style-src ' . "'self' 'unsafe-inline'" .
         '; connect-src ' . "'self'" . '; img-src ' . "'self' data:" .
         '; frame-ancestors ' . "'none'" . ';');
     require __DIR__ . '/terminal.php';
@@ -491,11 +494,13 @@ if ($route === '/qsyn/app' || $route === '/qsyn/app/') {
         respond(['error' => 'dashboard_not_enabled'], 404);
     }
     header('Content-Type: text/html; charset=utf-8');
+    // Separate fresh nonce for the optional private dashboard HTML.
+    $qsynCspNonce = base64_encode(random_bytes(18));
     header('Cache-Control: private, no-store');
     header('X-Frame-Options: DENY');
     header('X-Robots-Tag: noindex, nofollow');
     header('Content-Security-Policy: default-src ' . "'self'" .
-        '; script-src ' . "'self'" . '; style-src ' . "'self' 'unsafe-inline'" .
+        '; script-src ' . "'self' 'nonce-" . $qsynCspNonce . "'" . '; style-src ' . "'self' 'unsafe-inline'" .
         '; connect-src ' . "'self'" . '; img-src ' . "'self' data:" . '; frame-ancestors ' . "'none'" . ';');
     require __DIR__ . '/account-dashboard.php';
     exit;

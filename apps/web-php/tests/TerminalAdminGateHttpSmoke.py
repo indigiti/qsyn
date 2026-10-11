@@ -67,6 +67,17 @@ def run():
             status, home, headers = page(guest, origin, "/qsyn/")
             assert status == 200 and 'id="qsyn-root"' in home, (status, repr(home[:700]), dict(headers))
             assert "/qsyn/assets/terminal.js" in home
+            assert "no-store" in headers.get("Cache-Control", "")
+            assert "no-transform" not in headers.get("Cache-Control", "")
+            home_nonce = re.search(r"script-src 'self' 'nonce-([A-Za-z0-9+/=]+)'",
+                                   headers.get("Content-Security-Policy", ""))
+            assert home_nonce, "Homepage missing cryptographic CSP nonce"
+            assert f'nonce="{home_nonce.group(1)}"' in home
+            again, home_again, new_headers = page(guest, origin, "/qsyn/")
+            new_nonce = re.search(r"script-src 'self' 'nonce-([A-Za-z0-9+/=]+)'",
+                                  new_headers.get("Content-Security-Policy", ""))
+            assert again == 200 and new_nonce and new_nonce.group(1) != home_nonce.group(1)
+            assert f'nonce="{new_nonce.group(1)}"' in home_again
             for path in [
                 "/qsyn/terminal", "/qsyn/terminal/",
                 "/qsyn/terminal/trading", "/qsyn/terminal/brokers",
@@ -82,6 +93,7 @@ def run():
             assert status==200 and "Administrator sign-in" in login
             assert "terminal.js" not in login
             assert "unsafe-inline" not in headers.get("Content-Security-Policy","")
+            assert "no-transform" in headers.get("Cache-Control", ""), "login HTML allows script injection"
             csrf = re.search(r'name="csrf" value="([a-f0-9]{64})"', login).group(1)
             assert any(cookie.name=="QSYN_ADMIN_SESSION" for cookie in cookiejar)
             code,_,_=page(guest,origin,"/qsyn/terminal/login","POST",
@@ -100,6 +112,11 @@ def run():
                          "/qsyn/terminal/private-live","/qsyn/terminal/trading"]:
                 code,body,headers=page(guest,origin,path)
                 assert code==200 and "/qsyn/assets/terminal.js" in body, (path,code)
+                assert "no-store" in headers.get("Cache-Control", ""), path
+                assert "no-transform" not in headers.get("Cache-Control", ""), path
+                nonce = re.search(r"script-src 'self' 'nonce-([A-Za-z0-9+/=]+)'",
+                                  headers.get("Content-Security-Policy", ""))
+                assert nonce and f'nonce="{nonce.group(1)}"' in body, path
             code,_,headers=page(guest,origin,"/qsyn/studio")
             assert code==302 and headers.get("Location")=="/qsyn/terminal/strategy"
             code,_,headers=page(guest,origin,"/qsyn/terminal")

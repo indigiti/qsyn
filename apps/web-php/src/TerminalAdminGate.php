@@ -116,6 +116,9 @@ final class TerminalAdminGate
         // suppressed while preserving the same-origin form Origin header.
         header('Referrer-Policy: same-origin');
         header('Content-Type: text/html; charset=utf-8');
+        // Do not allow Cloudflare to insert bot-detection JavaScript into
+        // the password/setup form; no extra active code should run here.
+        header('Cache-Control: private, no-store, no-transform, max-age=0');
         header('Content-Security-Policy: default-src ' . "'none'"
             . '; style-src ' . "'self'"
             . '; form-action ' . "'self'"
