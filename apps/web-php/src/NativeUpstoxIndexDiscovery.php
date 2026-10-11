@@ -13,13 +13,13 @@ final class NativeUpstoxIndexDiscovery
     private const SCHEMA = 'QSYN-UPSTOX-INDEX-DISCOVERY/1';
     private const SEARCH_URL = 'https://api.upstox.com/v2/instruments/search';
     private const TARGETS = [
-        'NIFTY' => ['exchange'=>'NSE','segment'=>'NSE_INDEX','query'=>'NIFTY',
+        'NIFTY' => ['exchange'=>'NSE','segment'=>'NSE_INDEX','query'=>'Nifty 50',
             'aliases'=>['NIFTY','NIFTY50']],
-        'BANKNIFTY' => ['exchange'=>'NSE','segment'=>'NSE_INDEX','query'=>'BANK NIFTY',
+        'BANKNIFTY' => ['exchange'=>'NSE','segment'=>'NSE_INDEX','query'=>'Nifty Bank',
             'aliases'=>['BANKNIFTY','NIFTYBANK']],
-        'FINNIFTY' => ['exchange'=>'NSE','segment'=>'NSE_INDEX','query'=>'FINNIFTY',
+        'FINNIFTY' => ['exchange'=>'NSE','segment'=>'NSE_INDEX','query'=>'Nifty Fin Service',
             'aliases'=>['FINNIFTY','NIFTYFINSERVICE']],
-        'MIDCPNIFTY' => ['exchange'=>'NSE','segment'=>'NSE_INDEX','query'=>'MIDCPNIFTY',
+        'MIDCPNIFTY' => ['exchange'=>'NSE','segment'=>'NSE_INDEX','query'=>'Nifty Mid Select',
             'aliases'=>['MIDCPNIFTY','NIFTYMIDSELECT']],
         'INDIAVIX' => ['exchange'=>'NSE','segment'=>'NSE_INDEX','query'=>'India VIX',
             'aliases'=>['INDIAVIX']],
