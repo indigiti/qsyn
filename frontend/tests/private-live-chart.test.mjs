@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  validatePrivateChartScope, fetchPrivateChartGrant, PrivateAuthorizedChartFeed,
+  validatePrivateChartScope, isIndexInstrumentKey, fetchPrivateChartGrant, PrivateAuthorizedChartFeed,
 } from '../src/private-live-chart.js';
 
 const csrf = 'a'.repeat(64);
@@ -14,6 +14,24 @@ test('private chart strictly accepts Upstox FO keys, never arbitrary brokerage s
   assert.equal(validatePrivateChartScope('other.com/steal', instrument), false);
   assert.equal(validatePrivateChartScope(account, 'NFO|ALIAS'), false);
   assert.equal(validatePrivateChartScope(account, 'NSE_FO|abc'), false);
+});
+
+test('canonical NSE/BSE index keys are private-only and supported without relaxing FO checks', async () => {
+  assert.equal(isIndexInstrumentKey('NSE_INDEX|Nifty 50'),true);
+  assert.equal(isIndexInstrumentKey('BSE_INDEX|SENSEX'),true);
+  assert.equal(validatePrivateChartScope(account,'NSE_INDEX|Nifty 50'),true);
+  assert.equal(validatePrivateChartScope(account,'NSE_INDEX|Nifty/50'),false);
+  assert.equal(validatePrivateChartScope(account,'NSE_INDEX|../secret'),false);
+  const requests=[];
+  const feed = new PrivateAuthorizedChartFeed(account,'NSE_INDEX|Nifty 50',()=>{},{
+    fetcher:async (...args)=>{requests.push(args);throw Error('must not request FO history');},
+    location:{protocol:'https:',host:'qsyn.invalid'},
+  });
+  assert.deepEqual(await feed.getBars({
+    exchange:'UPSTOX_PRIVATE',symbol:'NSE_INDEX|Nifty 50',interval:'1m',
+  }),[]);
+  assert.equal(requests.length,0,'never request options history for index instruments');
+  feed.destroy();
 });
 
 test('grant cannot be fetched without authenticated private test identity', async () => {

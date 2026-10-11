@@ -118,6 +118,17 @@ def run():
             assert claim["expires_ms"] - claim["issued_ms"] == 30000
             assert now - 5000 < claim["issued_ms"] <= int(time.time() * 1000) + 1000
             assert "password" not in json.dumps(answer).lower()
+            # Canonical Upstox index keys include spaces; only keys explicitly
+            # listed in the same owner/account rights file may get a grant.
+            rights["instruments"].append("NSE_INDEX|Nifty 50")
+            rights_path.write_text(json.dumps(rights))
+            index_body = {"account_id": "approved-upstox-a", "instrument": "NSE_INDEX|Nifty 50"}
+            code, index_grant, _ = post(alice, index_body, csrf)
+            assert code == 200 and index_grant["instrument"] == index_body["instrument"]
+            assert post(alice, {"account_id": "approved-upstox-a", "instrument": "NSE_INDEX|Nifty/50"}, csrf)[0] == 422
+            rights["instruments"].remove("NSE_INDEX|Nifty 50")
+            rights_path.write_text(json.dumps(rights))
+            assert post(alice, index_body, csrf)[0] == 403
             print("PASS: private issuer matches Rust HMAC payload, scope, 30s TTL and same-origin authentication")
 
             # File-mode failures, licensing revocations and clock expiry deny issuance immediately.
