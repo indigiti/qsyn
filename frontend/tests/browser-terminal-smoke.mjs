@@ -152,6 +152,39 @@ try {
   await arrange.click();
   await page.locator('.oac-grid__picker[role="menu"]').waitFor({timeout:12000});
   await page.keyboard.press('Escape');
+
+  // End-to-end dialog acceptance for the *actual* OpenAlgo grid on /qsyn/.
+  // Previous tests exercised Layouts/Watchlist but missed chart settings,
+  // indicator picker, and the per-indicator Settings action altogether.
+  const chartSettings=page.locator('.qsyn-home-chart .oac-topbar button[aria-label="Chart settings"]').first();
+  await chartSettings.click();
+  const chartDialog=page.locator('.qsyn-home-chart .oac-settings[role="dialog"]');
+  await chartDialog.waitFor({state:'visible',timeout:12000});
+  if(!await chartDialog.locator('.oac-form .oac-row').count())
+    throw new Error('Native chart settings dialog has no usable controls');
+  await chartDialog.getByRole('button',{name:'Cancel'}).click();
+  await chartDialog.waitFor({state:'detached'});
+
+  const indicators=page.locator('.qsyn-home-chart .oac-topbar button[aria-label="Indicators"]').first();
+  await indicators.click();
+  const picker=page.locator('.qsyn-home-chart .oac-pick');
+  await picker.waitFor({state:'visible',timeout:12000});
+  await picker.getByRole('textbox',{name:'Search indicators'}).fill('Wick Science');
+  await picker.locator('.oac-pick__row').first().click();
+  await picker.getByRole('button',{name:'Done'}).click();
+  await picker.waitFor({state:'detached'});
+  await page.locator('.qsyn-home-chart .oac-topbar__objects').first().click();
+  const studySettings=page.locator('.qsyn-home-chart .oac-objects__row[data-object-id^="indicator:"] button[data-action="settings"]').first();
+  await studySettings.waitFor({state:'visible',timeout:12000});
+  await studySettings.click();
+  const studyDialog=page.locator('.qsyn-home-chart .oac-indset[role="dialog"]');
+  await studyDialog.waitFor({state:'visible',timeout:12000});
+  if(!await studyDialog.locator('.oac-form .oac-row').count())
+    throw new Error('Native indicator settings dialog did not render the study inputs');
+  await studyDialog.getByRole('button',{name:'Cancel'}).click();
+  await studyDialog.waitFor({state:'detached'});
+  await page.locator('.qsyn-home-chart .oac-topbar__objects').first().click();
+
   await watchlist.click();
   await page.waitForFunction(()=>!!document.querySelector('.oac-watchlist, .oac-watchlist-panel, .oac-panel-dock'),null,{timeout:12000});
   const invalid=await page.request.get(origin+'/qsyn/api/v1/crypto/bars?exchange=BAD&market=spot&symbol=../../secret&interval=1m');
