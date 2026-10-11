@@ -139,7 +139,7 @@ fn retry_delay(attempt: u32) -> Duration {
 fn transient_authorize() -> io::Error {
     io::Error::new(io::ErrorKind::TimedOut, "v3_authorize_temporarily_unavailable")
 }
-async fn authorize_next(client: &reqwest::Client, access_token: &str) -> io::Result<String> {
+pub(crate) async fn authorize_next(client: &reqwest::Client, access_token: &str) -> io::Result<String> {
     let response = client.get("https://api.upstox.com/v3/feed/market-data-feed/authorize")
         .bearer_auth(access_token).header("Accept", "application/json")
         .send().await.map_err(|_|transient_authorize())?;
