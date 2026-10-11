@@ -96,7 +96,6 @@ def main():
             assert SECRET not in pending.read_text()
             # Direct external callback must reject a wrong state without a
             # session cookie, never reach Upstox and never echo the code.
-            import urllib.request,urllib.error
             bad=origin+API+"callback?state="+"0"*64+"&code=FAKECODE777"
             with urllib.request.build_opener(NoRedirect()).open(bad) as response:
                 raise AssertionError("callback should redirect")
