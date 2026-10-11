@@ -34,6 +34,9 @@ jobs:
           php -l apps/web-php/public/index.php
           php -l apps/web-php/src/TerminalRoutes.php
           php apps/web-php/tests/TerminalRoutesTest.php
+          php -l apps/web-php/src/TerminalAdminGate.php
+          php -l apps/web-php/public/terminal-login.php
+          python3 apps/web-php/tests/TerminalAdminGateHttpSmoke.py
           php -l apps/web-php/public/terminal.php
           php -l apps/web-php/src/RustProbe.php
           php -l apps/web-php/src/RustStreamProbe.php
@@ -150,12 +153,15 @@ jobs:
           cp apps/web-php/public/index.php staging/public/index.php
           cp apps/web-php/public/terminal-routes.json staging/public/terminal-routes.json
           cp apps/web-php/src/TerminalRoutes.php staging/private/app/src/TerminalRoutes.php
+          cp apps/web-php/src/TerminalAdminGate.php staging/private/app/src/TerminalAdminGate.php
           cp apps/web-php/public/admin-rust.php staging/public/admin-rust.php
           cp apps/web-php/public/.htaccess staging/public/.htaccess
           cp frontend/dist/chart.js staging/public/assets/chart.js
           cp frontend/dist/terminal.js staging/public/assets/terminal.js
           cp frontend/dist/terminal.css staging/public/assets/terminal.css
           cp apps/web-php/public/terminal.php staging/public/terminal.php
+          cp apps/web-php/public/terminal-login.php staging/public/terminal-login.php
+          cp apps/web-php/public/assets/terminal-gate.css staging/public/assets/terminal-gate.css
           cp frontend/dist/studio.js staging/public/assets/studio.js
           cp apps/web-php/public/assets/studio.css staging/public/assets/studio.css
           cp apps/web-php/public/studio.php staging/public/studio.php
@@ -245,6 +251,9 @@ jobs:
           test -s staging/public/assets/terminal.js
           test -s staging/public/assets/terminal.css
           test -s staging/public/terminal.php
+          test -s staging/public/terminal-login.php
+          php -l staging/public/terminal-login.php
+          test -s staging/public/assets/terminal-gate.css
           test -s staging/public/assets/studio.js
           test -s staging/public/assets/studio.css
           test -s staging/public/studio.php
@@ -283,6 +292,8 @@ jobs:
           test -s staging/public/admin-rust.php
           test -s staging/public/terminal-routes.json
           test -s staging/private/app/src/TerminalRoutes.php
+          test -s staging/private/app/src/TerminalAdminGate.php
+          php -l staging/private/app/src/TerminalAdminGate.php
           test -s staging/private/app/src/RustAdmin.php
           test -s staging/private/app/src/RustAdminBootstrap.php
           test ! -e staging/private/runtime/admin-setup-code.txt
@@ -349,6 +360,9 @@ jobs:
           test -s verified-release/public/assets/terminal.js
           test -s verified-release/public/assets/terminal.css
           test -s verified-release/public/terminal.php
+          test -s verified-release/public/terminal-login.php
+          php -l verified-release/public/terminal-login.php
+          test -s verified-release/public/assets/terminal-gate.css
           test -s verified-release/public/assets/studio.js
           test -s verified-release/public/assets/studio.css
           test -s verified-release/public/studio.php
@@ -382,6 +396,8 @@ jobs:
           test -s verified-release/public/admin-rust.php
           test -s verified-release/public/terminal-routes.json
           test -s verified-release/private/app/src/TerminalRoutes.php
+          test -s verified-release/private/app/src/TerminalAdminGate.php
+          php -l verified-release/private/app/src/TerminalAdminGate.php
           test -s verified-release/private/app/src/RustAdmin.php
           test -s verified-release/private/app/src/RustAdminBootstrap.php
           test ! -e verified-release/private/runtime/admin-setup-code.txt
