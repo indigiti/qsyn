@@ -242,6 +242,9 @@ jobs:
           npm install --no-save --no-audit --no-fund playwright@1.55.0
           npx playwright install --with-deps chromium
         working-directory: frontend
+      - name: Verify initial 1600-candle Chromium auto-backfill and native Wick study
+        run: node tests/browser-crypto-backfill-smoke.mjs
+        working-directory: frontend
       - name: Check real-browser candlestick rendering and CSP
         run: node tests/browser-chart-smoke.mjs
         working-directory: frontend
