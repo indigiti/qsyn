@@ -89,7 +89,7 @@ fn parse_rows(req:&Request, value:&Value) -> Result<Vec<Bar>,()> {
             }
             _ => {
                 let a=row.as_array().ok_or(())?;
-                if a.len()<7 && req.exchange=="KRAKEN" || a.len()<6 {return Err(());}
+                (a.len()<7 && req.exchange=="KRAKEN") || a.len()<6 {return Err(());}
                 // All remaining providers: time, open, high, low, close;
                 // Kraken volume index 6, the others volume index 5.
                 bar(timestamp(&a[0],req.exchange!="KRAKEN").ok_or(())?,
@@ -115,7 +115,7 @@ fn source(req:&Request) -> Result<(String,Option<Value>),()> {
     let (host,path,params):(&str,String,Vec<(&str,&str)>)= match req.exchange.as_str() {
         "BINANCE" => (
             if req.market=="perp" {"https://fapi.binance.com"} else {"https://api.binance.com"},
-            if req.market=="perp" {"/fapi/v1/klines"} else {"/api/v3/klines"}.to_owned(),
+            (if req.market=="perp" {"/fapi/v1/klines"} else {"/api/v3/klines"}).to_owned(),
             vec![("symbol",s),("interval",i),("limit",&n)]),
         "BYBIT" => ("https://api.bybit.com","/v5/market/kline".into(),
             vec![("category",if req.market=="perp" {"linear"}else{"spot"}),
