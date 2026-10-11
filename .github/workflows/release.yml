@@ -240,6 +240,8 @@ jobs:
           cp services/stream-rust/target/release/qsyn-upstox-worker staging/private/app/bin/qsyn-upstox-worker
           cp services/stream-rust/target/release/qsyn-upstox-index-worker staging/private/app/bin/qsyn-upstox-index-worker
           cp services/stream-rust/target/release/qsyn-upstox-history staging/private/app/bin/qsyn-upstox-history
+          cp services/stream-rust/target/release/qsyn-upstox-index-history staging/private/app/bin/qsyn-upstox-index-history
+          cp services/stream-rust/target/release/qsyn-private-index-history staging/private/app/bin/qsyn-private-index-history
           cp services/stream-rust/target/release/qsyn-private-history staging/private/app/bin/qsyn-private-history
           cp ops/cloudways/qsyn-upstox-v3.supervisor.conf.example staging/private/app/ops/qsyn-upstox-v3.supervisor.conf.example
           cp ops/cloudways/qsyn-private-feed.supervisor.conf.example staging/private/app/ops/qsyn-private-feed.supervisor.conf.example
@@ -290,6 +292,8 @@ jobs:
           test -s staging/private/app/bin/qsyn-upstox-worker
           test -s staging/private/app/bin/qsyn-upstox-index-worker
           test -s staging/private/app/bin/qsyn-upstox-history
+          test -s staging/private/app/bin/qsyn-upstox-index-history
+          test -s staging/private/app/bin/qsyn-private-index-history
           test -s staging/private/app/bin/qsyn-private-history
           test -s staging/private/app/ops/qsyn-upstox-v3.supervisor.conf.example
           test -s staging/private/app/tools/private-history-export.php
@@ -468,6 +472,8 @@ jobs:
           test -s verified-release/private/app/bin/qsyn-upstox-worker
           test -s verified-release/private/app/bin/qsyn-upstox-index-worker
           test -s verified-release/private/app/bin/qsyn-upstox-history
+          test -s verified-release/private/app/bin/qsyn-upstox-index-history
+          test -s verified-release/private/app/bin/qsyn-private-index-history
           test -s verified-release/private/app/bin/qsyn-private-history
           test -s verified-release/private/app/ops/qsyn-upstox-v3.supervisor.conf.example
           test -s verified-release/private/app/tools/upstox-oauth.php

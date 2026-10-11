@@ -97,3 +97,28 @@ environment=QSYN_UPSTOX_INDEX_WORKER_ENABLE="0",QSYN_TRADING_ENABLED="0",QSYN_EN
 ; change of QSYN_UPSTOX_INDEX_WORKER_ENABLE to "1" AFTER provisioning 0700
 ; folders, 0600 files, approved BOD keys, exchange licenses and private
 ; authenticated TLS WebSocket chart ingress. No public listener or orders.
+
+; Optional, independent NSE/BSE historical index reader. Never auto-start.
+; The Cloudways private ingress MUST authenticate the requesting user before
+; proxying ONLY /qsyn/private-chart/index-history to 127.0.0.1:10447.
+; Do not expose the loopback port or use this for anonymous chart requests.
+[program:qsyn-upstox-v3-index-history-ACCOUNT_A]
+command=/ABSOLUTE/PRIVATE/app/bin/qsyn-private-index-history serve /ABSOLUTE/PRIVATE/config/index-worker-plan.json /ABSOLUTE/PRIVATE/config/chart-signing.key /ABSOLUTE/PRIVATE/index-history 10447
+directory=/ABSOLUTE/PRIVATE/app
+user=ACCOUNT_UNIX_OWNER
+autostart=false
+autorestart=true
+startsecs=5
+startretries=3
+stopsignal=TERM
+stopasgroup=true
+killasgroup=true
+redirect_stderr=true
+stdout_logfile=/ABSOLUTE/PRIVATE/logs/v3-index-history-A.log
+stdout_logfile_maxbytes=10MB
+stdout_logfile_backups=5
+environment=QSYN_PRIVATE_INDEX_HISTORY_HTTP_ENABLED="0",QSYN_TRADING_ENABLED="0",QSYN_ENABLE_LIVE_TRADING="0"
+
+; Operator-only importer is deliberately NOT supervised or auto-started.
+; qsyn-upstox-index-history check|backfill PLAN ARCHIVE "NSE_INDEX|Nifty 50" YYYY-MM-DD
+; Backfill requires QSYN_UPSTOX_INDEX_HISTORY_ENABLE=1 and current BOD/rights.
