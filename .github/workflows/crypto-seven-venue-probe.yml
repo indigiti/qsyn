@@ -3,6 +3,8 @@ name: QSYN Seven Venue Live Acceptance
 on:
   push:
     branches: ["probe/crypto-seven-venue-staging"]
+  pull_request:
+    paths: [".github/workflows/crypto-seven-venue-probe.yml"]
   workflow_dispatch:
 
 permissions:
