@@ -27,7 +27,11 @@ jobs:
           node-version: '22'
       - name: Test validation logic against deterministic mock exchange data
         run: node --test ops/verify-public-backfill.test.mjs
+      - name: Identify which staging endpoint rejects GitHub-hosted requests
+        run: node ops/probe-stage-access.mjs > stage-access-report.json
       - name: Probe actual read-only Binance public history on Cloudways staging
+        id: history
+        continue-on-error: true
         env:
           QSYN_BARS: ${{ inputs.bars }}
         run: |
@@ -42,6 +46,8 @@ jobs:
           npm install --no-save --no-audit --no-fund playwright@1.55.0
           npx playwright install --with-deps chromium
       - name: Verify deployed React chart actually auto-loads 1600 candles
+        id: chart
+        continue-on-error: true
         run: node ops/verify-stage-chart.mjs
       - name: Preserve stage acceptance report
         if: always()
@@ -51,4 +57,17 @@ jobs:
           path: |
             stage-backfill-report.json
             stage-chart-report.json
+            stage-access-report.json
           if-no-files-found: warn
+      - name: Fail closed unless both live API and Chromium acceptance passed
+        if: always()
+        env:
+          HISTORY_OUTCOME: ${{ steps.history.outcome }}
+          CHART_OUTCOME: ${{ steps.chart.outcome }}
+        run: |
+          echo "Live history acceptance: $HISTORY_OUTCOME"
+          echo "Live Chromium acceptance: $CHART_OUTCOME"
+          if [[ "$HISTORY_OUTCOME" != success || "$CHART_OUTCOME" != success ]]; then
+            echo "::error::Stage acceptance not verified; download sanitized JSON artifacts and check Cloudways/WAF logs for matching 403 requests."
+            exit 1
+          fi
