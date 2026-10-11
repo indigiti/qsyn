@@ -1,6 +1,6 @@
 # QSYN
 
-Multi-user synthetic-market charting platform. **Phase 0 foundation only** — not a live Upstox-connected trading application.
+Multi-user synthetic-market charting platform with a database-free PHP/React terminal, simulated and public crypto feeds, and private broker-readiness components. The repository does not itself attest a deployed, licensed live Upstox trading service.
 
 Canonical requirements: [Master Blueprint v1.4](docs/MASTER_BLUEPRINT.md).
 
@@ -12,7 +12,7 @@ Canonical requirements: [Master Blueprint v1.4](docs/MASTER_BLUEPRINT.md).
 - Rust/Tokio service skeleton: health endpoint, opt-in local-only simulated WebSocket, CE+PE synthetic candle builder and unit tests.
 - GitHub Actions tests and a staged DigiOps artifact named **digiops-release**, with segregated public/private folders.
 
-**Not implemented:** real Upstox OAuth, OpenAlgo adapter/session isolation, authenticated multi-user API, durable WAL/segment history, production credentials, live trading, or Cloudways daemon setup. Do not use the prototype for trading or real accounts.
+**Production gates remain unverified:** live exchange display/retention entitlements, current BOD attestation, continuously supervised Upstox streams, account-isolated operational acceptance, Cloudways deployment parity, and authorized trading. Source modules for native Upstox OAuth, private Rust workers, durable WAL and restricted charts exist, but passing CI or resolving instrument keys does not activate those services. Trading remains disabled by default.
 
 ## Run locally — no MariaDB, Redis, RabbitMQ or Node server
 
@@ -55,3 +55,9 @@ OpenAlgo and OpenAlgo Charts must remain pinned and independently upgradeable; t
 The browser admin page is available at `/qsyn/admin/rust` with **Start / Stop / Restart / Refresh / Health**. This feature is **disabled by default**. It requires either opt-in direct Rust lifecycle mode (no Supervisor) or a Cloudways-approved restricted Supervisor configuration, a server-injected administrator password hash, and PHP process-control permission. It never executes arbitrary browser-supplied commands. See [DigiOps service control guidance](infrastructure/DIGIOPS.md) for setup and security gates.
 
 No permission has yet been granted to start the Rust daemon on Cloudways; the page will show service controls unavailable until Cloudways supplies a supported manager. The health button remains usable even when actions are disabled.
+
+## Reliability and staging acceptance
+
+The optional development private-file workspace is checked only when the operator chooses **Refresh private file status**; it is not needed for browser-only chart layouts. The endpoint is deliberately disabled by default, and an upstream 503 is never treated as authorization.
+
+CI checks PHP/Rust/frontend behavior and packages DigiOps artifacts; those results do not establish live Cloudways deployment parity. The read-only public staging acceptance workflow requires an explicitly operator-confirmed **deployed full SHA** via manual `workflow_dispatch`; it no longer assumes that an old known SHA is still deployed. Do not enable feed, identity, execution or exchange data permissions solely to make a probe green.
