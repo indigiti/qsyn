@@ -39,6 +39,8 @@ try{
   await page.goto(origin+'/qsyn/admin/rust',{waitUntil:'domcontentloaded'});
   await page.getByLabel('QSYN administrator password').fill(adminPassword);
   await page.getByRole('button',{name:'Unlock terminal'}).click();
+  if(new URL(page.url()).pathname==='/qsyn/terminal/login')
+    throw new Error('Administrator unlock returned login instead of terminal: '+(await page.locator('body').innerText()).slice(0,420));
   await page.getByRole('heading',{name:'Trading charts'}).waitFor();
   const checks=[
     ['/qsyn/admin/rust','operations','Service administration'],
