@@ -14,5 +14,5 @@ if ($method !== 'GET' && $method !== 'HEAD') {
 header('Cache-Control: private, no-store, max-age=0');
 header('Pragma: no-cache');
 header('X-Robots-Tag: noindex, nofollow');
-header('Location: /qsyn/terminal?view=strategy', true, 302);
+header('Location: /qsyn/terminal/strategy', true, 302);
 exit;
