@@ -1,6 +1,6 @@
 // Canonical React routing replaces the retired legacy chart and Rust admin
 // documents. Admin APIs remain independently gated by server-side sessions.
-import {spawn} from 'node:child_process';
+import {spawn,execFileSync} from 'node:child_process';
 import {mkdir,copyFile,rm,readFile} from 'node:fs/promises';
 import {createServer} from 'node:net';
 import {resolve} from 'node:path';
@@ -19,8 +19,10 @@ try{
   for(const ext of ['js','css'])
     await copyFile(resolve(root,'frontend/dist/terminal.'+ext),resolve(assets,'terminal.'+ext));
   const p=await port(),origin='http://127.0.0.1:'+p;
+  const adminPassword='ci-terminal-chart-admin-password-123456';
+  const adminHash=execFileSync('php',['-r','echo password_hash($argv[1], PASSWORD_DEFAULT);',adminPassword],{encoding:'utf8'}).trim();
   server=spawn('php',['-S','127.0.0.1:'+p,'-t','apps/web-php/public','apps/web-php/dev-router.php'],
-    {cwd:root,stdio:['ignore','pipe','pipe'],env:{...process.env,QSYN_ALLOW_HTTP_TEST:'1'}});
+    {cwd:root,stdio:['ignore','pipe','pipe'],env:{...process.env,QSYN_ALLOW_HTTP_TEST:'1',QSYN_CONTROL_ENABLED:'1',QSYN_ADMIN_PASSWORD_HASH:adminHash}});
   for(let n=0;n<60;n++){
     try{if((await fetch(origin+'/qsyn/api/v1/health')).ok)break;}
     catch{}await delay(150);
@@ -28,6 +30,16 @@ try{
   browser=await chromium.launch({headless:true,args:['--disable-dev-shm-usage']});
   const page=await browser.newPage({viewport:{width:1440,height:900}});
   const errors=[];page.on('pageerror',e=>errors.push(e.message));
+  // Anonymous legacy URLs must NOT serve React or redirect into unlocked workspaces.
+  for(const old of ['/qsyn/admin/rust','/qsyn/legacy-chart']){
+    const blocked=await page.request.get(origin+old,{maxRedirects:0});
+    if(blocked.status()!==303||blocked.headers().location!=='/qsyn/terminal/login')
+      throw Error('Legacy alias not admin-gated: '+old);
+  }
+  await page.goto(origin+'/qsyn/admin/rust',{waitUntil:'domcontentloaded'});
+  await page.getByLabel('QSYN administrator password').fill(adminPassword);
+  await page.getByRole('button',{name:'Unlock terminal'}).click();
+  await page.getByRole('heading',{name:'Trading charts'}).waitFor();
   const checks=[
     ['/qsyn/admin/rust','operations','Service administration'],
     ['/qsyn/admin/rust/','operations','Service administration'],
@@ -52,12 +64,14 @@ try{
   if(!shim.includes("Location: /qsyn/terminal/operations") ||
       !shim.includes("no-store") || shim.includes('<!doctype html>'))
     throw Error('Physical admin-rust.php was not retired');
-  const state=await page.request.get(origin+'/qsyn/api/v1/admin/rust/state');
+  const unauth=await browser.newPage();
+  const state=await unauth.request.get(origin+'/qsyn/api/v1/admin/rust/state');
   if(state.status()!==200||(await state.json()).authenticated!==false)
     throw Error('Administrator endpoint unexpectedly authenticated');
-  const denied=await page.request.post(origin+'/qsyn/api/v1/admin/rust/action',{
+  const denied=await unauth.request.post(origin+'/qsyn/api/v1/admin/rust/action',{
     data:{action:'restart'},headers:{'Content-Type':'application/json'}});
   if(denied.status()===200)throw Error('Unauthenticated service restart authorized');
+  await unauth.close();
   await page.goto(origin+'/qsyn/',{waitUntil:'domcontentloaded'});
   await page.waitForFunction(()=>document.querySelectorAll('.qsyn-home-chart canvas').length>0,
     null,{timeout:16000});
