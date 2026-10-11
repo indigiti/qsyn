@@ -172,7 +172,7 @@ function HomepageChart({ theme }) {
         topbar.insertBefore(slot,nativeWatchlist);
       const gridRect=grid.root.getBoundingClientRect();
       const position=slot.getBoundingClientRect();
-      bar.style.left=(position.left-gridRect.left)+'px';
+      bar.style.left=Math.max(0,Math.min(position.left-gridRect.left,gridRect.width-72))+'px';
       bar.style.top=(position.top-gridRect.top)+'px';
       bar.dataset.placed='true';
     };
@@ -181,6 +181,7 @@ function HomepageChart({ theme }) {
     const offActive=grid.on('active',syncToolbar);
     const offLayout=grid.on('layout',syncToolbar);
     window.addEventListener('resize',syncToolbar);
+    host.current.addEventListener('scroll',syncToolbar,true);
     void grid.ready.then(syncToolbar).catch(()=>{
       if(active)setMessage('Public market feed unavailable · no demo fallback');
     });
@@ -188,6 +189,7 @@ function HomepageChart({ theme }) {
     return ()=>{
       active=false;observer.disconnect();offActive?.();offLayout?.();
       window.removeEventListener('resize',syncToolbar);
+      host.current?.removeEventListener('scroll',syncToolbar,true);
       slot?.remove();
       grid.destroy();feed.destroy();
     };
