@@ -27,6 +27,9 @@ jobs:
           php -l apps/web-php/public/index.php
           php -l apps/web-php/src/TerminalRoutes.php
           php apps/web-php/tests/TerminalRoutesTest.php
+          php -l apps/web-php/src/TerminalAdminGate.php
+          php -l apps/web-php/public/terminal-login.php
+          python3 apps/web-php/tests/TerminalAdminGateHttpSmoke.py
           php -l apps/web-php/public/terminal.php
           php -l apps/web-php/src/RustProbe.php
           php -l apps/web-php/src/RustStreamProbe.php
@@ -130,7 +133,7 @@ jobs:
           ' "$root/admin-auth.json"
       - name: Demo endpoint smoke test
         run: |
-          php -S 127.0.0.1:18080 -t apps/web-php/public apps/web-php/dev-router.php > /tmp/qsyn-php.log 2>&1 &
+          QSYN_ALLOW_HTTP_TEST=1 php -S 127.0.0.1:18080 -t apps/web-php/public apps/web-php/dev-router.php > /tmp/qsyn-php.log 2>&1 &
           PID=$!
           trap 'kill "$PID" || true' EXIT
           sleep 1
@@ -139,17 +142,16 @@ jobs:
           curl --fail --silent http://127.0.0.1:18080/qsyn/api/v1/diagnostics/rust | grep -q '"status":"offline"'
           curl --fail --silent http://127.0.0.1:18080/qsyn/api/v1/diagnostics/rust-stream | grep -q '"status":"offline"'
           curl --fail --silent http://127.0.0.1:18080/qsyn/api/v1/admin/rust/state | grep -q '"configured":false'
-          test "$(curl --silent -o /dev/null -w '%{http_code}' http://127.0.0.1:18080/qsyn/admin/rust)" = 302
-          curl --silent -D - -o /dev/null http://127.0.0.1:18080/qsyn/admin/rust | grep -qi '^Location: /qsyn/terminal/operations'
-          curl --silent -D - -o /dev/null http://127.0.0.1:18080/qsyn/studio/ | grep -qi '^Location: /qsyn/terminal/strategy'
-          curl --silent -D - -o /dev/null http://127.0.0.1:18080/qsyn/legacy-chart | grep -qi '^Location: /qsyn/terminal/diagnostics'
-          # This PHP-only job has no compiled React assets yet. Assert route
-          # resolution succeeds and only the missing bundle causes a 503.
-          test "$(curl -s -o /tmp/qsyn-route.json -w '%{http_code}' http://127.0.0.1:18080/qsyn/terminal/markets)" = 503
-          grep -q 'terminal_bundle_unavailable' /tmp/qsyn-route.json
-          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:18080/qsyn/terminal/unknown)" = 404
+          test "$(curl --silent -o /dev/null -w '%{http_code}' http://127.0.0.1:18080/qsyn/admin/rust)" = 303
+          curl --silent -D - -o /dev/null http://127.0.0.1:18080/qsyn/admin/rust | grep -qi '^Location: /qsyn/terminal/login'
+          curl --silent -D - -o /dev/null http://127.0.0.1:18080/qsyn/studio/ | grep -qi '^Location: /qsyn/terminal/login'
+          curl --silent -D - -o /dev/null http://127.0.0.1:18080/qsyn/legacy-chart | grep -qi '^Location: /qsyn/terminal/login'
+          # Anonymous terminal visitors must be redirected BEFORE routing
+          # or looking for a missing React bundle.
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:18080/qsyn/terminal/markets)" = 303
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:18080/qsyn/terminal/unknown)" = 303
           test "$(curl -s -o /dev/null -w '%{http_code}' -X POST http://127.0.0.1:18080/qsyn/terminal/markets)" = 405
-          curl --silent -D - -o /dev/null 'http://127.0.0.1:18080/qsyn/terminal?view=dashboard' | grep -qi '^Location: /qsyn/terminal/dashboard'
+          curl --silent -D - -o /dev/null 'http://127.0.0.1:18080/qsyn/terminal?view=dashboard' | grep -qi '^Location: /qsyn/terminal/login'
           curl --fail --silent http://127.0.0.1:18080/qsyn/api/v1/india/indexes | grep -q 'QSYN-INDIA-INDEX-CATALOG/1'
           test "$(curl --silent -o /tmp/qsyn-india.json -w '%{http_code}' 'http://127.0.0.1:18080/qsyn/api/v1/india/bars?exchange=NSE_INDEX&symbol=NIFTY&interval=1m')" = 503
           grep -q 'india_index_feed_not_authorized' /tmp/qsyn-india.json

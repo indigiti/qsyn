@@ -1,0 +1,19 @@
+:root{color-scheme:dark;font:14px/1.5 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#0e1624;color:#e7edf7}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;background:radial-gradient(circle at 50% 0%,#1b3553 0,#0e1624 60%);padding:24px}
+.gate-shell{min-height:calc(100vh - 48px);display:grid;place-items:center}
+.gate-panel{width:min(100%,438px);padding:32px;border:1px solid #2d425c;background:#172333;border-radius:14px;box-shadow:0 20px 48px #0005}
+.gate-eyebrow{color:#79b4f5;font-size:11px;font-weight:750;letter-spacing:.1em}
+h1{font-size:27px;line-height:1.22;margin:9px 0 12px}
+.gate-intro,.gate-footnote,.gate-info{color:#aebed1}
+.gate-footnote{font-size:11px;margin-top:26px}
+.gate-info{border-left:3px solid #69adf0;padding:6px 12px;font-size:12px}
+.gate-error{color:#ffd7d7;background:#52252a;padding:12px;border-radius:7px;font-size:13px}
+form{display:flex;flex-direction:column;gap:10px;margin:22px 0}
+label{font-weight:600;font-size:12px}
+input{padding:12px 13px;min-height:44px;color:#fff;background:#101b2b;border:1px solid #46617d;border-radius:7px;font:inherit}
+input:focus-visible,a:focus-visible,button:focus-visible{outline:2px solid #90caff;outline-offset:2px}
+button{min-height:45px;margin-top:10px;border:0;border-radius:7px;background:#3b8add;color:#fff;font:inherit;font-weight:700;cursor:pointer}
+button:hover{background:#277bd4}
+.gate-home{display:inline-block;color:#8fc4fc;text-decoration:none;margin-top:6px;font-size:13px}
+.gate-home:hover{text-decoration:underline}

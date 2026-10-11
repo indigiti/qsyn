@@ -1,5 +1,5 @@
 // Database-free OpenAlgo-style QSYN terminal browser acceptance.
-import { spawn } from 'node:child_process';
+import { spawn, execFileSync } from 'node:child_process';
 import { copyFile, mkdir, rm } from 'node:fs/promises';
 import { createServer } from 'node:net';
 import { resolve } from 'node:path';
@@ -35,12 +35,15 @@ try {
     await copyFile(resolve(root,'frontend/dist/terminal.'+ext),resolve(assets,'terminal.'+ext));
 
   const port=await findPort(), origin='http://127.0.0.1:'+port;
+  const adminPassword='ci-test-only-terminal-password-123456';
+  const adminHash=execFileSync('php',['-r','echo password_hash($argv[1], PASSWORD_DEFAULT);',adminPassword],{encoding:'utf8'}).trim();
   server=spawn('php',['-S','127.0.0.1:'+port,'-t','apps/web-php/public','apps/web-php/dev-router.php'],{
-    cwd:root,stdio:['ignore','pipe','pipe'],env:{...process.env,QSYN_ALLOW_HTTP_TEST:'1'}
+    cwd:root,stdio:['ignore','pipe','pipe'],env:{...process.env,QSYN_ALLOW_HTTP_TEST:'1',QSYN_CONTROL_ENABLED:'1',QSYN_ADMIN_PASSWORD_HASH:adminHash}
   });
   await ready(origin);
   browser=await chromium.launch({headless:true,args:['--disable-dev-shm-usage']});
-  const page=await browser.newPage({viewport:{width:1440,height:900}});
+  const context=await browser.newContext({viewport:{width:1440,height:900}});
+  const page=await context.newPage();
   page.on('pageerror',e=>browserErrors.push(e.message));
   page.on('request',r=>browserRequests.push(r.url()));
   // Homepage uses native OpenAlgo Charts 2.6 grid and a strict public crypto
@@ -48,10 +51,23 @@ try {
   const response=await page.goto(origin+'/qsyn/',{waitUntil:'domcontentloaded',timeout:25000});
   if(response.status()!==200) throw new Error('QSYN homepage returned '+response.status());
   if(new URL(page.url()).pathname!=='/qsyn/') throw new Error('Homepage redirected');
-  const alternate=await page.request.get(origin+'/qsyn/terminal');
-  if(alternate.status()!==200)throw new Error('Terminal unavailable');
-  // The old dashboards must redirect into the same React terminal; no
-  // standalone legacy, strategy or administrator HTML may remain active.
+  const alternate=await page.request.get(origin+'/qsyn/terminal',{maxRedirects:0});
+  if(alternate.status()!==303 || alternate.headers().location!=='/qsyn/terminal/login')
+    throw new Error('Unauthenticated terminal leaked before admin login');
+  // All legacy workspace aliases must also require the admin password.
+  for (const old of ['/qsyn/studio','/qsyn/admin/rust','/qsyn/legacy-chart']) {
+    const denied=await page.request.get(origin+old,{maxRedirects:0});
+    if(denied.status()!==303 || denied.headers().location!=='/qsyn/terminal/login')
+      throw new Error('Retired alias bypassed password gate: '+old);
+  }
+  // Existing alias redirects are still preserved after login.
+  await page.goto(origin+'/qsyn/terminal',{waitUntil:'domcontentloaded'});
+  await page.getByRole('heading',{name:'Administrator sign-in'}).waitFor();
+  await page.getByLabel('QSYN administrator password').fill(adminPassword);
+  await page.getByRole('button',{name:'Unlock terminal'}).click();
+  if(new URL(page.url()).pathname==='/qsyn/terminal/login')
+    throw new Error('Administrator unlock returned login instead of terminal: '+(await page.locator('body').innerText()).slice(0,420));
+  await page.getByRole('heading',{name:'Trading charts'}).waitFor();
   for (const [old,view] of [
     ['/qsyn/legacy-chart','diagnostics'],
     ['/qsyn/legacy-chart/','diagnostics'],
@@ -69,6 +85,8 @@ try {
     if(invalidMethod.status()!==405)
       throw new Error('Retired dashboard unexpectedly accepted POST: '+old);
   }
+  // Return to the public homepage before its native-grid rendering checks.
+  await page.goto(origin+'/qsyn/',{waitUntil:'domcontentloaded'});
   const blockedPost=await page.request.post(origin+'/qsyn/');
   if(blockedPost.status()!==405)throw new Error('Homepage accepted POST');
   if(!String(response.headers()['content-security-policy']).includes("connect-src 'self'"))
@@ -173,7 +191,14 @@ try {
 
   // Stub an authenticated PRIVATE developer response in an isolated tab;
   // loading it must never copy owner-scoped layout data to the shared local key.
-  const privatePage = await browser.newPage({viewport:{width:1280,height:800}});
+  // A private tab must share only the administrator SESSION COOKIE, never
+  // the previous public browser's localStorage/watchlist state.
+  const signedState = await context.storageState();
+  const privateContext = await browser.newContext({
+    viewport:{width:1280,height:800},
+    storageState:{cookies:signedState.cookies,origins:[]},
+  });
+  const privatePage = await privateContext.newPage();
   privatePage.on('pageerror',e=>browserErrors.push(e.message));
   const privateSnapshot = {
     schema:'QSYN-TERMINAL-BROWSER-WORKSPACES/1',
@@ -210,6 +235,7 @@ try {
   if(await privatePage.locator('select[aria-label="Saved layouts"] option[value="Private unique"]').count()!==0)
     throw new Error('Private owner workspace remained visible after returning to browser');
   await privatePage.close();
+  await privateContext.close();
   // Unified shell: no iframe, redirect or new page for markets, strategies,
   // broker readiness, diagnostics, operations or saved workspaces.
   await page.goto(origin+'/qsyn/terminal?view=diagnostics',{waitUntil:'domcontentloaded'});
@@ -222,7 +248,7 @@ try {
   await page.getByRole('button',{name:'Brokers',exact:true}).first().click();
   await page.getByRole('heading',{name:'Accounts & authorizations'}).waitFor();
   if(!new URL(page.url()).pathname==='/qsyn/terminal/brokers')throw new Error('Broker view not routed in React');
-  await page.getByText('No production broker session verified').waitFor({timeout:12000});
+  await page.getByRole('button',{name:'Refresh broker status'}).waitFor({timeout:12000});
   await page.getByRole('button',{name:'Operations',exact:true}).first().click();
   await page.getByRole('heading',{name:'Service administration'}).waitFor();
   if(await page.getByRole('button',{name:'Restart',exact:true}).count() &&
@@ -251,7 +277,14 @@ try {
     null,{timeout:14000});
   if(new URL(page.url()).pathname!=='/qsyn/terminal/markets')
     throw new Error('Market view escaped unified React terminal');
-  const mobile=await browser.newPage({viewport:{width:390,height:844}});
+  // Mobile checks use a separate viewport and storage, but retain the
+  // already-authenticated admin cookie so protected terminal routes load.
+  const mobileState=await context.storageState();
+  const mobileContext=await browser.newContext({
+    viewport:{width:390,height:844},
+    storageState:{cookies:mobileState.cookies,origins:[]},
+  });
+  const mobile=await mobileContext.newPage();
   mobile.on('pageerror',e=>browserErrors.push(e.message));
   await mobile.goto(origin+'/qsyn/',{waitUntil:'domcontentloaded'});
   await mobile.waitForFunction(()=>document.querySelectorAll('.qsyn-home-chart canvas').length>0);
@@ -276,6 +309,7 @@ try {
   if(oversized)throw new Error('Terminal overflows on mobile');
   if(browserRequests.some(url=>/(\/api\/v1\/(placeorder|cancelorder|modifyorder)|\/auth\/login|\/socket\.io)/i.test(url)))
     throw new Error('Terminal unexpectedly requested broker, auth or order execution endpoints');
+  await mobileContext.close();
   if(browserErrors.length)throw new Error('Browser exceptions: '+JSON.stringify(browserErrors));
   console.log('PASS: full-viewport OpenAlgo-only homepage, legacy rollback, terminal, mobile, CSP and no order calls');
 }finally{

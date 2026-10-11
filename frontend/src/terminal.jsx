@@ -12,7 +12,7 @@ import { createRoot } from 'react-dom/client';
 import {
   Activity, BookOpen, CandlestickChart, ChartColumnIncreasing, ChevronDown,
   ClipboardList, Compass, FlaskConical, Gauge, Layers, LayoutDashboard,
-  LockKeyhole, Menu, Moon, PanelLeftClose, PanelLeftOpen, Search,
+  LockKeyhole, LogOut, Menu, Moon, PanelLeftClose, PanelLeftOpen, Search,
   Settings, ShieldAlert, Sun, Wallet, Wrench, X, Plus, Save, Columns2, Trash2, Route,
 } from 'lucide-react';
 import { createWidget, createChartGrid } from 'openalgo-charts/widget';
@@ -591,6 +591,26 @@ function App() {
   const [sidebar, setSidebar] = useState(false);
   const [capabilities, setCapabilities] = useState(null);
   useEffect(() => {
+    if (['/', '/qsyn', '/qsyn/'].includes(window.location.pathname)) return;
+    let active = true;
+    const check = async () => {
+      try {
+        const result = await fetch('/qsyn/api/v1/admin/rust/state', {
+          credentials:'same-origin',cache:'no-store',headers:{Accept:'application/json'},
+        });
+        const state = await result.json();
+        if (active && (!result.ok || !state.authenticated)) {
+          window.location.replace('/qsyn/terminal/login');
+        }
+      } catch {
+        if (active) window.location.replace('/qsyn/terminal/login');
+      }
+    };
+    void check();
+    const interval = window.setInterval(check, 60000);
+    return () => { active = false; window.clearInterval(interval); };
+  }, []);
+  useEffect(() => {
     const change = () => setView(routeView());
     window.addEventListener('popstate', change);
     return () => window.removeEventListener('popstate', change);
@@ -620,10 +640,32 @@ function App() {
     if (!VIEWS.has(next)) return;
     const target=terminalHref(next);
     if(!target) return;
+    if (['/', '/qsyn', '/qsyn/'].includes(window.location.pathname)) {
+      // Full navigation MUST go through PHP's admin gate, never pushState.
+      window.location.assign(target);
+      return;
+    }
     if(window.location.pathname!==target || window.location.search)
       window.history.pushState(null, '', target);
     setView(next);
     setSidebar(false);
+  }
+  async function signOutTerminal() {
+    try {
+      const result = await fetch('/qsyn/api/v1/admin/rust/state', {
+        credentials:'same-origin',cache:'no-store',headers:{Accept:'application/json'},
+      });
+      const state = await result.json();
+      if (result.ok && state.authenticated && typeof state.csrf === 'string') {
+        await fetch('/qsyn/api/v1/admin/rust/logout', {
+          method:'POST',credentials:'same-origin',cache:'no-store',
+          headers:{'Content-Type':'application/json','X-CSRF-Token':state.csrf},
+          body:'{}',
+        });
+      }
+    } finally {
+      window.location.replace('/qsyn/terminal/login');
+    }
   }
   function Navigation({ mobile = false }) {
     return <nav aria-label={mobile ? 'Mobile terminal' : 'Terminal'}>
@@ -653,11 +695,12 @@ function App() {
         <span className="terminal-current"><current.icon size={16}/>{current.label}</span>
       </div>
       <div className="terminal-top-right">
-        <span className="terminal-environment">{['private-live','brokers','operations'].includes(view)?'● PRIVATE · GATED':['markets','diagnostics'].includes(view)?'● PUBLIC · READ ONLY':'● SIMULATED'}</span>
+        <span className="terminal-environment">● ADMIN TERMINAL · {['private-live','brokers','operations'].includes(view)?'RESTRICTED':['markets','diagnostics'].includes(view)?'READ ONLY':'SIMULATED'}</span>
         <button type="button" className="terminal-icon" aria-label="Toggle theme"
           onClick={toggleTheme}>
           {theme === 'dark' ? <Sun size={18}/> : <Moon size={18}/>}</button>
         <button type="button" className="terminal-icon" onClick={()=>openView('operations')} aria-label="Terminal operations" title="Protected Rust administration"><Settings size={17}/></button>
+        <button type="button" className="terminal-icon" onClick={()=>void signOutTerminal()} aria-label="Sign out of QSYN terminal" title="Sign out"><LogOut size={17}/></button>
       </div>
     </header>
     <aside className={'terminal-sidebar' + (sidebar ? ' show' : '')}>

@@ -5,6 +5,31 @@ declare(strict_types=1);
  * credentials, Flask, private identities, execution or persistence stores.
  * Visual navigation pattern adapted from upstream OpenAlgo (AGPL-3.0).
  */
+// Defense in depth: if Cloudways exposes this physical PHP entrypoint
+// directly, it MUST NOT bypass the canonical /qsyn/terminal/* auth gate.
+// The chart-only /qsyn/ homepage intentionally remains public.
+$requestedPath = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/';
+if (!in_array($requestedPath, ['/', '/qsyn', '/qsyn/'], true)) {
+    $src = dirname(__DIR__) . '/src/RustAdmin.php';
+    if (!is_file($src)) {
+        $src = dirname(__DIR__, 2) . '/private_html/qsyn/app/src/RustAdmin.php';
+    }
+    if (!is_file($src)) {
+        http_response_code(503);
+        exit;
+    }
+    require_once $src;
+    if (!\QSYN\Admin\RustAdmin::originAllowed($_SERVER)) {
+        http_response_code(403);
+        exit;
+    }
+    \QSYN\Admin\RustAdmin::boot();
+    if (!\QSYN\Admin\RustAdmin::authenticated()) {
+        header('Cache-Control: no-store');
+        header('Location: /qsyn/terminal/login', true, 303);
+        exit;
+    }
+}
 $js = __DIR__ . '/assets/terminal.js';
 $css = __DIR__ . '/assets/terminal.css';
 $jsVersion = (string) (@filemtime($js) ?: '0');
