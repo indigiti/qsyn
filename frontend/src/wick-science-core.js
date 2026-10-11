@@ -114,7 +114,12 @@ export function calculateWickScience(bars, settings = {}, context = {}) {
         upperZone > setupOpen && lowerZone < setupOpen;
       state = 0; armIndex = -1; entryIndex = -1; wickExtreme = null; activeStop = null;
     } else if (group.count > 0 && bar.time !== group.last + chartSeconds) {
+      // We cannot reconstruct a flip sequence across a missing lower-TF bar.
+      // Disable trading signals for this entire higher-TF candle, not merely
+      // the MFE contribution when it eventually closes.
       group.unbroken = false;
+      available = false;
+      state = 6;
     }
     group.last = bar.time;
     group.count++;
