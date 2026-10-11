@@ -24,11 +24,22 @@ pub struct Subscription {
 
 impl Subscription {
     pub fn valid(&self) -> bool {
-        const EXCHANGES: &[&str] = &["NSE","BSE","NFO","BFO","MCX","CDS","NSE_INDEX","BSE_INDEX"];
+        const EXCHANGES: &[&str] = &[
+            "NSE",
+            "BSE",
+            "NFO",
+            "BFO",
+            "MCX",
+            "CDS",
+            "NSE_INDEX",
+            "BSE_INDEX",
+        ];
         EXCHANGES.contains(&self.exchange.as_str())
-            && !self.symbol.is_empty() && self.symbol.len() <= 100
-            && self.symbol.bytes().all(|c| c.is_ascii_uppercase()
-                || c.is_ascii_digit() || matches!(c, b'_' | b'-' | b'.'))
+            && !self.symbol.is_empty()
+            && self.symbol.len() <= 100
+            && self.symbol.bytes().all(|c| {
+                c.is_ascii_uppercase() || c.is_ascii_digit() || matches!(c, b'_' | b'-' | b'.')
+            })
     }
 }
 
@@ -56,23 +67,35 @@ pub fn normalize(
     if raw.len() > 65536 {
         return Err(invalid("oversized_provider_message"));
     }
-    let frame: Value = serde_json::from_str(raw)
-        .map_err(|_| invalid("invalid_provider_json"))?;
+    let frame: Value = serde_json::from_str(raw).map_err(|_| invalid("invalid_provider_json"))?;
     if frame["type"] != "market_data" {
         return Ok(None);
     }
-    let exchange = frame["exchange"].as_str().ok_or_else(|| invalid("missing_exchange"))?;
-    let symbol = frame["symbol"].as_str().ok_or_else(|| invalid("missing_symbol"))?;
-    if frame["broker"] != broker || frame["mode"] != 1
-        || !subscriptions.iter().any(|s| s.exchange == exchange && s.symbol == symbol)
+    let exchange = frame["exchange"]
+        .as_str()
+        .ok_or_else(|| invalid("missing_exchange"))?;
+    let symbol = frame["symbol"]
+        .as_str()
+        .ok_or_else(|| invalid("missing_symbol"))?;
+    if frame["broker"] != broker
+        || frame["mode"] != 1
+        || !subscriptions
+            .iter()
+            .any(|s| s.exchange == exchange && s.symbol == symbol)
     {
         return Err(invalid("wrong_broker_mode_or_subscription"));
     }
-    let data = frame["data"].as_object().ok_or_else(|| invalid("missing_ltp_data"))?;
-    let price = data.get("ltp").and_then(Value::as_f64)
+    let data = frame["data"]
+        .as_object()
+        .ok_or_else(|| invalid("missing_ltp_data"))?;
+    let price = data
+        .get("ltp")
+        .and_then(Value::as_f64)
         .filter(|x| x.is_finite() && *x > 0.0)
         .ok_or_else(|| invalid("invalid_provider_ltp"))?;
-    let ts = data.get("timestamp").and_then(Value::as_u64)
+    let ts = data
+        .get("timestamp")
+        .and_then(Value::as_u64)
         .ok_or_else(|| invalid("missing_provider_timestamp"))?;
     if ts == 0 || ts > received_ms.saturating_add(30_000) {
         return Err(invalid("future_or_invalid_timestamp"));
@@ -80,8 +103,10 @@ pub fn normalize(
     Ok(Some(CandidateQuote {
         scope: scope.clone(),
         instrument_id: format!("{exchange}|{symbol}"),
-        exchange_timestamp_ms: ts, received_timestamp_ms: received_ms,
-        price, stale: received_ms.saturating_sub(ts) > 120_000,
+        exchange_timestamp_ms: ts,
+        received_timestamp_ms: received_ms,
+        price,
+        stale: received_ms.saturating_sub(ts) > 120_000,
         entitlement_verified: false,
         publishable_to_public_studio: false,
     }))
@@ -117,28 +142,52 @@ pub async fn probe(
     max_frames: usize,
     duration_seconds: u64,
 ) -> io::Result<FeedDiagnostic> {
-    if ws_port < 1025 || key.len() < 16 || key.len() > 256
-        || subscriptions.is_empty() || subscriptions.len() > 8
+    if ws_port < 1025
+        || key.len() < 16
+        || key.len() > 256
+        || subscriptions.is_empty()
+        || subscriptions.len() > 8
         || !(1..=200).contains(&max_frames)
         || !(1..=30).contains(&duration_seconds)
-        || broker.is_empty() || !broker.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_')
+        || broker.is_empty()
+        || !broker
+            .bytes()
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_')
     {
-        return Err(io::Error::new(io::ErrorKind::InvalidInput, "invalid_probe_settings"));
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "invalid_probe_settings",
+        ));
     }
     let mut unique = HashSet::new();
-    if subscriptions.iter().any(|s| !s.valid() || !unique.insert(s.clone())) {
-        return Err(io::Error::new(io::ErrorKind::InvalidInput, "invalid_duplicate_subscription"));
+    if subscriptions
+        .iter()
+        .any(|s| !s.valid() || !unique.insert(s.clone()))
+    {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "invalid_duplicate_subscription",
+        ));
     }
     let url = format!("ws://127.0.0.1:{ws_port}");
     let (mut socket, _) = timeout(Duration::from_secs(5), connect_async(url))
-        .await.map_err(|_| invalid("provider_connection_timeout"))?
+        .await
+        .map_err(|_| invalid("provider_connection_timeout"))?
         .map_err(|_| invalid("local_openalgo_ws_unavailable"))?;
 
-    socket.send(Message::Text(json!({"action":"authenticate","api_key":key}).to_string().into()))
-        .await.map_err(|_| invalid("provider_auth_send_failed"))?;
+    socket
+        .send(Message::Text(
+            json!({"action":"authenticate","api_key":key})
+                .to_string()
+                .into(),
+        ))
+        .await
+        .map_err(|_| invalid("provider_auth_send_failed"))?;
     let authenticated = timeout(Duration::from_secs(5), async {
         loop {
-            let incoming = socket.next().await
+            let incoming = socket
+                .next()
+                .await
                 .ok_or_else(|| invalid("provider_closed_before_auth"))?
                 .map_err(|_| invalid("provider_auth_frame_failed"))?;
             if let Message::Text(text) = incoming {
@@ -150,17 +199,28 @@ pub async fn probe(
                     }
                     return Ok(());
                 }
-                if parsed["type"] == "error" { return Err(invalid("provider_auth_denied")); }
+                if parsed["type"] == "error" {
+                    return Err(invalid("provider_auth_denied"));
+                }
             } else if incoming.is_close() {
                 return Err(invalid("provider_auth_closed"));
             }
         }
-    }).await.map_err(|_| invalid("provider_auth_timeout"))?;
+    })
+    .await
+    .map_err(|_| invalid("provider_auth_timeout"))?;
     authenticated?;
 
-    socket.send(Message::Text(json!({
-        "action":"subscribe","mode":"LTP","symbols":subscriptions
-    }).to_string().into())).await.map_err(|_| invalid("subscription_send_failed"))?;
+    socket
+        .send(Message::Text(
+            json!({
+                "action":"subscribe","mode":"LTP","symbols":subscriptions
+            })
+            .to_string()
+            .into(),
+        ))
+        .await
+        .map_err(|_| invalid("subscription_send_failed"))?;
 
     let start = Instant::now();
     let mut total = 0usize;
@@ -169,8 +229,7 @@ pub async fn probe(
     let mut duplicates = 0usize;
     let mut last = HashMap::<String, (u64, f64)>::new();
     while start.elapsed().as_secs() < duration_seconds && total < max_frames {
-        let remaining = Duration::from_secs(duration_seconds)
-            .saturating_sub(start.elapsed());
+        let remaining = Duration::from_secs(duration_seconds).saturating_sub(start.elapsed());
         let received = timeout(remaining, socket.next()).await;
         let incoming = match received {
             Ok(Some(Ok(frame))) => frame,
@@ -178,27 +237,44 @@ pub async fn probe(
             Ok(None) => break,
             Err(_) => break,
         };
-        if incoming.is_close() { break; }
+        if incoming.is_close() {
+            break;
+        }
         if let Message::Ping(bytes) = incoming {
-            socket.send(Message::Pong(bytes)).await
+            socket
+                .send(Message::Pong(bytes))
+                .await
                 .map_err(|_| invalid("provider_pong_failed"))?;
             continue;
         }
-        let Message::Text(text) = incoming else { continue };
-        let now_ms = SystemTime::now().duration_since(UNIX_EPOCH)
-            .map_err(|_| invalid("local_clock_invalid"))?.as_millis() as u64;
+        let Message::Text(text) = incoming else {
+            continue;
+        };
+        let now_ms = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_err(|_| invalid("local_clock_invalid"))?
+            .as_millis() as u64;
         if let Some(candidate) = normalize(&text, scope, broker, subscriptions, now_ms)? {
-            let duplicate = last.get(&candidate.instrument_id)
-                .is_some_and(|(ms, price)| candidate.exchange_timestamp_ms < *ms
-                    || (candidate.exchange_timestamp_ms == *ms && candidate.price == *price));
+            let duplicate = last
+                .get(&candidate.instrument_id)
+                .is_some_and(|(ms, price)| {
+                    candidate.exchange_timestamp_ms < *ms
+                        || (candidate.exchange_timestamp_ms == *ms && candidate.price == *price)
+                });
             if duplicate {
                 duplicates += 1;
                 continue;
             }
-            last.insert(candidate.instrument_id.clone(),
-                (candidate.exchange_timestamp_ms, candidate.price));
+            last.insert(
+                candidate.instrument_id.clone(),
+                (candidate.exchange_timestamp_ms, candidate.price),
+            );
             total += 1;
-            if candidate.stale { stale += 1; } else { fresh += 1; }
+            if candidate.stale {
+                stale += 1;
+            } else {
+                fresh += 1;
+            }
         }
     }
     // Attempt graceful close; failure is not permission to publish data.
@@ -209,7 +285,9 @@ pub async fn probe(
         authenticated_to_openalgo: true,
         broker: broker.to_owned(),
         account_id: scope.account_id.clone(),
-        delivered_frames: total, fresh_frames: fresh, stale_frames: stale,
+        delivered_frames: total,
+        fresh_frames: fresh,
+        stale_frames: stale,
         skipped_duplicates: duplicates,
         source_exchange_timestamps_present: total > 0,
         exchange_entitlement_verified: false,
@@ -223,11 +301,18 @@ mod tests {
     use super::*;
     use tokio_tungstenite::accept_async;
     fn scope() -> Scope {
-        Scope { tenant_id: "tenantA".into(), account_id: "brokerA".into(),
-            source_id: "openalgo".into(), entitlement_id: "not_verified".into() }
+        Scope {
+            tenant_id: "tenantA".into(),
+            account_id: "brokerA".into(),
+            source_id: "openalgo".into(),
+            entitlement_id: "not_verified".into(),
+        }
     }
     fn symbols() -> Vec<Subscription> {
-        vec![Subscription { exchange: "NFO".into(), symbol: "NIFTY29OCT2624500CE".into() }]
+        vec![Subscription {
+            exchange: "NFO".into(),
+            symbol: "NIFTY29OCT2624500CE".into(),
+        }]
     }
     #[test]
     fn normalizes_only_correctly_scoped_ltp_without_licensing_claims() {
@@ -237,21 +322,36 @@ mod tests {
             "exchange":"NFO","broker":"upstox","mode":1,
             "data":{"ltp":101.25,"timestamp":now-500}
         });
-        let valid = normalize(&quote.to_string(), &scope(), "upstox", &symbols(), now).unwrap().unwrap();
+        let valid = normalize(&quote.to_string(), &scope(), "upstox", &symbols(), now)
+            .unwrap()
+            .unwrap();
         assert_eq!(valid.instrument_id, "NFO|NIFTY29OCT2624500CE");
         assert_eq!(valid.price, 101.25);
         assert!(!valid.entitlement_verified && !valid.publishable_to_public_studio && !valid.stale);
         let mut foreign = quote.clone();
         foreign["broker"] = json!("zerodha");
         assert!(normalize(&foreign.to_string(), &scope(), "upstox", &symbols(), now).is_err());
-        foreign = quote.clone(); foreign["data"]["ltp"] = json!(-1);
+        foreign = quote.clone();
+        foreign["data"]["ltp"] = json!(-1);
         assert!(normalize(&foreign.to_string(), &scope(), "upstox", &symbols(), now).is_err());
-        foreign = quote.clone(); foreign["data"]["timestamp"] = json!(now+60000);
+        foreign = quote.clone();
+        foreign["data"]["timestamp"] = json!(now + 60000);
         assert!(normalize(&foreign.to_string(), &scope(), "upstox", &symbols(), now).is_err());
-        foreign = quote.clone(); foreign["data"]["timestamp"] = json!(now-180000);
-        assert!(normalize(&foreign.to_string(), &scope(), "upstox", &symbols(), now).unwrap().unwrap().stale);
-        foreign = quote; foreign["type"] = json!("subscription_ack");
-        assert!(normalize(&foreign.to_string(), &scope(), "upstox", &symbols(), now).unwrap().is_none());
+        foreign = quote.clone();
+        foreign["data"]["timestamp"] = json!(now - 180000);
+        assert!(
+            normalize(&foreign.to_string(), &scope(), "upstox", &symbols(), now)
+                .unwrap()
+                .unwrap()
+                .stale
+        );
+        foreign = quote;
+        foreign["type"] = json!("subscription_ack");
+        assert!(
+            normalize(&foreign.to_string(), &scope(), "upstox", &symbols(), now)
+                .unwrap()
+                .is_none()
+        );
     }
 
     #[tokio::test]
@@ -265,20 +365,40 @@ mod tests {
             let auth: Value = serde_json::from_str(&auth).unwrap();
             assert_eq!(auth["action"], "authenticate");
             assert_eq!(auth["api_key"], "fake-private-openalgo-key");
-            ws.send(Message::Text(json!({"type":"auth","status":"success","broker":"upstox"}).to_string().into())).await.unwrap();
+            ws.send(Message::Text(
+                json!({"type":"auth","status":"success","broker":"upstox"})
+                    .to_string()
+                    .into(),
+            ))
+            .await
+            .unwrap();
             let sub = ws.next().await.unwrap().unwrap().into_text().unwrap();
             let sub: Value = serde_json::from_str(&sub).unwrap();
             assert_eq!(sub["action"], "subscribe");
             assert_eq!(sub["mode"], "LTP");
-            let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() as u64;
+            let now = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_millis() as u64;
             let quote = json!({"type":"market_data","symbol":"NIFTY29OCT2624500CE",
                 "exchange":"NFO","broker":"upstox","mode":1,
                 "data":{"ltp":125.5,"timestamp":now}});
-            ws.send(Message::Text(quote.to_string().into())).await.unwrap();
+            ws.send(Message::Text(quote.to_string().into()))
+                .await
+                .unwrap();
             let _ = ws.close(None).await;
         });
-        let report = probe(port, "fake-private-openalgo-key", "upstox",
-            &scope(), &symbols(), 10, 2).await.unwrap();
+        let report = probe(
+            port,
+            "fake-private-openalgo-key",
+            "upstox",
+            &scope(),
+            &symbols(),
+            10,
+            2,
+        )
+        .await
+        .unwrap();
         assert_eq!(report.delivered_frames, 1);
         assert_eq!(report.fresh_frames, 1);
         assert!(!report.exchange_entitlement_verified);
