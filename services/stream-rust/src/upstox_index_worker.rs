@@ -123,6 +123,12 @@ impl IndexWorkerSettings {
             market_data_display_approved: self.operator_approved_display,
         }
     }
+    /// Only the operator-only historical importer receives this bearer after
+    /// renewed BOD, account, retention and display checks. Never print it.
+    pub fn authorized_history_token(&self, now: u64) -> io::Result<String> {
+        self.validate(now)?;
+        Ok(self.session()?.access_token)
+    }
     fn session(&self) -> io::Result<OAuthSession> {
         let session: OAuthSession =
             serde_json::from_slice(&private_bytes(&self.private_oauth_session_file, 16384)?)
