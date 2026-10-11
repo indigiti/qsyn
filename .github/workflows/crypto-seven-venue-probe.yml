@@ -1,5 +1,5 @@
 name: QSYN Seven Venue Live Acceptance
-# Post-deployment acceptance: QSYN #231, main 3400750ae0da.
+# Post-deployment strict contiguous history acceptance: QSYN #235, main 92e0806f2585.
 
 on:
   push:
@@ -30,7 +30,8 @@ jobs:
             --base-url https://stage.digiti.in \
             --observe-seconds 90 \
             --sample-seconds 20 \
-            --require-websocket 2>&1 | tee qsyn-crypto-seven-venue-report.txt
+            --require-websocket \
+            --require-contiguous 2>&1 | tee qsyn-crypto-seven-venue-report.txt
       - name: Preserve probe report even when a provider fails
         if: always()
         uses: actions/upload-artifact@v4
