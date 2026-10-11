@@ -173,6 +173,27 @@ if ($route === '/qsyn/api/v1/studio/market' || $route === '/qsyn/api/v1/studio/b
     }
 }
 
+// Password-protected, redacted diagnostic snapshot. No token, user identity,
+// account number, cookie value, provider payload or private path is serialized.
+if ($route === '/qsyn/api/v1/admin/diagnostics/report') {
+    $src = dirname(__DIR__) . '/src';
+    if (!is_file($src . '/NativeAdminDiagnostics.php')) {
+        $src = dirname(__DIR__, 2) . '/private_html/qsyn/app/src';
+    }
+    foreach (['RustAdmin', 'NativeAdminDiagnostics'] as $module) {
+        if (!is_file($src . '/' . $module . '.php')) {
+            respond(['error' => 'diagnostics_module_unavailable'], 503);
+        }
+        require_once $src . '/' . $module . '.php';
+    }
+    header('Cache-Control: private, no-store');
+    header('Pragma: no-cache');
+    header('X-Robots-Tag: noindex, nofollow');
+    [$status, $payload] = \QSYN\Diagnostics\NativeAdminDiagnostics::read($_SERVER);
+    header('X-QSYN-Request-ID: ' . $payload['request_id']);
+    respond($payload, $status);
+}
+
 // Native Upstox operator OAuth. No OpenAlgo Python or API key is involved.
 // The callback accepts a one-use 256-bit state instead of an admin cookie:
 // external Upstox redirects will not carry our SameSite=Strict admin session.
@@ -538,6 +559,7 @@ if (preg_match('#^(?:/qsyn)?/api/v1/admin/rust/(state|login|logout|action|demo|s
                 ];
             })(),
             'authenticated' => $authorized,
+            'session' => \QSYN\Admin\RustAdmin::sessionReport(),
             'csrf' => $authorized ? \QSYN\Admin\RustAdmin::csrf() : null,
             'manager' => $authorized ? \QSYN\Admin\RustSupervisor::status() : null,
         ]);
