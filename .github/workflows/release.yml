@@ -32,6 +32,8 @@ jobs:
       - name: Test PHP
         run: |
           php -l apps/web-php/public/index.php
+          php -l apps/web-php/src/TerminalRoutes.php
+          php apps/web-php/tests/TerminalRoutesTest.php
           php -l apps/web-php/public/terminal.php
           php -l apps/web-php/src/RustProbe.php
           php -l apps/web-php/src/RustStreamProbe.php
@@ -125,6 +127,7 @@ jobs:
           npm install --no-audit --no-fund
           npm run build
           node tests/india-index-contract.mjs
+          node tests/terminal-routes-contract.mjs
       - name: Stage DigiOps-compatible release
         shell: bash
         run: |
@@ -139,6 +142,8 @@ jobs:
           mkdir -p staging/private/runtime
           printf 'QSYN private runtime; never store credentials in release artifacts.\n' > staging/private/runtime/README.txt
           cp apps/web-php/public/index.php staging/public/index.php
+          cp apps/web-php/public/terminal-routes.json staging/public/terminal-routes.json
+          cp apps/web-php/src/TerminalRoutes.php staging/private/app/src/TerminalRoutes.php
           cp apps/web-php/public/admin-rust.php staging/public/admin-rust.php
           cp apps/web-php/public/.htaccess staging/public/.htaccess
           cp frontend/dist/chart.js staging/public/assets/chart.js
@@ -256,6 +261,8 @@ jobs:
           test -s staging/public/assets/rust-admin.js
           test -s staging/public/assets/rust-activation-readiness.js
           test -s staging/public/admin-rust.php
+          test -s staging/public/terminal-routes.json
+          test -s staging/private/app/src/TerminalRoutes.php
           test -s staging/private/app/src/RustAdmin.php
           test -s staging/private/app/src/RustAdminBootstrap.php
           test ! -e staging/private/runtime/admin-setup-code.txt
@@ -344,6 +351,8 @@ jobs:
           test -s verified-release/public/assets/rust-admin.js
           test -s verified-release/public/assets/rust-activation-readiness.js
           test -s verified-release/public/admin-rust.php
+          test -s verified-release/public/terminal-routes.json
+          test -s verified-release/private/app/src/TerminalRoutes.php
           test -s verified-release/private/app/src/RustAdmin.php
           test -s verified-release/private/app/src/RustAdminBootstrap.php
           test ! -e verified-release/private/runtime/admin-setup-code.txt
