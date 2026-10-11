@@ -176,28 +176,21 @@ if ($route === '/qsyn/api/v1/studio/market' || $route === '/qsyn/api/v1/studio/b
 // Canonical unified React terminal is the sole UI. Old bookmarked HTML pages
 // remain as non-cacheable navigation aliases only. JSON endpoints are routed
 // above/below this block unchanged, with the same server-side security.
-if (isset([
-    '/qsyn/studio' => 'strategy',
-    '/qsyn/studio/' => 'strategy',
-    '/qsyn/admin/rust' => 'operations',
-    '/qsyn/admin/rust/' => 'operations',
-    '/qsyn/legacy-chart' => 'diagnostics',
-    '/qsyn/legacy-chart/' => 'diagnostics',
-][$route])) {
+$legacyWorkspace = [
+    '/qsyn/studio' => 'strategy', '/qsyn/studio/' => 'strategy',
+    '/qsyn/admin/rust' => 'operations', '/qsyn/admin/rust/' => 'operations',
+    '/qsyn/legacy-chart' => 'diagnostics', '/qsyn/legacy-chart/' => 'diagnostics',
+];
+if (isset($legacyWorkspace[$route])) {
     if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'GET'
         && ($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'HEAD') {
         header('Allow: GET, HEAD');
         respond(['error' => 'method_not_allowed'], 405);
     }
-    $targets = [
-        '/qsyn/studio' => 'strategy', '/qsyn/studio/' => 'strategy',
-        '/qsyn/admin/rust' => 'operations', '/qsyn/admin/rust/' => 'operations',
-        '/qsyn/legacy-chart' => 'diagnostics', '/qsyn/legacy-chart/' => 'diagnostics',
-    ];
     header('Cache-Control: private, no-store, max-age=0');
     header('Pragma: no-cache');
     header('X-Robots-Tag: noindex, nofollow');
-    header('Location: /qsyn/terminal?view=' . $targets[$route], true, 302);
+    header('Location: /qsyn/terminal?view=' . $legacyWorkspace[$route], true, 302);
     exit;
 }
 
