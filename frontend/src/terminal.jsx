@@ -15,7 +15,9 @@ import {
   LockKeyhole, Menu, Moon, PanelLeftClose, PanelLeftOpen, Search,
   Settings, ShieldAlert, Sun, Wallet, Wrench, X, Plus, Save, Columns2, Trash2,
 } from 'lucide-react';
-import { createWidget } from 'openalgo-charts/widget';
+import { createWidget, createChartGrid } from 'openalgo-charts/widget';
+import { QsynCryptoFeed } from './crypto-feed.js';
+import { cryptoDefault, CRYPTO_MARKETS } from './crypto-catalog.js';
 import 'openalgo-charts/indicators';
 import { QsynWorkspaceFeed } from './terminal-feed.js';
 import { publicNativeWorkspaceStore } from './native-workspaces.js';
@@ -127,12 +129,51 @@ const ignoreHomepageWidget = () => {};
  * Keep the simulated-data disclosure below the chart, outside its controls.
  */
 function HomepageChart({ theme }) {
-  const nativeWorkspaces = useMemo(() => publicNativeWorkspaceStore(), []);
-  return <main className="qsyn-homepage" aria-label="QSYN simulated chart homepage">
-    <div className="qsyn-home-chart">
-      <ChartPanel pane={HOME_PANE} theme={theme} savedState={null}
-        revision={0} onMount={ignoreHomepageWidget} hideBranding nativeWorkspaces={nativeWorkspaces}/>
+  const host=useRef(null);
+  const gridRef=useRef(null);
+  const [selection,setSelection]=useState(cryptoDefault);
+  const [message,setMessage]=useState('Connecting public exchange candles…');
+  const [preset,setPreset]=useState('1x1');
+  const nativeWorkspaces=useMemo(()=>publicNativeWorkspaceStore(),[]);
+  useEffect(()=>{
+    if(!host.current)return;
+    let active=true;
+    const feed=new QsynCryptoFeed(s=>{if(active)setMessage(s);});
+    const grid=createChartGrid(host.current,{
+      feed,symbol:selection.symbol,exchange:selection.exchange+':'+selection.market,
+      interval:'1m',intervals:['1m','5m','15m','1h','1d'],
+      theme,branding:false,panels:true,toolbar:true,bottombar:true,
+      preset,workspaces:nativeWorkspaces||undefined,
+      links:{crosshair:true},navigation:{defaultVisibleBars:120,mousePan:'horizontal'},
+    });
+    gridRef.current=grid;
+    grid.ready.catch(()=>{if(active)setMessage('Public market feed unavailable · no demo fallback');});
+    return ()=>{active=false;gridRef.current=null;grid.destroy();feed.destroy();};
+  },[theme,nativeWorkspaces]);
+  function choose(next) {
+    if(!next)return;
+    setSelection(next);
+    for(const cell of gridRef.current?.cells()||[]) {
+      cell.widget.setSymbol(next.symbol,next.exchange+':'+next.market);
+    }
+  }
+  function layout(value) {
+    setPreset(value);
+    gridRef.current?.setPreset(value);
+  }
+  return <main className="qsyn-homepage" aria-label="QSYN public crypto charts">
+    <div className="qsyn-crypto-selector" role="group" aria-label="Public crypto market selector">
+      <select aria-label="Exchange market and symbol" value={selection.id}
+        onChange={e=>choose(CRYPTO_MARKETS.find(x=>x.id===e.target.value))}>
+        {CRYPTO_MARKETS.map(item=><option key={item.id} value={item.id}>{item.label}</option>)}
+      </select>
+      <select aria-label="Chart grid layout" value={preset} onChange={e=>layout(e.target.value)}>
+        <option value="1x1">1 chart</option><option value="1x2">2 charts</option>
+        <option value="2x2">4 charts</option><option value="2x3">6 charts</option>
+      </select>
+      <span role="status" className="qsyn-crypto-source">{message}</span>
     </div>
+    <div className="qsyn-home-chart"><div className="qsyn-crypto-grid" ref={host}/></div>
   </main>;
 }
 
