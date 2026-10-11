@@ -41,4 +41,37 @@ jobs:
                     'OLD_DEMO_HEADER','QSYN — Development Terminal' in text)
               if path.startswith('/qsyn/api/v1/'):
                   print('API_START',text[:250].replace('\n',' '))
+          import json
+          def read(path):
+              req=urllib.request.Request('https://stage.digiti.in'+path,
+                  headers={'Accept':'text/html,application/json','User-Agent':'QSYN-stage-246-http-diagnostics/1'})
+              try:
+                  with urllib.request.urlopen(req,timeout=15) as r:
+                      return r.status,r.read(2_000_000).decode('utf-8',errors='replace'),dict(r.headers)
+              except urllib.error.HTTPError as r:
+                  return r.code,r.read(100_000).decode('utf-8',errors='replace'),dict(r.headers)
+          status,html,headers=read('/qsyn/terminal')
+          assert status==200 and 'id="qsyn-root"' in html
+          scripts=re.findall(r'/qsyn/assets/terminal[.]js[?]v=[A-Za-z0-9._-]+',html)
+          assert scripts,'terminal_js_missing'
+          s,js,h=read(scripts[0])
+          assert s==200 and len(js)>10000,('terminal_bundle_bad',s,len(js))
+          keys=['Diagnostics & feed health','Accounts & authorizations','Service administration',
+                'Strategy Studio','Live crypto & India index charts']
+          found={k:(k in js) for k in keys}
+          print('BUNDLE_STATUS',s,'BYTES',len(js),'MARKERS',found)
+          assert all(found.values()),'unified_react_code_not_present'
+          a,body,head=read('/qsyn/api/v1/admin/rust/state')
+          data=json.loads(body) if a==200 else {}
+          print('ADMIN_STATUS',a,'ANON_AUTHENTICATED',data.get('authenticated'))
+          assert a==200 and data.get('authenticated') is False,'admin_access_boundary_failed'
+          a,body,head=read('/qsyn/api/v1/india/bars?exchange=NSE_INDEX&symbol=NIFTY&interval=1m&limit=5')
+          data=json.loads(body) if a==503 else {}
+          print('INDIA_LICENSED_DATA_STATUS',a,'GATE',data.get('error'))
+          assert a==503 and data.get('error')=='india_index_feed_not_authorized'
+          a,body,head=read('/qsyn/api/v1/studio/market?underlying=NIFTY')
+          data=json.loads(body) if a==200 else {}
+          print('STRATEGY_API_STATUS',a,'MODE',data.get('mode'),'TRADING',data.get('trading_enabled'))
+          assert a==200 and data.get('mode')=='simulated' and data.get('trading_enabled') is False
+          print('PASS: React terminal bundle, anonymous admin gate, licensed NSE gate and simulated strategy API')
           PY
