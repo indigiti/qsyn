@@ -73,6 +73,7 @@ impl IndexWorkerSettings {
         if session.schema != "QSYN-UPSTOX-AUTH-SESSION/1"
             || session.broker != "upstox"
             || session.user_id != self.upstox_user_id
+            || session.created_at.is_empty()
             || session.order_routing_enabled || session.display_entitlement_verified
             || session.retention_entitlement_verified
             || session.access_token.len() < 20 || session.access_token.len() > 8192
