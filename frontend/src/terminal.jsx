@@ -155,7 +155,7 @@ const ignoreHomepageWidget = () => {};
  */
 function HomepageChart({ theme, embedded = false,
   initialExchange = cryptoDefault.exchange+':'+cryptoDefault.market,
-  initialSymbol = cryptoDefault.symbol, onPrivateIndexRequest = null, adminIndexHistory = false }) {
+  initialSymbol = cryptoDefault.symbol, onPrivateIndexRequest = null, adminIndexHistory = true }) {
   const host=useRef(null);
   const [message,setMessage]=useState('Connecting public exchange candles…');
   const [blockedIndex,setBlockedIndex]=useState(null);
@@ -168,7 +168,9 @@ function HomepageChart({ theme, embedded = false,
     // a refresh or changes interval; a known AbortError is not an app fault.
     const updateState=s=>{if(active)setMessage(s);};
     const feed=adminIndexHistory
-      ?new AdminIndexHistoryFeed(updateState)
+      ?new AdminIndexHistoryFeed(updateState,{
+        onBlockedIndex:index=>{if(active)setBlockedIndex(index);}
+      })
       :new QsynMarketsFeed(updateState,{
         onBlockedIndex:index=>{if(active)setBlockedIndex(index);}
       });
