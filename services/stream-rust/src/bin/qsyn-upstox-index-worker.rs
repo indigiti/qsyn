@@ -5,6 +5,18 @@ use std::path::Path;
 pub(crate) fn main() {
     let args = qsyn_stream::runtime_cli::operator_args("qsyn-upstox-index-worker");
     let result = match args.as_slice() {
+        [operation,symbol,day,runtime] if operation=="personal-history" => {
+            let rt=tokio::runtime::Builder::new_current_thread()
+                .enable_all().build();
+            match rt {
+                Ok(rt)=>match rt.block_on(qsyn_stream::personal_index::history(
+                    symbol,day,Path::new(runtime))) {
+                    Ok(json)=>{println!("{json}");Ok(())},
+                    Err(_)=>Err(std::io::Error::other("personal_index_history_unavailable")),
+                },
+                Err(_)=>Err(std::io::Error::other("runtime_unavailable")),
+            }
+        },
         [operation, path] if operation == "check" || operation == "run" => {
             let settings = IndexWorkerSettings::from_private_file(Path::new(path));
             match (operation.as_str(), settings) {
