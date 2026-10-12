@@ -36,6 +36,9 @@ def main():
       assert status['schema']=='QSYN-INDEX-WEB-OPERATIONS/1'
       assert status['web_operations_enabled'] is False
       assert status['preflight_enabled'] is False
+      assert status['worker_preflight_enabled'] is False
+      assert status['worker_service_controls_enabled'] is False
+      assert status['private_plan_unapproved_draft'] is False
       assert status['private_plan_ready'] is False
       assert isinstance(status['executor_ready'],bool)
       assert status['backfill_enabled'] is False
@@ -45,6 +48,20 @@ def main():
       assert len(status['csrf'])==64
       assert 'no-store' in headers['Cache-Control']
       assert len(headers['X-QSYN-Request-ID'])==16
+      assert request(anonymous,origin,URL+'check-worker','POST',
+        {'confirmed':True})[0]==401
+      assert request(admin,origin,URL+'check-worker')[0]==405
+      assert request(admin,origin,URL+'check-worker','POST',
+        {'confirmed':True})[0]==403
+      assert request(admin,origin,URL+'check-worker','POST',
+        {'confirmed':True},status['csrf'],
+        browser_origin='http://malicious.example')[0]==403
+      assert request(admin,origin,URL+'check-worker','POST',
+        {'confirmed':True,'date':'2026-10-09'},status['csrf'])[0]==422
+      assert request(admin,origin,URL+'check-worker','POST',
+        {'confirmed':True,'binary':'/bin/sh'},status['csrf'])[0]==422
+      assert request(admin,origin,URL+'check-worker','POST',
+        {'confirmed':True},status['csrf'])[0]==503
       assert request(admin,origin,URL+'check')[0]==405
       assert request(admin,origin,URL+'status','POST',{},status['csrf'])[0]==405
       assert request(admin,origin,URL+'check','POST',
