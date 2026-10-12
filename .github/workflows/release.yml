@@ -443,12 +443,13 @@ jobs:
     runs-on: ubuntu-latest
     needs: package
     steps:
+      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           name: digiops-release
           path: verified-release
       - name: Verify downloaded runtime launchers and budget
-        run: python3 ops/rust_footprint_guard.py staging verified-release
+        run: python3 ops/rust_footprint_guard.py extracted verified-release
       - name: Validate exact artifact layout
         shell: bash
         run: |
