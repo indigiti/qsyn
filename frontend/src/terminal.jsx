@@ -276,7 +276,7 @@ function HomepageChart({ theme, embedded = false,
         <button type="button" onClick={openPrivateIndex}>
           Open authorized {blockedIndex.symbol} chart
         </button>
-        <span>No public NSE/BSE index candles are available here. A valid Upstox token alone does not grant display rights or start the private index worker.</span>
+        <span>Sign in as the authorized QSYN administrator to view your personal Upstox history. No public redistribution, trading access or extra Rust worker is required for historical candles.</span>
       </div>}
     </div>
   </main>;
