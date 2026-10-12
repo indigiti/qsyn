@@ -152,16 +152,29 @@ export function MarketExplorer({theme,openView,CryptoChart,PrivateCharts}){
     </>}
     {market==='indices'&&<>
       <section className="terminal-surface">
-        <div className="terminal-card-head"><h2>Licensed index chart</h2><LockKeyhole size={17}/></div>
-        <p>NIFTY, BANKNIFTY, FINNIFTY, MIDCPNIFTY, SENSEX and INDIA VIX use
-          current exchange instrument keys, not the alias shown in the selector.
-          Enter the approved key only after instrument and display rights are verified.
-          Historical data and private WSS must be independently activated.</p>
-        <p role="status" className="terminal-footnote">Private index activation:
-          {' '}{audit?.next_action_code||'NO_CURRENT_OPERATOR_PREFLIGHT'}.
-          {' '}A saved Analytics Token is not evidence of a licensed live feed.</p>
+        <div className="terminal-card-head"><h2>Upstox · authenticated index candles</h2><LockKeyhole size={17}/></div>
+        <p>Native read-only intraday and historical candles are fetched directly
+          from Upstox with the saved Analytics Token, behind your administrator
+          session. All six NSE/BSE indices are resolved against Upstox's current
+          instrument search. No manually entered instrument keys, additional
+          Rust executable, or broker order connection is needed for history.</p>
+        <p className="terminal-footnote">This is private personal market-data access,
+          not an approved public redistribution feed or verified tick-level WebSocket.
+          Latest candle timestamps and provider errors appear in the chart status.</p>
       </section>
-      <PrivateCharts embedded onlyIndex selectedIndex={currentInstrument}/>
+      {currentInstrument&&<CryptoChart key={currentInstrument.id} theme={theme}
+        embedded adminIndexHistory
+        initialExchange={currentInstrument.exchange+':index'}
+        initialSymbol={currentInstrument.symbol}/>}
+      <section className="terminal-surface">
+        <div className="terminal-card-head"><h2>Advanced · signed private live stream</h2><LockKeyhole size={16}/></div>
+        <p>Optional Rust tick streaming remains restricted to separately approved
+          instrument rights, private worker and WSS. It is not required to display
+          real historical and intraday Upstox candles.</p>
+        <details><summary>Open private WSS chart controls</summary>
+          <PrivateCharts embedded onlyIndex selectedIndex={currentInstrument}/>
+        </details>
+      </section>
     </>}
     {market==='stocks'&&<section className="terminal-surface">
       <div className="terminal-card-head"><h2>NSE / BSE equities</h2><LockKeyhole size={16}/></div>
