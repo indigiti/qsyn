@@ -278,7 +278,7 @@ function NativeUpstoxPanel({refreshTick=0}){
         throw Error('INVALID_ANALYTICS_RESPONSE');
       if(operation==='verify'){
         if(typeof data.provider_feed_authorized_now!=='boolean' ||
-            !/^UPSTOX_ANALYTICS_MARKET_AUTH_[A-Z_]+$/.test(data.diagnostic_code||''))
+            !/^UPSTOX_ANALYTICS_MARKET_(?:AUTHORIZED_NOW|AUTH_UNAVAILABLE)$/.test(data.diagnostic_code||''))
           throw Error('INVALID_ANALYTICS_VERIFICATION');
         setAnalyticsVerification({verified:data.provider_feed_authorized_now,
           checked_at_utc:data.checked_at_utc,code:data.diagnostic_code});
