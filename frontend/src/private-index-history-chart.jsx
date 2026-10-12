@@ -101,7 +101,7 @@ export function PrivateIndexHistoryChart({symbol}){
       feed.destroy();
       try{widget?.destroy();}catch{}
     };
-  },[opened,auth,dayKey(date),symbol]);
+  },[opened,auth,date,symbol]);
   function changeDate(next){setDate(next);setOpened(false);}
   return <section className="terminal-surface qt-private-history-chart">
     <div className="terminal-card-head">
@@ -128,4 +128,3 @@ export function PrivateIndexHistoryChart({symbol}){
       in browser storage or returned to anonymous users.</p>
   </section>;
 }
-function dayKey(value){return value;}
