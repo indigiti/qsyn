@@ -334,7 +334,10 @@ mod tests {
             current.low,
             current.close
         ));
-        assert_eq!((current.open, current.high, current.low, current.close), (100.0, 125.0, 90.0, 111.0));
+        assert_eq!(
+            (current.open, current.high, current.low, current.close),
+            (100.0, 125.0, 90.0, 111.0)
+        );
         assert_eq!(current.observations, 4);
         assert!(!current.observe(f64::INFINITY));
         assert_eq!(current.close, 111.0);
