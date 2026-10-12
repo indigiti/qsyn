@@ -10,7 +10,8 @@ A web application cannot grant itself exchange rights or Cloudways privileges. A
 
 - `QSYN_UPSTOX_INDEX_WORKER_PLAN_FILE=/ABSOLUTE/PRIVATE/config/index-worker-plan.json` — existing owner-only 0600 file with approved current BOD, exact account and instrument mappings and independently evidenced NSE/BSE display and retention rights.
 - `QSYN_INDEX_WEB_ARCHIVE_ROOT=/ABSOLUTE/PRIVATE/index-history` — existing 0700 owner-only directory.
-- `QSYN_INDEX_WEB_OPERATIONS_ENABLED=1` — explicitly authorizes the website to run **bounded preflight** for this fixed private plan. Without this flag all operations fail closed.
+ - Administrator-only, read-only **Validate six-index plan** is available without a second environment flag once the private executable/plan/archive are correctly provisioned. `QSYN_INDEX_WEB_OPERATIONS_ENABLED=0` is an explicit emergency kill switch.
+- `QSYN_INDEX_WEB_OPERATIONS_ENABLED=1` — separately authorizes the website to request **state-changing** backfills and dedicated service controls, subject to their own flags.
 - `QSYN_INDEX_WEB_BACKFILL_ENABLED=1` and `QSYN_UPSTOX_INDEX_HISTORY_ENABLE=1` — **optional separate approvals** for web-triggered historical imports using the existing Rust CLI; trading flags must remain disabled.
 - `QSYN_INDEX_WEB_SERVICE_CONTROL_ENABLED=1` — **optional separate** worker control approval, only after the account/rights and Supervisor have been verified.
 - `QSYN_INDEX_WEB_SUPERVISOR_CONFIG=/ABSOLUTE/PRIVATE/config/qsyn-index-supervisor.conf` — private 0600 owner-readable configuration for a **dedicated non-root index-only Supervisor instance**.
