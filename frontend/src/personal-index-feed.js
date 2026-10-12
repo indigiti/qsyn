@@ -59,6 +59,10 @@ export class PrivateIndexHistoryFeed {
       if(this.closed||ctl.signal.aborted||e?.name==='AbortError')return [];
       this.onStatus(/^[A-Z0-9_]{3,90}$/i.test(e.message||'')
         ?e.message:'PRIVATE_INDEX_HISTORY_NOT_AVAILABLE');
+      // Scroll-back must distinguish missing trading-day candles from
+      // a rejected history request, not permanently mark provider failure
+      // as exhausted history.
+      if(req.strictHistory===true)throw e;
       return [];
     }finally{
       this.controllers.delete(ctl);req.signal?.removeEventListener('abort',abort);
