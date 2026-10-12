@@ -35,6 +35,7 @@ def main():
       assert code==200,(code,status)
       assert status['schema']=='QSYN-INDEX-WEB-OPERATIONS/1'
       assert status['web_operations_enabled'] is False
+      assert status['preflight_enabled'] is False
       assert status['private_plan_ready'] is False
       assert status['backfill_enabled'] is False
       assert status['service_controls_enabled'] is False
