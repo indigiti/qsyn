@@ -47,13 +47,11 @@ import {terminalHref,terminalViewForLocation,defaultTerminalView,terminalRoutes}
 const VIEWS = new Set(terminalRoutes.map(route=>route.view));
 // Navigation is product-oriented. Legacy routes remain valid but do not
 // advertise demonstration trading or disconnected feature menus as products.
+// QSYN Core: only chart data and connection setup are primary navigation.
+// Retired research/admin screens remain available at their old deep links.
 const sections = [
   { label:'Markets',view:'markets',icon:CandlestickChart },
-  { label:'Workspaces & Templates',view:'workspaces',icon:Layers },
-  { label:'Strategy Studio',view:'strategy',icon:FlaskConical },
   { label:'Data Providers & Connections',view:'brokers',icon:Wallet },
-  { label:'Diagnostics',view:'diagnostics',icon:Activity },
-  { label:'Rust Runtime',view:'operations',icon:Settings },
 ];
 const mobileSections=sections.filter(s=>['markets','workspaces','strategy','brokers'].includes(s.view));
 const unavailable = [
@@ -818,9 +816,7 @@ function App() {
         aria-current={view === s.view ? 'page' : undefined}
         className={'terminal-nav-item' + (view === s.view ? ' active' : '')}
         onClick={() => openView(s.view)}><s.icon size={18}/><span>{s.label}</span></button>)}
-      <p className="terminal-nav-label">SYSTEM</p>
-      <button type="button" className="terminal-nav-item" onClick={()=>openView('routes')}>
-        <Route size={18}/><span>Route management</span></button>
+
     </nav>;
   }
   if (['/', '/qsyn', '/qsyn/'].includes(window.location.pathname)) {
