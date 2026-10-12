@@ -207,6 +207,32 @@ if ($route === '/qsyn/api/v1/admin/diagnostics/report') {
     respond($payload, $status);
 }
 
+// Administrator-only read-only Upstox Analytics Token intake (opt-in).
+// This does not modify the OAuth file, attest account identity, authorize
+// exchange redistribution or enable worker/trading. No secrets in responses.
+if (preg_match('#^/qsyn/api/v1/admin/upstox/analytics/(status|import|clear)$#', $route, $analytics)) {
+    $src = dirname(__DIR__) . '/src';
+    if (!is_file($src . '/NativeUpstoxAnalyticsApi.php')) {
+        $src = dirname(__DIR__, 2) . '/private_html/qsyn/app/src';
+    }
+    foreach (['RustAdmin','NativeUpstoxAnalyticsApi'] as $unit) {
+        if (!is_file($src . '/' . $unit . '.php')) {
+            respond(['error'=>'analytics_module_unavailable'], 503);
+        }
+        require_once $src . '/' . $unit . '.php';
+    }
+    header('Cache-Control: private, no-store');
+    header('Pragma: no-cache');
+    header('Referrer-Policy: no-referrer');
+    header('X-Robots-Tag: noindex, nofollow');
+    [$status,$payload] = \QSYN\Broker\NativeUpstoxAnalyticsApi::dispatch($analytics[1], $_SERVER);
+    if ($status === 405) header('Allow: '.($analytics[1] === 'status' ? 'GET' : 'POST'));
+    $requestId = bin2hex(random_bytes(8));
+    header('X-QSYN-Request-ID: ' . $requestId);
+    $payload['request_id'] = $requestId;
+    respond($payload, $status);
+}
+
 // Native Upstox operator OAuth. No OpenAlgo Python or API key is involved.
 // The callback accepts a one-use 256-bit state instead of an admin cookie:
 // external Upstox redirects will not carry our SameSite=Strict admin session.
