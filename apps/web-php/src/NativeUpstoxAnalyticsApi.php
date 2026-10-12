@@ -216,6 +216,42 @@ final class NativeUpstoxAnalyticsApi
         }
     }
 
+    /**
+     * Server-side only: run an approved market-data GET with the existing
+     * validated, account-pinned Analytics Token. Never return credentials to
+     * route handlers, frontend, responses, error pages or diagnostic files.
+     * Does not grant public exchange redistribution or order permissions.
+     */
+    public static function withReadOnlyToken(callable $read): mixed
+    {
+        $root = self::directory(false);
+        $user = self::expectedUser($root);
+        $file = $root . '/' . self::FILE;
+        if (!self::privateFile($file, 16384)) throw self::deny();
+        try {
+            $row = json_decode((string)file_get_contents($file), true, 10, JSON_THROW_ON_ERROR);
+        } catch (\Throwable) {
+            throw self::deny();
+        }
+        if (!is_array($row) || array_is_list($row)
+            || count($row) !== 8 || ($row['schema'] ?? null) !== self::SCHEMA
+            || ($row['broker'] ?? null) !== 'upstox'
+            || ($row['user_id'] ?? null) !== $user
+            || ($row['order_routing_enabled'] ?? null) !== false
+            || ($row['display_entitlement_verified'] ?? null) !== false
+            || ($row['retention_entitlement_verified'] ?? null) !== false
+            || !is_string($row['created_at'] ?? null)
+            || !is_string($row['access_token'] ?? null)) throw self::deny();
+        $token = $row['access_token'];
+        if (strlen($token) < 20 || strlen($token) > 8192
+            || preg_match('/\A[\x21-\x7e]+\z/D', $token) !== 1
+            || str_contains($token, '\\') || str_contains($token, '"'))
+            throw self::deny();
+        // No persistent cache, public output, broker order scope or long-lived
+        // WebSocket generated here. Request handler controls the fixed URLs.
+        return $read($token);
+    }
+
     private static function clear(string $root): void
     {
         self::withLock($root, static function() use ($root): void {
