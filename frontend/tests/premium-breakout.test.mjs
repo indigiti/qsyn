@@ -76,7 +76,8 @@ test('previous range mode derives bounded high/low, without future leakage',()=>
    {...PREMIUM_PRESET,mode:'PREVIOUS_RANGE',autoBuffer:8});
  assert.equal(r.levels[1].buyAbove,404);
  assert.equal(r.levels[1].shortBelow,386);
- assert.equal(r.openPosition,null); // no cross above 404: 403 < 404
+ assert.equal(r.openPosition?.side,'LONG'); // 09:17 close 409 crosses 404
+ assert.equal(r.openPosition?.entry,409); // next candle, 09:18
 });
 
 function synthTrend(decline=true,includeNew=true) {
