@@ -107,7 +107,7 @@ def run():
             assert code==401 and "Invalid administrator password" in body
             code,body,headers=page(guest,origin,"/qsyn/terminal/login","POST",
                                    {"csrf":csrf,"password":PASSWORD})
-            assert code==303 and headers.get("Location")=="/qsyn/terminal/trading"
+            assert code==303 and headers.get("Location")=="/qsyn/terminal/markets"
             for path in ["/qsyn/terminal/brokers","/qsyn/terminal/operations",
                          "/qsyn/terminal/private-live","/qsyn/terminal/trading"]:
                 code,body,headers=page(guest,origin,path)
@@ -120,7 +120,7 @@ def run():
             code,_,headers=page(guest,origin,"/qsyn/studio")
             assert code==302 and headers.get("Location")=="/qsyn/terminal/strategy"
             code,_,headers=page(guest,origin,"/qsyn/terminal")
-            assert code==302 and headers.get("Location")=="/qsyn/terminal/trading"
+            assert code==302 and headers.get("Location")=="/qsyn/terminal/markets"
             code,_,_=page(guest,origin,"/qsyn/terminal/brokers","POST",{"x":"y"})
             assert code==405
             code,_,_=page(guest,origin,"/qsyn/terminal/unknown")
