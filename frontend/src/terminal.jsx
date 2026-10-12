@@ -179,12 +179,12 @@ function HomepageChart({ theme, embedded = false,
       exchange:initialExchange,
       interval:'1m',intervals:['1m','5m','15m','1h','1d'],
       theme,branding:false,panels:true,toolbar:true,bottombar:true,
-      preset:'1x1',workspaces:adminIndexHistory?undefined:(nativeWorkspaces||undefined),
+      preset:'1x1',workspaces:(adminIndexHistory&&initialExchange.endsWith(':index'))?undefined:(nativeWorkspaces||undefined),
       lookbackBars:INITIAL_BACKFILL_BARS,
       // OpenAlgo's default 15s history deadline is too short for a bounded
       // 51-page maximum MFE backfill. Keep PHP/Rust timeouts per request.
       loading:{pageSize:300,maxBars:MAX_AUTO_BACKFILL_BARS,timeoutMs:120000},
-      ...(!adminIndexHistory&&nativeWatchlists?{watchlist:{store:nativeWatchlists,quotes:noSyntheticQuotes}}:{}),
+      ...(!(adminIndexHistory&&initialExchange.endsWith(':index'))&&nativeWatchlists?{watchlist:{store:nativeWatchlists,quotes:noSyntheticQuotes}}:{}),
       links:{crosshair:true},navigation:{defaultVisibleBars:120,mousePan:'horizontal'},
     });
     // Keep OpenAlgo's buttons inside their OWN grid bar; reparenting them
