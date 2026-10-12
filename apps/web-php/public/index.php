@@ -211,6 +211,25 @@ if ($route === '/qsyn/api/v1/studio/market' || $route === '/qsyn/api/v1/studio/b
     }
 }
 
+// Read-only account-owner chart preview. Strict admin CSRF, no public index bars.
+if ($route === '/qsyn/api/v1/admin/upstox/private-index-chart') {
+    $src=dirname(__DIR__).'/src';
+    if (!is_file($src.'/IndexHistoricalProof.php'))
+        $src=dirname(__DIR__,2).'/private_html/qsyn/app/src';
+    foreach (['RustAdmin','UpstoxIndexV3','IndexHistoricalProof'] as $unit) {
+        if (!is_file($src.'/'.$unit.'.php'))
+            respond(['error'=>'private_index_chart_unavailable'],503);
+        require_once $src.'/'.$unit.'.php';
+    }
+    header('Cache-Control: private, no-store');
+    header('Pragma: no-cache');
+    header('X-Robots-Tag: noindex, nofollow');
+    [$status,$payload]=\QSYN\MarketData\IndexHistoricalProof::dispatchPrivateChart($_SERVER);
+    if ($status===405) header('Allow: POST');
+    header('X-QSYN-Request-ID: '.bin2hex(random_bytes(8)));
+    respond($payload,$status);
+}
+
 // Single read-only Upstox history proof. Never exposes OHLC publicly.
 if ($route === '/qsyn/api/v1/admin/upstox/index-history-proof') {
     $src=dirname(__DIR__).'/src';
