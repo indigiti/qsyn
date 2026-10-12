@@ -280,7 +280,7 @@ if (preg_match('#^/qsyn/api/v1/admin/index-prepare/(status|prepare)$#', $route, 
 // Dedicated administrator-only read-only index operator workflow.
 // All executable paths, private plan/archives and supervisor program names
 // must be provisioned on Cloudways; never accepted from request parameters.
-if (preg_match('#^/qsyn/api/v1/admin/index-ops/(status|check|backfill|start|stop)$#', $route, $indexOps)) {
+if (preg_match('#^/qsyn/api/v1/admin/index-ops/(status|check|check-worker|backfill|start|stop)$#', $route, $indexOps)) {
     $src = dirname(__DIR__) . '/src';
     if (!is_file($src . '/IndexWebOperations.php')) {
         $src = dirname(__DIR__, 2) . '/private_html/qsyn/app/src';
