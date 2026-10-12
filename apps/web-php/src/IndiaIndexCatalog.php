@@ -21,7 +21,7 @@ final class IndiaIndexCatalog
             'MIDCPNIFTY' => 'MIDCPNIFTY',
             'INDIAVIX' => 'INDIA VIX',
         ],
-        'BSE_INDEX' => ['SENSEX' => 'SENSEX'],
+        'BSE_INDEX' => ['SENSEX' => 'SENSEX', 'BANKEX' => 'S&P BSE BANKEX'],
     ];
 
     public static function dispatch(string $operation, array $query, array $server): array
