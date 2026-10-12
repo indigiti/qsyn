@@ -180,10 +180,7 @@ impl PrivateBasket {
                 if opening - candle.open_time_ms > 60_000 {
                     self.gap_detected = true;
                 }
-                (
-                    Candle::from_observation(opening, premium)?,
-                    Some(candle),
-                )
+                (Candle::from_observation(opening, premium)?, Some(candle))
             }
             Some(candle) => {
                 self.forming = Some(candle);
