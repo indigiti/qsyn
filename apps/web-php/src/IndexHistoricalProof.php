@@ -19,6 +19,15 @@ final class IndexHistoricalProof
         'NIFTY' => 'NSE_INDEX|Nifty 50',
         'SENSEX' => 'BSE_INDEX|SENSEX',
     ];
+    // Fixed personal market-data catalog; no key, token or URL from the browser.
+    private const PERSONAL_KEYS = [
+        'NIFTY' => 'NSE_INDEX|Nifty 50',
+        'BANKNIFTY' => 'NSE_INDEX|Nifty Bank',
+        'FINNIFTY' => 'NSE_INDEX|Nifty Fin Service',
+        'MIDCPNIFTY' => 'NSE_INDEX|Nifty Mid Select',
+        'INDIAVIX' => 'NSE_INDEX|India VIX',
+        'SENSEX' => 'BSE_INDEX|SENSEX',
+    ];
 
     private static function secureFile(string $path, int $max): bool
     {
@@ -98,7 +107,8 @@ final class IndexHistoricalProof
     /** Fixed Upstox host, HTTPS only, bounded response, no redirects. */
     private static function request(string $url, string $token): array
     {
-        if (!str_starts_with($url,'https://api.upstox.com/v3/historical-candle/'))
+        if (!str_starts_with($url,'https://api.upstox.com/v3/historical-candle/')
+            && !str_starts_with($url,'https://api.upstox.com/v3/market-quote/ohlc?'))
             throw new \RuntimeException('history_url_not_allowed');
         if (!function_exists('curl_init')) throw new \RuntimeException('curl_unavailable');
         $ch=curl_init($url);
@@ -196,15 +206,17 @@ final class IndexHistoricalProof
             || ($body['confirmed']??null)!==true
             || ($body['private_view_acknowledged']??null)!==true
             || !is_string($body['symbol']??null)
-            || !array_key_exists($body['symbol'],self::KEYS)
-            || !self::validDay($body['day']??null))
+            || !array_key_exists($body['symbol'],self::PERSONAL_KEYS)
+            || !(self::validDay($body['day']??null) ||
+                 (($body['day']??null)===self::todayIst() && self::isWeekdayIst())))
             return [422,['error'=>'invalid_private_chart_scope']];
         $token=self::privateToken();
         if ($token===null) return [409,['error'=>'upstox_analytics_token_not_ready']];
-        $key=self::KEYS[$body['symbol']];
+        $key=self::PERSONAL_KEYS[$body['symbol']];
         $day=$body['day'];
-        $url='https://api.upstox.com/v3/historical-candle/'
-            .rawurlencode($key).'/minutes/1/'.$day.'/'.$day;
+        $url=$day===self::todayIst()
+            ? 'https://api.upstox.com/v3/historical-candle/intraday/'.rawurlencode($key).'/minutes/1'
+            : 'https://api.upstox.com/v3/historical-candle/'.rawurlencode($key).'/minutes/1/'.$day.'/'.$day;
         try {
             $provider=$transport?$transport($url,$token):self::request($url,$token);
             if (!is_array($provider)) throw new \RuntimeException('invalid_provider');
@@ -233,6 +245,117 @@ final class IndexHistoricalProof
             ]];
         } catch (\Throwable) {
             return [502,['error'=>'private_upstox_history_invalid']];
+        }
+    }
+
+
+    private static function todayIst(): string
+    {
+        return (new \DateTimeImmutable('now',new \DateTimeZone('Asia/Kolkata')))
+            ->format('Y-m-d');
+    }
+
+    private static function isWeekdayIst(): bool
+    {
+        return (int)(new \DateTimeImmutable('now',new \DateTimeZone('Asia/Kolkata')))
+            ->format('N') <= 5;
+    }
+
+    /**
+     * Normalize provider-supplied 1m candles, preserving the provider candle
+     * start timestamp. No browser-clock synthetic bars or OAuth/worker plans.
+     */
+    public static function normalizePersonalOhlc(string $symbol, array $response, int $nowMs): array
+    {
+        if (!array_key_exists($symbol,self::PERSONAL_KEYS))
+            throw new \InvalidArgumentException('unknown_index');
+        $data=$response['data']??null;
+        if (($response['status']??null)!=='success' || !is_array($data))
+            throw new \RuntimeException('invalid_quote_payload');
+        $key=self::PERSONAL_KEYS[$symbol];
+        $matches=array_values(array_filter($data,static fn($v)=>
+            is_array($v)&&($v['instrument_token']??null)===$key));
+        if (count($matches)!==1) throw new \RuntimeException('index_instrument_mismatch');
+        $quote=$matches[0];
+        $result=[];
+        foreach (['prev_ohlc','live_ohlc'] as $field) {
+            $c=$quote[$field]??null;
+            if (!is_array($c)) continue;
+            $ms=$c['ts']??null;
+            if (!is_int($ms) || $ms<1_600_000_000_000 || $ms%60000!==0 ||
+                $ms>$nowMs+5000 || $nowMs-$ms>180000) continue;
+            foreach (['open','high','low','close','volume'] as $v) {
+                if (!is_int($c[$v]??null) && !is_float($c[$v]??null))
+                    throw new \RuntimeException('invalid_index_ohlc');
+            }
+            if ($c['low']<=0 || $c['open']<=0 || $c['close']<=0 ||
+                $c['high']<max($c['open'],$c['close']) ||
+                $c['low']>min($c['open'],$c['close']) || $c['volume']<0)
+                throw new \RuntimeException('invalid_index_ohlc');
+            $date=(new \DateTimeImmutable('@'.intdiv($ms,1000)))
+                ->setTimezone(new \DateTimeZone('Asia/Kolkata'))->format('Y-m-d');
+            if ($date!==self::todayIst()) continue;
+            $result[intdiv($ms,1000)]=[
+                'time'=>intdiv($ms,1000),'open'=>$c['open'],'high'=>$c['high'],
+                'low'=>$c['low'],'close'=>$c['close'],'volume'=>$c['volume']
+            ];
+        }
+        ksort($result,SORT_NUMERIC);
+        return array_values($result);
+    }
+
+    /**
+     * Personal 1-minute Upstox market quote (GET upstream, POST admin-CSRF
+     * on QSYN). Uses only the existing Analytics Token and never starts Rust.
+     */
+    public static function dispatchPersonalQuote(array $server, ?callable $transport=null): array
+    {
+        if (($server['REQUEST_METHOD']??'GET')!=='POST')
+            return [405,['error'=>'method_not_allowed']];
+        if (!RustAdmin::originAllowed($server))
+            return [403,['error'=>'secure_same_origin_required']];
+        RustAdmin::boot();
+        if (!RustAdmin::authenticated())
+            return [401,['error'=>'admin_login_required']];
+        if (getenv('QSYN_INDEX_PERSONAL_QUOTE_ENABLED')==='0')
+            return [503,['error'=>'index_quote_disabled']];
+        if (!RustAdmin::verifyCsrf((string)($server['HTTP_X_CSRF_TOKEN']??'')))
+            return [403,['error'=>'csrf_invalid']];
+        if (!preg_match('~\Aapplication/json(?:\s*;|$)~i',
+            (string)($server['CONTENT_TYPE']??'')))
+            return [415,['error'=>'json_required']];
+        $raw=file_get_contents('php://input',false,null,0,257);
+        if (!is_string($raw)||strlen($raw)>256)
+            return [413,['error'=>'request_too_large']];
+        try {$input=json_decode($raw,true,4,JSON_THROW_ON_ERROR);}
+        catch (\Throwable) {return [400,['error'=>'invalid_json']];}
+        if (!is_array($input)||array_is_list($input)||count($input)!==1
+            || !is_string($input['symbol']??null)
+            || !array_key_exists($input['symbol'],self::PERSONAL_KEYS))
+            return [422,['error'=>'invalid_personal_index_symbol']];
+        $token=self::privateToken();
+        if ($token===null) return [409,['error'=>'upstox_analytics_token_not_ready']];
+        $symbol=$input['symbol'];
+        $url='https://api.upstox.com/v3/market-quote/ohlc?'
+            .http_build_query(['instrument_key'=>self::PERSONAL_KEYS[$symbol],
+                               'interval'=>'I1'],'','&',PHP_QUERY_RFC3986);
+        $nowMs=(int)round(microtime(true)*1000);
+        try{
+            $received=$transport?$transport($url,$token):self::request($url,$token);
+            if (!is_array($received)||($received['http_status']??null)!==200)
+                return [502,['error'=>'upstox_personal_quote_unavailable',
+                    'provider_http_status'=>(int)($received['http_status']??0)]];
+            $bars=self::normalizePersonalOhlc($symbol,$received['body']??[],$nowMs);
+            return [200,[
+                'schema'=>'QSYN-UPSTOX-PERSONAL-OHLC/1',
+                'symbol'=>$symbol,'interval'=>'1m',
+                'source'=>'upstox_analytics_token_market_quote_v3',
+                'code'=>$bars?'FRESH_EXCHANGE_OHLC':'NO_FRESH_EXCHANGE_OHLC',
+                'bars'=>$bars,'personal_view_only'=>true,
+                'trading_enabled'=>false,'public_redistribution_allowed'=>false
+            ]];
+        }catch (\Throwable) {
+            return [502,['error'=>'upstox_personal_quote_invalid']];
         }
     }
 
