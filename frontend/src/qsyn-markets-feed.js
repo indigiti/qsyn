@@ -2,13 +2,15 @@ import {QsynCryptoFeed} from './crypto-feed.js';
 import {findIndiaIndex,searchIndiaIndexes} from './india-index-catalog.js';
 import {PrivateIndexHistoryFeed,todayIst} from './personal-index-feed.js';
 
-const INTERVALS=new Set(['1m','5m','15m','1h','1d']);
+const INTERVALS=new Set(['1s','1m','5m','15m','1h','1d']);
 const STEPS=Object.freeze({'1m':60,'5m':300,'15m':900,'1h':3600,'1d':86400});
 const IST_OFFSET=19800;
 const PROOF='/qsyn/api/v1/admin/upstox/index-history-proof';
 
 export function validIndexBarTime(time,interval){
-  if(!Number.isSafeInteger(time)||time<=0||time%60!==0)return false;
+  if(!Number.isSafeInteger(time)||time<=0)return false;
+  if(interval==='1s')return true;
+  if(time%60!==0)return false;
   if(interval==='1d')return (time+IST_OFFSET)%86400===0;
   if(interval==='5m'||interval==='15m')
     return (time+IST_OFFSET)%STEPS[interval]===0;
@@ -21,7 +23,7 @@ export function validIndexBarTime(time,interval){
  */
 export function aggregatePersonalIndexBars(bars,interval){
   if(!INTERVALS.has(interval)||!Array.isArray(bars))throw Error('INVALID_INDEX_INTERVAL');
-  if(interval==='1m')return bars;
+  if(interval==='1m'||interval==='1s')return bars;
   const groups=new Map(),step=STEPS[interval];
   for(const bar of bars){
     const istDay=Math.floor((bar.time+IST_OFFSET)/86400)*86400-IST_OFFSET;
@@ -114,6 +116,11 @@ export class QsynMarketsFeed extends QsynCryptoFeed {
       if(this.closed||req.signal?.aborted)return [];
       this.activeIndex=instrument.id;
       this.onBlockedIndex(null);
+      if(req.interval==='1s'){
+        this._session(instrument,todayIst(),proof.csrf);
+        this.onState(instrument.name+' · live 1-second bars only; no historical 1s available');
+        return [];
+      }
       const istNow=todayIst();
       const dayOfWeek=new Date(istNow+'T12:00:00+05:30').getUTCDay();
       const weekday=dayOfWeek>=1&&dayOfWeek<=5;
@@ -166,8 +173,13 @@ export class QsynMarketsFeed extends QsynCryptoFeed {
     if(!instrument)return super.subscribeBars(req,onBar,opts);
     const session=this.personalFeeds.get(instrument.id);
     if(!session||this.closed)return ()=>{};
-    const scoped={...req,exchange:'UPSTOX_PERSONAL',symbol:instrument.symbol,interval:'1m'};
+    const scoped={...req,exchange:'UPSTOX_PERSONAL',symbol:instrument.symbol,
+      interval:req.interval==='1s'?'1s':'1m'};
     return session.subscribeBars(scoped,minuteBar=>{
+      if(req.interval==='1s'){
+        onBar(minuteBar,{provisional:true});
+        return;
+      }
       const prior=this.personalBars.get(instrument.id)||[];
       if(prior.length&&prior.at(-1).time===minuteBar.time)
         prior[prior.length-1]=minuteBar;
