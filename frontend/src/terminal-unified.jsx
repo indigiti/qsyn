@@ -482,7 +482,7 @@ function NativeUpstoxPanel({refreshTick=0}){
         disabled={busy||!status.token_stored} onClick={()=>void action('verify',{})}>
         <ShieldCheck size={16}/> Verify current Upstox session</button>
       <button type="button" className="terminal-action terminal-secondary-action"
-        disabled={busy||!status.token_stored} onClick={()=>void action('discover',{})}>
+        disabled={busy||(!status.token_stored&&!analytics?.token_stored)} onClick={()=>void action('discover',{})}>
         <Search size={16}/> Discover index instrument keys</button>
       <button type="button" className="terminal-action terminal-secondary-action" disabled={busy}
         onClick={()=>void load()}><RefreshCw size={16}/> Refresh OAuth status</button>
