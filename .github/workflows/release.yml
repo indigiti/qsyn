@@ -134,10 +134,10 @@ jobs:
           QSYN_SOURCE_SHA: ${{ github.sha }}
         run: |
           cargo test --manifest-path services/stream-rust/Cargo.toml
-          # Only the shared runtime and the standalone archive smoke target
-          # require optimized release compilation; CI still builds/tests all bins.
-          cargo build --release --bin qsyn-stream --bin qsyn-market-archive --manifest-path services/stream-rust/Cargo.toml
-          QSYN_MARKET_ARCHIVE_BINARY=services/stream-rust/target/release/qsyn-market-archive python3 services/stream-rust/tests/market_archive_cli_smoke.py
+          # Build the sole deployable ELF; CI separately exercises every
+          # old standalone CLI target. Release smoke tests the same archive
+          # operations through the unified Rust runtime.
+          cargo build --release --bin qsyn-stream --manifest-path services/stream-rust/Cargo.toml
           QSYN_MARKET_ARCHIVE_BINARY=services/stream-rust/target/release/qsyn-stream QSYN_MARKET_ARCHIVE_UNIFIED=1 python3 services/stream-rust/tests/market_archive_cli_smoke.py
           QSYN_RUST_BINARY=services/stream-rust/target/release/qsyn-stream python3 services/stream-rust/tests/smoke_service.py
           QSYN_RUST_BINARY=services/stream-rust/target/release/qsyn-stream python3 services/stream-rust/tests/direct_control_smoke.py
