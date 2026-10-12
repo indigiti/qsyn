@@ -409,7 +409,10 @@ pub fn decode_personal_index_frame(
         {
             continue;
         }
-        // Official Upstox V3 MarketDataFeed.proto Type enum:\n        // initial_feed = 0, live_feed = 1, market_info = 2.\n        // Frame 1 MUST enter the live candle builder; only 0 is a snapshot.\n        out.push((key, ts, ltpc.ltp, frame.frame_type == 0));
+        // Official Upstox V3 MarketDataFeed.proto Type enum:
+        // initial_feed = 0, live_feed = 1, market_info = 2.
+        // Frame 1 MUST enter the live candle builder; only 0 is a snapshot.
+        out.push((key, ts, ltpc.ltp, frame.frame_type == 0));
     }
     Ok(out)
 }
