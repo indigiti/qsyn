@@ -62,8 +62,12 @@ pub fn runtime_dir() -> io::Result<std::path::PathBuf> {
         return Ok(std::path::PathBuf::from(configured));
     }
     let exe = std::env::current_exe()?;
-    Ok(exe.parent().and_then(|p| p.parent()).and_then(|p| p.parent())
-        .ok_or_else(denied)?.join("runtime"))
+    Ok(exe
+        .parent()
+        .and_then(|p| p.parent())
+        .and_then(|p| p.parent())
+        .ok_or_else(denied)?
+        .join("runtime"))
 }
 
 pub fn read_token(runtime: &Path) -> io::Result<String> {
