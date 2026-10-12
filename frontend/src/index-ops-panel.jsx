@@ -103,7 +103,7 @@ export function IndexWebOperationsPanel(){
     {status?<div className="qt-market-status-grid">
       <div><small>Private worker plan</small><strong>{status.private_plan_ready?'Present · not validated':'Not provisioned'}</strong></div>
       <div><small>Index history storage</small><strong>{status.archive_ready?'Private directory ready':'Unavailable'}</strong></div>
-      <div><small>Web operator</small><strong>{status.web_operations_enabled?'Imports and service actions approved':status.preflight_enabled?'Read-only checks available':'Private setup required'}</strong></div>
+      <div><small>Web operator</small><strong>{!status.executor_ready?'Host PHP executor unavailable':status.web_operations_enabled?'Imports and service actions approved':status.preflight_enabled?'Read-only checks available':'Private setup required'}</strong></div>
       <div><small>Live data</small><strong>Not verified</strong></div>
     </div>:<p role="status">Operations unavailable or administrator login required.</p>}
     <div className="qt-form qt-index-web-form">
