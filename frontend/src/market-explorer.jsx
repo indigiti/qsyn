@@ -3,6 +3,7 @@ import {Activity,ArrowRight,CheckCircle2,LockKeyhole,RefreshCw,ShieldCheck} from
 import {MARKET_FAMILIES,MARKET_PROVIDERS,DEFAULT_MARKET,catalogFor,
   marketFamily,providerFor,isValidCryptoHealth,providerEvidence} from './market-model.js';
 import {consumeIndexIntent,indexIntentFor} from './private-index-intent.js';
+import {PrivateIndexHistoryChart} from './private-index-history-chart.jsx';
 import './market-explorer.css';
 
 const healthRequest = source=>'/qsyn/api/v1/crypto/health?'+new URLSearchParams({
@@ -153,15 +154,22 @@ export function MarketExplorer({theme,openView,CryptoChart,PrivateCharts}){
     {market==='indices'&&<>
       <section className="terminal-surface">
         <div className="terminal-card-head"><h2>Licensed index chart</h2><LockKeyhole size={17}/></div>
-        <p>NIFTY, BANKNIFTY, FINNIFTY, MIDCPNIFTY, SENSEX and INDIA VIX use
-          current exchange instrument keys, not the alias shown in the selector.
-          Enter the approved key only after instrument and display rights are verified.
-          Historical data and private WSS must be independently activated.</p>
+        <p>For NIFTY and SENSEX, the administrator may open a read-only
+          personal historical chart using the verified Upstox Analytics Token.
+          Continuous live data still requires separate authenticated WSS and
+          documented display rights. No synthetic candles are substituted.</p>
         <p role="status" className="terminal-footnote">Private index activation:
           {' '}{audit?.next_action_code||'NO_CURRENT_OPERATOR_PREFLIGHT'}.
           {' '}A saved Analytics Token is not evidence of a licensed live feed.</p>
       </section>
-      <PrivateCharts embedded onlyIndex selectedIndex={currentInstrument}/>
+      {['NIFTY','SENSEX'].includes(currentInstrument?.symbol)
+        ? <PrivateIndexHistoryChart key={currentInstrument.id}
+            symbol={currentInstrument.symbol}/>
+        : <PrivateCharts embedded onlyIndex selectedIndex={currentInstrument}/>}
+      {['NIFTY','SENSEX'].includes(currentInstrument?.symbol)&&
+        <details><summary>Licensed continuous index feed</summary>
+          <PrivateCharts embedded onlyIndex selectedIndex={currentInstrument}/>
+        </details>}
     </>}
     {market==='stocks'&&<section className="terminal-surface">
       <div className="terminal-card-head"><h2>NSE / BSE equities</h2><LockKeyhole size={16}/></div>
