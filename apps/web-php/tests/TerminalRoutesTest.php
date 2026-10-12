@@ -20,9 +20,9 @@ foreach ($expected as $view) {
     check($registry->target('/qsyn/terminal/'.$view.'/')==='/qsyn/terminal/'.$view,
         'canonical_slash_'.$view);
 }
-check($registry->target('/qsyn/terminal')==='/qsyn/terminal/trading','root_alias');
+check($registry->target('/qsyn/terminal')==='/qsyn/terminal/markets','root_alias');
 check($registry->target('/qsyn/terminal/','strategy')==='/qsyn/terminal/strategy','old_query_bookmark');
-check($registry->target('/qsyn/terminal','../../secret')==='/qsyn/terminal/trading','invalid_query');
+check($registry->target('/qsyn/terminal','../../secret')==='/qsyn/terminal/markets','invalid_query');
 foreach ([
     '/qsyn/studio'=>'strategy',
     '/qsyn/admin/rust'=>'operations',
