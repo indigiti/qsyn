@@ -115,16 +115,19 @@ export function MarketExplorer({theme,openView,CryptoChart,PrivateCharts}){
           </select></label>}
       </div>
       <div className="qt-market-status-grid" role="status" aria-label="Selected provider status">
-        <div><small>Provider connection</small><strong>{evidence.connection==='responding'
-          ? 'Public endpoint responding':evidence.connection==='simulated'
-          ? 'Simulation only':'Not verified'}</strong></div>
+        <div><small>Provider connection</small><strong>{market==='indices'
+          && tokenStatus?.schema==='QSYN-UPSTOX-ANALYTICS-STATUS/1'
+          && tokenStatus.token_stored===true
+          ? 'Personal Analytics Token stored'
+          : evidence.connection==='responding'?'Public endpoint responding'
+          : evidence.connection==='simulated'?'Simulation only':'Not verified'}</strong></div>
         <div><small>Historical candles</small><strong>{evidence.history==='simulated'
           ? 'Simulated':'Not checked for this source'}</strong></div>
         <div><small>Live streaming</small><strong>{evidence.streaming==='verified'
           ? 'Verified live':'Not verified'}</strong></div>
-        <div><small>Display entitlement</small><strong>{evidence.display==='public_exchange'
+        {market!=='indices'&&<div><small>Display entitlement</small><strong>{evidence.display==='public_exchange'
           ? 'Public source':evidence.display==='simulation_only'
-          ? 'Simulation only':'Not verified'}</strong></div>
+          ? 'Simulation only':'Not verified'}</strong></div>}
       </div>
       <p className="terminal-footnote">
         {market==='crypto'&&cryptoCheck
@@ -132,8 +135,8 @@ export function MarketExplorer({theme,openView,CryptoChart,PrivateCharts}){
           : market==='crypto'?'Public exchange status not verified. No demo fallback is permitted.'
           : market==='indices'
           ? (evidence.authenticated==='stored_unverified'
-            ? 'Upstox Analytics Token stored. Authentication status is not proof of account rights, current NSE/BSE mapping or streaming.'
-            : 'Upstox private index data requires an authorized account and approved exchange display rights.')
+            ? 'Personal read-only Upstox token stored. Chart history and Rust streaming are checked separately when the chart opens.'
+            : 'Store your Upstox Analytics Token under Data Providers & Connections to view personal index data.')
           : market==='stocks'?'Stock market adapter not operationally verified; no invented NSE/BSE candles.'
           : 'Option research uses simulation. Live CE/PE requires a separately authorized broker subscription.'}
       </p>
@@ -156,9 +159,9 @@ export function MarketExplorer({theme,openView,CryptoChart,PrivateCharts}){
       <section className="terminal-surface">
         <div className="terminal-card-head"><h2>Upstox personal index charts</h2><LockKeyhole size={17}/></div>
         <p>Your stored one-year Analytics Token powers these private read-only charts.
-          Select a trading date for historical candles, or Today for direct Upstox
-          1-minute OHLC updates during market hours. No OAuth, worker plan, or
-          additional setup screen is required.</p>
+          Select a trading date for Rust 1-minute historical candles, or Today
+          for genuine Upstox V3 ticks streamed and aggregated through the
+          existing Rust WebSocket. No OAuth or index-worker plan is required.</p>
       </section>
       {currentInstrument&&<PrivateIndexHistoryChart key={currentInstrument.id}
         symbol={currentInstrument.symbol}/>}
