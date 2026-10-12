@@ -176,6 +176,7 @@ jobs:
           test "$(curl -s -o /dev/null -w '%{http_code}' -X POST http://127.0.0.1:18080/qsyn/terminal/markets)" = 405
           curl --silent -D - -o /dev/null 'http://127.0.0.1:18080/qsyn/terminal?view=dashboard' | grep -qi '^Location: /qsyn/terminal/login'
           curl --fail --silent http://127.0.0.1:18080/qsyn/api/v1/india/indexes | grep -q 'QSYN-INDIA-INDEX-CATALOG/1'
+          curl --fail --silent http://127.0.0.1:18080/qsyn/api/v1/markets/catalog | grep -q 'QSYN-MARKET-PROVIDER-REGISTRY/1'
           test "$(curl --silent -o /tmp/qsyn-india.json -w '%{http_code}' 'http://127.0.0.1:18080/qsyn/api/v1/india/bars?exchange=NSE_INDEX&symbol=NIFTY&interval=1m')" = 503
           grep -q 'india_index_feed_not_authorized' /tmp/qsyn-india.json
           test "$(curl --silent -o /tmp/qsyn-india.json -w '%{http_code}' 'http://127.0.0.1:18080/qsyn/api/v1/india/bars?exchange=NSE_INDEX&symbol=../etc&interval=1m')" = 422
@@ -235,6 +236,9 @@ jobs:
         working-directory: frontend
       - name: Verify shared pretty URL registry
         run: node tests/terminal-routes-contract.mjs
+        working-directory: frontend
+      - name: Verify canonical market and data-source contracts
+        run: node tests/market-provider-contract.mjs
         working-directory: frontend
       - name: Verify India index native discovery and strict license gates
         run: node tests/india-index-contract.mjs

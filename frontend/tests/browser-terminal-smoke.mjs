@@ -83,7 +83,7 @@ try {
   await page.getByRole('button',{name:'Unlock terminal'}).click();
   if(new URL(page.url()).pathname==='/qsyn/terminal/login')
     throw new Error('Administrator unlock returned login instead of terminal: '+(await page.locator('body').innerText()).slice(0,420));
-  await page.getByRole('heading',{name:'Trading charts'}).waitFor();
+  await page.getByRole('heading',{name:'Market explorer'}).waitFor();
   // Transient admin API 503 must not forcibly log out a valid administrator.
   await page.route('**/qsyn/api/v1/admin/rust/state',async route=>{
     await route.fulfill({status:503,contentType:'application/json',
@@ -193,15 +193,15 @@ try {
   if(await page.locator('html').getAttribute('data-qsyn-theme')!=='light')throw new Error('First-visit light theme lost');
   // The /qsyn/terminal route retains existing chart compare, watchlist,
   // private-workspace and broker-safety behavior.
-  await page.goto(origin+'/qsyn/terminal',{waitUntil:'domcontentloaded'});
-  await page.getByRole('heading',{name:'Trading charts'}).waitFor();
+  await page.goto(origin+'/qsyn/terminal/trading',{waitUntil:'domcontentloaded'});
+  await page.getByRole('heading',{name:'Legacy Chart Lab'}).waitFor();
   await page.waitForFunction(()=>document.querySelectorAll('#qsyn-native-chart canvas').length>0,
     null,{timeout:12000});
   const source = await page.locator('.terminal-alert').innerText();
-  if(!source.includes('Simulation workspace')||!source.includes('No live market data'))
+  if(!source.includes('Research-only workspace')||!source.includes('Simulated data'))
     throw new Error('Missing unambiguous simulation provenance label');
-  if(!(await page.locator('.terminal-nav-item.locked:disabled').count()===3))
-    throw new Error('Broker-dependent navigation is not explicitly disabled');
+  if(await page.locator('.terminal-nav-item.locked:disabled').count()!==0)
+    throw new Error('Retired broker/order navigation is still displayed');
   // Chart compare and AT-MONEY synthetic demos use only whitelisted public simulations.
   await page.getByRole('button',{name:'Compare two charts'}).click();
   await page.waitForFunction(()=>document.querySelectorAll('#qsyn-secondary-chart canvas').length>0);
@@ -235,7 +235,7 @@ try {
   await page.getByRole('button',{name:'Toggle theme'}).click();
   if(await page.locator('html').getAttribute('data-qsyn-theme')!=='light')
     throw new Error('Light theme did not activate');
-  await page.getByRole('button',{name:'Dashboard',exact:true}).first().click();
+  await page.goto(origin+'/qsyn/terminal/dashboard',{waitUntil:'domcontentloaded'});
   await page.getByRole('heading',{name:'Command center'}).waitFor();
   if(new URL(page.url()).pathname!=='/qsyn/terminal/dashboard')throw new Error('Dashboard deep link failed');
   if(!(await page.getByText('SIMULATION ONLY').count()))
@@ -246,13 +246,13 @@ try {
   await page.reload({waitUntil:'domcontentloaded'});
   await page.getByRole('heading',{name:'Command center'}).waitFor();
   await page.waitForFunction(()=>document.querySelectorAll('.qd-chart-preview #qsyn-native-chart canvas').length>0);
-  await page.getByRole('button',{name:'Tools',exact:true}).first().click();
+  await page.goto(origin+'/qsyn/terminal/tools',{waitUntil:'domcontentloaded'});
   await page.getByRole('heading',{name:'Tools'}).waitFor();
   if(!(await page.getByRole('button',{name:/Strategy Studio/}).count()>0))
     throw new Error('Unified Strategy Studio tool missing');
   // Public terminal stays browser-only without opt-in identity/private storage.
-  await page.getByRole('button',{name:'Trading',exact:true}).first().click();
-  await page.getByRole('heading',{name:'Trading charts'}).waitFor();
+  await page.goto(origin+'/qsyn/terminal/trading',{waitUntil:'domcontentloaded'});
+  await page.getByRole('heading',{name:'Legacy Chart Lab'}).waitFor();
   if(await page.getByRole('button',{name:'Load private file'}).count()!==0)
     throw new Error('Private workspace controls unexpectedly available without authentication');
 
@@ -288,8 +288,8 @@ try {
           revision:0,csrf:'a'.repeat(64),can_write:true,workspace:privateSnapshot})});
     }
   });
-  await privatePage.goto(origin+'/qsyn/terminal',{waitUntil:'domcontentloaded'});
-  await privatePage.getByRole('heading',{name:'Trading charts'}).waitFor();
+  await privatePage.goto(origin+'/qsyn/terminal/trading',{waitUntil:'domcontentloaded'});
+  await privatePage.getByRole('heading',{name:'Legacy Chart Lab'}).waitFor();
   if(privateReads!==0)
     throw new Error('Private development workspace was probed without operator opt-in');
   await privatePage.getByRole('button',{name:'Refresh private file status'}).click();
@@ -353,8 +353,8 @@ try {
           status:'not_found',instrument_key:null}],
       })});
   });
-  await page.getByRole('button',{name:'Brokers',exact:true}).first().click();
-  await page.getByRole('heading',{name:'Accounts & authorizations'}).waitFor();
+  await page.getByRole('button',{name:'Data Providers & Connections',exact:true}).first().click();
+  await page.getByRole('heading',{name:'Data providers & connections'}).waitFor();
   if(new URL(page.url()).pathname!=='/qsyn/terminal/brokers')
     throw new Error('Broker view not routed in React');
   await page.getByRole('button',{name:'Refresh broker status'}).waitFor({timeout:12000});
@@ -391,18 +391,18 @@ try {
     throw new Error('Brokers HTML missing unique CSP nonce or script binding');
   if(String(brokerResponse.headers()['cache-control']||'').includes('no-transform'))
     throw new Error('Brokers unexpectedly disabled Cloudflare JavaScript Detections');
-  await page.getByRole('heading',{name:'Accounts & authorizations'}).waitFor();
+  await page.getByRole('heading',{name:'Data providers & connections'}).waitFor();
   await page.getByRole('button',{name:'Discover index instrument keys'}).waitFor({state:'visible'});
   if(browserErrors.length)
     throw new Error('Brokers deep-link crashed: '+JSON.stringify(browserErrors));
   await page.unroute('**/qsyn/api/v1/admin/upstox/status');
   await page.unroute('**/qsyn/api/v1/admin/upstox/discover');
-  await page.getByRole('button',{name:'Operations',exact:true}).first().click();
+  await page.getByRole('button',{name:'Rust Runtime',exact:true}).first().click();
   await page.getByRole('heading',{name:'Service administration'}).waitFor();
   if(await page.getByRole('button',{name:'Restart',exact:true}).count() &&
      await page.getByRole('button',{name:'Restart',exact:true}).isEnabled())
     throw new Error('Public visitor gained Rust restart privileges');
-  await page.getByRole('button',{name:'Strategies',exact:true}).first().click();
+  await page.getByRole('button',{name:'Strategy Studio',exact:true}).first().click();
   await page.getByRole('heading',{name:'Strategy Studio'}).waitFor();
   await page.getByRole('button',{name:'Render strategy'}).waitFor({state:'visible'});
   await page.getByRole('button',{name:'Render strategy'}).click();
@@ -410,9 +410,9 @@ try {
     null,{timeout:14000});
   if(await page.getByText('Fictional reference points').count()===0)
     throw new Error('Strategy payoff not integrated into React');
-  await page.getByRole('button',{name:'Workspaces',exact:true}).first().click();
+  await page.getByRole('button',{name:'Workspaces & Templates',exact:true}).first().click();
   await page.getByRole('heading',{name:'Chart workspaces'}).waitFor();
-  await page.getByRole('button',{name:'Routes',exact:true}).first().click();
+  await page.getByRole('button',{name:'Route management',exact:true}).first().click();
   await page.getByRole('heading',{name:'Route management'}).waitFor();
   if(new URL(page.url()).pathname!=='/qsyn/terminal/routes'||
      await page.locator('.qt-table tbody tr').count()<11)
@@ -420,11 +420,25 @@ try {
   await page.goBack({waitUntil:'domcontentloaded'});
   await page.getByRole('heading',{name:'Chart workspaces'}).waitFor();
   await page.getByRole('button',{name:'Markets',exact:true}).first().click();
-  await page.getByRole('heading',{name:'Live crypto & India index charts'}).waitFor();
+  await page.getByRole('heading',{name:'Market explorer'}).waitFor();
   await page.waitForFunction(()=>document.querySelectorAll('.terminal-market-embedded canvas').length>0,
     null,{timeout:14000});
   if(new URL(page.url()).pathname!=='/qsyn/terminal/markets')
     throw new Error('Market view escaped unified React terminal');
+  // Market-provider registry is unified: non-crypto markets must never
+  // substitute demo history for an unlicensed NSE/BSE stream.
+  await page.getByRole('button',{name:'Indices',exact:true}).click();
+  await page.getByRole('combobox',{name:'Exchange venue'}).selectOption('BSE_INDEX');
+  await page.getByRole('combobox',{name:'Market instrument'}).selectOption('BSE_INDEX:index:SENSEX');
+  if(await page.getByText('Licensed index chart').count()!==1)
+    throw Error('Index chart readiness was not integrated into Markets');
+  await page.getByRole('button',{name:'Stocks',exact:true}).click();
+  await page.getByText('Stock market adapter not operationally verified').first().waitFor();
+  await page.getByRole('button',{name:'Options',exact:true}).click();
+  await page.getByRole('button',{name:'Open Strategy Studio'}).click();
+  await page.getByRole('heading',{name:'Strategy Studio'}).waitFor();
+  await page.getByRole('button',{name:'Markets',exact:true}).first().click();
+  await page.getByRole('heading',{name:'Market explorer'}).waitFor();
   // Mobile checks use a separate viewport and storage, but retain the
   // already-authenticated admin cookie so protected terminal routes load.
   const mobileState=await context.storageState();
@@ -451,8 +465,8 @@ try {
   if(!(await mobile.locator('.terminal-sidebar').getAttribute('class')).includes('show'))
     throw new Error('Mobile menu did not open');
   await mobile.getByRole('button',{name:'Close navigation'}).click();
-  await mobile.getByRole('button',{name:'Trading',exact:true}).last().click();
-  await mobile.getByRole('heading',{name:'Trading charts'}).waitFor();
+  await mobile.getByRole('button',{name:'Markets',exact:true}).last().click();
+  await mobile.getByRole('heading',{name:'Market explorer'}).waitFor();
   const oversized=await mobile.evaluate(()=>document.documentElement.scrollWidth>innerWidth+2);
   if(oversized)throw new Error('Terminal overflows on mobile');
   if(browserRequests.some(url=>/(\/api\/v1\/(placeorder|cancelorder|modifyorder)|\/auth\/login|\/socket\.io)/i.test(url)))

@@ -38,23 +38,22 @@ import './terminal.css';
 import { DashboardCockpit } from './dashboard.jsx';
 import {DiagnosticsWorkspace,BrokersWorkspace,OperationsWorkspace} from './terminal-unified.jsx';
 import {StrategyWorkspace} from './terminal-strategy.jsx';
+import {MarketExplorer} from './market-explorer.jsx';
 import {RouteManagementWorkspace} from './terminal-route-management.jsx';
 import {terminalHref,terminalViewForLocation,defaultTerminalView,terminalRoutes} from './terminal-routes.js';
 
 const VIEWS = new Set(terminalRoutes.map(route=>route.view));
+// Navigation is product-oriented. Legacy routes remain valid but do not
+// advertise demonstration trading or disconnected feature menus as products.
 const sections = [
-  { label: 'Dashboard', view: 'dashboard', icon: LayoutDashboard },
-  { label: 'Markets', view: 'markets', icon: CandlestickChart },
-  { label: 'Trading', view: 'trading', icon: ChartColumnIncreasing },
-  { label: 'Strategies', view: 'strategy', icon: FlaskConical },
-  { label: 'Workspaces', view: 'workspaces', icon: Layers },
-  { label: 'Brokers', view: 'brokers', icon: Wallet },
-  { label: 'Diagnostics', view: 'diagnostics', icon: Activity },
-  { label: 'Operations', view: 'operations', icon: Settings },
-  { label: 'Routes', view: 'routes', icon: Route },
-  { label: 'Tools', view: 'tools', icon: Wrench },
+  { label:'Markets',view:'markets',icon:CandlestickChart },
+  { label:'Workspaces & Templates',view:'workspaces',icon:Layers },
+  { label:'Strategy Studio',view:'strategy',icon:FlaskConical },
+  { label:'Data Providers & Connections',view:'brokers',icon:Wallet },
+  { label:'Diagnostics',view:'diagnostics',icon:Activity },
+  { label:'Rust Runtime',view:'operations',icon:Settings },
 ];
-const mobileSections=sections.filter(s=>['markets','trading','strategy','diagnostics'].includes(s.view));
+const mobileSections=sections.filter(s=>['markets','workspaces','strategy','brokers'].includes(s.view));
 const unavailable = [
   { label: 'Orderbook', icon: ClipboardList },
   { label: 'Positions', icon: ChartColumnIncreasing },
@@ -152,7 +151,9 @@ const ignoreHomepageWidget = () => {};
  * watchlist. Reuse native grid action buttons beside its Watchlist control,
  * rather than duplicating exchange and layout dropdowns above the chart.
  */
-function HomepageChart({ theme, embedded = false }) {
+function HomepageChart({ theme, embedded = false,
+  initialExchange = cryptoDefault.exchange+':'+cryptoDefault.market,
+  initialSymbol = cryptoDefault.symbol }) {
   const host=useRef(null);
   const [message,setMessage]=useState('Connecting public exchange candles…');
   const nativeWorkspaces=useMemo(()=>cryptoNativeWorkspaceStore(),[]);
@@ -164,8 +165,8 @@ function HomepageChart({ theme, embedded = false }) {
     // a refresh or changes interval; a known AbortError is not an app fault.
     const feed=new QsynMarketsFeed(s=>{if(active)setMessage(s);});
     const grid=createChartGrid(host.current,{
-      feed,symbol:cryptoDefault.symbol,
-      exchange:cryptoDefault.exchange+':'+cryptoDefault.market,
+      feed,symbol:initialSymbol,
+      exchange:initialExchange,
       interval:'1m',intervals:['1m','5m','15m','1h','1d'],
       theme,branding:false,panels:true,toolbar:true,bottombar:true,
       preset:'1x1',workspaces:nativeWorkspaces||undefined,
@@ -244,7 +245,7 @@ function HomepageChart({ theme, embedded = false }) {
       slot?.remove();
       grid.destroy();feed.destroy();
     };
-  },[theme,nativeWorkspaces,nativeWatchlists]);
+  },[theme,nativeWorkspaces,nativeWatchlists,initialExchange,initialSymbol]);
   return <main className={embedded ? 'qsyn-homepage terminal-market-embedded' : 'qsyn-homepage'} aria-label="QSYN crypto and India index charts">
     <div className="qsyn-home-chart">
       <div className="qsyn-crypto-grid" ref={host}/>
@@ -524,7 +525,7 @@ function PrivateMarketPanel({ account, instrument, label, authMode = 'private_te
       : 'Exchange last-trade timestamps. No historical candles until licensed backfill is verified.'}</p>
   </section>;
 }
-function PrivateMarketWorkspace() {
+function PrivateMarketWorkspace({embedded=false,onlyIndex=false}) {
   const [access, setAccess] = useState('checking');
   const [account, setAccount] = useState('');
   const [ce, setCe] = useState('');
@@ -569,10 +570,10 @@ function PrivateMarketWorkspace() {
     validatePrivateChartScope(account.trim(), indexKey.trim());
   const supported = validatePrivateChartScope(account.trim(), ce.trim()) &&
     validatePrivateChartScope(account.trim(), pe.trim()) && ce.trim() !== pe.trim();
-  return <div className="terminal-page">
-    <header className="terminal-title"><div><p className="terminal-eyebrow">PRIVATE · READ ONLY</p>
+  return <div className={embedded ? 'qt-private-market-embedded' : 'terminal-page'}>
+    {!embedded&&<header className="terminal-title"><div><p className="terminal-eyebrow">PRIVATE · READ ONLY</p>
       <h1>Authorized Upstox charts</h1><p>Private CE/PE and NSE/BSE indices. No public redistribution or order execution.</p>
-    </div></header>
+    </div></header>}
     <section className="terminal-surface terminal-live-controls">
       {access === 'checking' && <p role="status">Checking private identity access…</p>}
       {access === 'locked' && <p role="status">Unavailable. Requires a private operator or development identity, independently approved Upstox index rights and an authenticated WSS proxy. No demo candles or order execution.</p>}
@@ -580,7 +581,7 @@ function PrivateMarketWorkspace() {
         <p>{access === 'operator_admin' ? 'Operator administrator session active. Your account is server-bound. Only independently approved NSE/BSE index keys can receive private 30-second viewer grants.' : 'Private test identity active. Enter only account, CE/PE or index keys approved in the private rights file. The grant issuer independently verifies access.'}</p>
         <div className="terminal-layout-tools">
           <label>Approved account alias<input aria-label="Approved account alias" value={account} readOnly={access === 'operator_admin'} maxLength={128} onChange={e => setAccount(e.target.value)}/></label>
-          {access === 'private_test' && <>
+          {access === 'private_test' && !onlyIndex && <>
           <label>CE instrument key<input aria-label="Private CE key" placeholder="NSE_FO|12345" value={ce} maxLength={32} onChange={e=>setCe(e.target.value)}/></label>
           <label>PE instrument key<input aria-label="Private PE key" placeholder="NSE_FO|12346" value={pe} maxLength={32} onChange={e=>setPe(e.target.value)}/></label>
           <button className="terminal-action" type="button" disabled={!supported}
@@ -594,7 +595,7 @@ function PrivateMarketWorkspace() {
       </>}
     </section>
     {(access === 'private_test' || access === 'operator_admin') && selected && <div className="terminal-private-chart-grid">
-      {selected.index ?
+{selected.index ?
         <PrivateMarketPanel key={selected.account + selected.index} account={selected.account} instrument={selected.index} label="Upstox index" authMode={access === 'operator_admin' ? 'operator_admin' : 'private_test'}/> : <>
         <PrivateMarketPanel key={selected.account + selected.ce} account={selected.account} instrument={selected.ce} label="Call option (CE)"/>
         <PrivateMarketPanel key={selected.account + selected.pe} account={selected.account} instrument={selected.pe} label="Put option (PE)"/>
@@ -766,16 +767,14 @@ function App() {
   }
   function Navigation({ mobile = false }) {
     return <nav aria-label={mobile ? 'Mobile terminal' : 'Terminal'}>
-      <p className="terminal-nav-label">Workspace</p>
+      <p className="terminal-nav-label">RESEARCH & DATA</p>
       {sections.map(s => <button key={s.view} type="button"
         aria-current={view === s.view ? 'page' : undefined}
         className={'terminal-nav-item' + (view === s.view ? ' active' : '')}
         onClick={() => openView(s.view)}><s.icon size={18}/><span>{s.label}</span></button>)}
-      <button type="button" className="terminal-nav-item" onClick={()=>openView('private-live')}><LockKeyhole size={18}/><span>Private CE/PE charts</span></button>
-      <p className="terminal-nav-label">Broker services</p>
-      {unavailable.map(s => <button type="button" key={s.label} disabled
-        className="terminal-nav-item locked" title="Requires authenticated QSYN backend">
-        <s.icon size={18}/><span>{s.label}</span><LockKeyhole size={13}/></button>)}
+      <p className="terminal-nav-label">SYSTEM</p>
+      <button type="button" className="terminal-nav-item" onClick={()=>openView('routes')}>
+        <Route size={18}/><span>Route management</span></button>
     </nav>;
   }
   if (['/', '/qsyn', '/qsyn/'].includes(window.location.pathname)) {
@@ -792,7 +791,7 @@ function App() {
         <span className="terminal-current"><current.icon size={16}/>{current.label}</span>
       </div>
       <div className="terminal-top-right">
-        <span className="terminal-environment">● ADMIN TERMINAL · {['private-live','brokers','operations'].includes(view)?'RESTRICTED':['markets','diagnostics'].includes(view)?'READ ONLY':'SIMULATED'}</span>
+        <span className="terminal-environment">● ADMIN TERMINAL · {['private-live','brokers','operations'].includes(view)?'RESTRICTED':view==='markets'||view==='diagnostics'?'MARKET DATA · READ ONLY':'RESEARCH ONLY'}</span>
         <button type="button" className="terminal-icon" aria-label="Toggle theme"
           onClick={toggleTheme}>
           {theme === 'dark' ? <Sun size={18}/> : <Moon size={18}/>}</button>
@@ -819,16 +818,13 @@ function App() {
       </div>}
       <div className="terminal-alert" role="note"><ShieldAlert size={17}/>
         <span>{view==='private-live'||view==='brokers'||view==='operations'
-          ? <><b>Restricted services.</b> Broker entitlements and administrator permissions are independently gated. No orders.</>
+          ? <><b>Restricted source management.</b> Authentication, display rights and worker activation are independent. Orders disabled.</>
           : view==='markets'||view==='diagnostics'
-          ? <><b>Public crypto feed.</b> Exchange WebSocket workers supply public OHLCV; NSE/BSE data is separately licensed. No orders.</>
-          : <><b>Simulation workspace.</b> No live market data, connected broker or executable orders.</>}</span></div>
+          ? <><b>Source-aware markets.</b> Public crypto is separate from licensed India feeds. Provider health and chart availability are verified independently. Orders disabled.</>
+          : <><b>Research-only workspace.</b> Simulated data is never treated as exchange prices. Orders disabled.</>}</span></div>
       {view === 'dashboard' && <DashboardCockpit capabilities={capabilities} openView={openView} theme={theme} ChartPanel={ChartPanel}/>}
-      {view === 'markets' && <div className="terminal-page qt-unified">
-        <header className="terminal-title"><div><p className="terminal-eyebrow">PUBLIC MARKETS</p><h1>Live crypto & India index charts</h1>
-        <p>Native OpenAlgo market chart. Seven public crypto exchanges; licensed NSE/BSE indexes remain authorization-gated.</p></div></header>
-        <HomepageChart theme={theme} embedded/>
-      </div>}
+      {view === 'markets' && <MarketExplorer theme={theme} openView={openView}
+        CryptoChart={HomepageChart} PrivateCharts={PrivateMarketWorkspace}/>} 
       {view === 'strategy' && <StrategyWorkspace theme={theme}/>}
       {view === 'workspaces' && <div className="terminal-page"><header className="terminal-title">
         <div><p className="terminal-eyebrow">SAVED LAYOUTS</p><h1>Chart workspaces</h1>
@@ -839,8 +835,8 @@ function App() {
       {view === 'operations' && <OperationsWorkspace/>}
       {view === 'routes' && <RouteManagementWorkspace openView={openView}/>} 
       {view === 'trading' && <div className="terminal-page">
-        <header className="terminal-title"><div><p className="terminal-eyebrow">MARKET WORKSPACE</p><h1>Trading charts</h1>
-          <p>OpenAlgo Charts 2.6.0 with QSYN's existing simulated PHP data adapter.</p></div></header>
+        <header className="terminal-title"><div><p className="terminal-eyebrow">COMPATIBILITY · SIMULATION ONLY</p><h1>Legacy Chart Lab</h1>
+          <p>This legacy route remains available for existing saved simulated layouts. No order execution or live market source is connected.</p></div></header>
         <ChartWorkspace theme={theme}/></div>}
       {view === 'tools' && <Tools openView={openView}/>}
       {view === 'private-live' && <PrivateMarketWorkspace/>}
@@ -849,7 +845,7 @@ function App() {
       {mobileSections.map(s=><button type="button" key={s.view}
         className={view === s.view ? 'active':''} aria-current={view === s.view ? 'page':undefined}
         onClick={()=>openView(s.view)}><s.icon size={18}/><span>{s.label}</span></button>)}
-      <button type="button" onClick={()=>openView('dashboard')}><LayoutDashboard size={18}/><span>Overview</span></button>
+      <button type="button" onClick={()=>openView('diagnostics')}><Activity size={18}/><span>Health</span></button>
     </nav>
   </div>;
 }

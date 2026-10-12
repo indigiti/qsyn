@@ -1,7 +1,7 @@
 {
   "schema": "QSYN-TERMINAL-ROUTES/1",
   "base": "/qsyn/terminal",
-  "defaultView": "trading",
+  "defaultView": "markets",
   "routes": [
     {
       "view": "dashboard",
@@ -18,8 +18,8 @@
     {
       "view": "trading",
       "slug": "trading",
-      "label": "Trading",
-      "access": "public-demo"
+      "label": "Legacy Chart Lab",
+      "access": "simulation-only"
     },
     {
       "view": "strategy",
@@ -30,13 +30,13 @@
     {
       "view": "workspaces",
       "slug": "workspaces",
-      "label": "Workspaces",
+      "label": "Workspaces & Templates",
       "access": "mixed-account-gated"
     },
     {
       "view": "brokers",
       "slug": "brokers",
-      "label": "Brokers",
+      "label": "Data Providers & Connections",
       "access": "account-gated"
     },
     {
@@ -48,7 +48,7 @@
     {
       "view": "operations",
       "slug": "operations",
-      "label": "Operations",
+      "label": "Rust Runtime",
       "access": "admin-gated"
     },
     {
@@ -66,7 +66,7 @@
     {
       "view": "private-live",
       "slug": "private-live",
-      "label": "Private CE/PE",
+      "label": "Private Market Access",
       "access": "account-gated"
     }
   ],

@@ -1,0 +1,194 @@
+{
+  "schema": "QSYN-MARKET-PROVIDER-REGISTRY/1",
+  "defaultMarket": "crypto",
+  "markets": [
+    {
+      "id": "crypto",
+      "label": "Crypto",
+      "venues": [
+        "BINANCE",
+        "BYBIT",
+        "OKX",
+        "COINBASE",
+        "KRAKEN",
+        "BITGET",
+        "HYPERLIQUID"
+      ],
+      "providers": [
+        "binance",
+        "bybit",
+        "okx",
+        "coinbase",
+        "kraken",
+        "bitget",
+        "hyperliquid"
+      ],
+      "data_mode": "public_exchange",
+      "product_state": "implemented"
+    },
+    {
+      "id": "indices",
+      "label": "Indices",
+      "venues": [
+        "NSE_INDEX",
+        "BSE_INDEX"
+      ],
+      "providers": [
+        "upstox"
+      ],
+      "data_mode": "account_scoped",
+      "product_state": "gated"
+    },
+    {
+      "id": "stocks",
+      "label": "Stocks",
+      "venues": [
+        "NSE",
+        "BSE"
+      ],
+      "providers": [
+        "upstox"
+      ],
+      "data_mode": "account_scoped",
+      "product_state": "not_implemented"
+    },
+    {
+      "id": "options",
+      "label": "Options",
+      "venues": [
+        "NSE_FO",
+        "BSE_FO"
+      ],
+      "providers": [
+        "upstox",
+        "simulation"
+      ],
+      "data_mode": "account_scoped",
+      "product_state": "simulation_only"
+    }
+  ],
+  "providers": [
+    {
+      "id": "binance",
+      "label": "BINANCE",
+      "kind": "exchange",
+      "venues": [
+        "BINANCE"
+      ],
+      "asset_classes": [
+        "crypto"
+      ],
+      "adapter": "public_crypto",
+      "account_required": false
+    },
+    {
+      "id": "bybit",
+      "label": "BYBIT",
+      "kind": "exchange",
+      "venues": [
+        "BYBIT"
+      ],
+      "asset_classes": [
+        "crypto"
+      ],
+      "adapter": "public_crypto",
+      "account_required": false
+    },
+    {
+      "id": "okx",
+      "label": "OKX",
+      "kind": "exchange",
+      "venues": [
+        "OKX"
+      ],
+      "asset_classes": [
+        "crypto"
+      ],
+      "adapter": "public_crypto",
+      "account_required": false
+    },
+    {
+      "id": "coinbase",
+      "label": "Coinbase",
+      "kind": "exchange",
+      "venues": [
+        "COINBASE"
+      ],
+      "asset_classes": [
+        "crypto"
+      ],
+      "adapter": "public_crypto",
+      "account_required": false
+    },
+    {
+      "id": "kraken",
+      "label": "KRAKEN",
+      "kind": "exchange",
+      "venues": [
+        "KRAKEN"
+      ],
+      "asset_classes": [
+        "crypto"
+      ],
+      "adapter": "public_crypto",
+      "account_required": false
+    },
+    {
+      "id": "bitget",
+      "label": "BITGET",
+      "kind": "exchange",
+      "venues": [
+        "BITGET"
+      ],
+      "asset_classes": [
+        "crypto"
+      ],
+      "adapter": "public_crypto",
+      "account_required": false
+    },
+    {
+      "id": "hyperliquid",
+      "label": "Hyperliquid",
+      "kind": "exchange",
+      "venues": [
+        "HYPERLIQUID"
+      ],
+      "asset_classes": [
+        "crypto"
+      ],
+      "adapter": "public_crypto",
+      "account_required": false
+    },
+    {
+      "id": "upstox",
+      "label": "Upstox",
+      "kind": "broker_market_data",
+      "venues": [
+        "NSE_INDEX",
+        "BSE_INDEX",
+        "NSE",
+        "BSE",
+        "NSE_FO",
+        "BSE_FO"
+      ],
+      "asset_classes": [
+        "indices",
+        "stocks",
+        "options"
+      ],
+      "adapter": "private_upstox",
+      "account_required": true
+    },
+    {
+      "id": "simulation",
+      "label": "QSYN Research Simulation",
+      "kind": "simulation",
+      "venues": [],
+      "asset_classes": [
+        "options"
+      ],
+      "adapter": "simulated_options",
+      "account_required": false
+    }
+  ]
+}
