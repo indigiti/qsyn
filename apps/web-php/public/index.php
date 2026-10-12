@@ -211,22 +211,25 @@ if ($route === '/qsyn/api/v1/studio/market' || $route === '/qsyn/api/v1/studio/b
     }
 }
 
-// Personal Upstox read-only 1m quote; the stored Analytics Token is
-// sufficient. No OAuth callback, worker plan, exchange approval form or WSS.
-if ($route === '/qsyn/api/v1/admin/upstox/personal-index-ohlc') {
+// Browser-admin to single Rust market-data ELF. No OAuth, plans or HTTP
+// bearer transmission. WS upgrade is forwarded separately by the HTTPS host.
+if (preg_match('#^/qsyn/api/v1/admin/upstox/personal-index/(history|ticket)$#',
+    $route, $personalIndex)) {
     $src=dirname(__DIR__).'/src';
-    if (!is_file($src.'/IndexHistoricalProof.php'))
+    if (!is_file($src.'/PersonalIndexGateway.php'))
         $src=dirname(__DIR__,2).'/private_html/qsyn/app/src';
-    foreach (['RustAdmin','UpstoxIndexV3','IndexHistoricalProof'] as $unit) {
+    foreach (['RustAdmin','UpstoxIndexV3','IndexHistoricalProof','PersonalIndexGateway'] as $unit) {
         if (!is_file($src.'/'.$unit.'.php'))
-            respond(['error'=>'private_index_quote_module_unavailable'],503);
+            respond(['error'=>'rust_personal_index_module_unavailable'],503);
         require_once $src.'/'.$unit.'.php';
     }
     header('Cache-Control: private, no-store');
     header('Pragma: no-cache');
     header('X-Robots-Tag: noindex, nofollow');
-    [$status,$payload]=\QSYN\MarketData\IndexHistoricalProof::dispatchPersonalQuote($_SERVER);
-    if ($status===405) header('Allow: POST');
+    [$status,$payload]=$personalIndex[1]==='history'
+        ? \QSYN\MarketData\PersonalIndexGateway::history($_SERVER)
+        : \QSYN\MarketData\PersonalIndexGateway::ticket($_SERVER);
+    if ($status===405)header('Allow: POST');
     header('X-QSYN-Request-ID: '.bin2hex(random_bytes(8)));
     respond($payload,$status);
 }
