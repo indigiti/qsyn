@@ -529,6 +529,19 @@ try {
   await page.clock.setFixedTime(new Date('2026-10-12T05:00:00Z'));
   const today='2026-10-12';
   const currentMinute=Math.floor(Date.parse('2026-10-12T05:00:00Z')/60000)*60;
+  await page.route('**/qsyn/api/v1/admin/upstox/personal-index/history',async route=>{
+    const body=route.request().postDataJSON();
+    if(body.symbol!=='SENSEX'||body.day!==today)
+      throw Error('Today Rust history returned wrong account-scope/date');
+    await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({
+      schema:'QSYN-UPSTOX-RUST-INDEX-HISTORY/1',
+      symbol:'SENSEX',day_ist:today,interval:'1m',
+      source:'upstox_v3_rust_history',
+      bars:[{time:currentMinute,open:25000,high:25015,low:24995,
+        close:25012,volume:0}],
+      public_redistribution_allowed:false,trading_enabled:false
+    })});
+  });
   let rustTicketCalls=0;
   await page.route('**/qsyn/api/v1/admin/upstox/personal-index/ticket',async route=>{
     rustTicketCalls++;
@@ -546,7 +559,7 @@ try {
   await page.getByRole('button',{name:'Today',exact:true}).click();
   await page.getByRole('button',{name:'Open SENSEX historical chart'}).click();
   try {
-    await page.getByText(/Rust WebSocket connected|RUST_UPSTOX_WEBSOCKET_UNAVAILABLE|Rust WebSocket disconnected/)
+    await page.getByText(/Rust WebSocket connected|RUST_UPSTOX_WEBSOCKET_UNAVAILABLE|Rust WebSocket disconnected|Rust WebSocket closed abnormally/)
       .first().waitFor({timeout:15000});
   } catch(error) {
     const report=await page.evaluate(()=>({
