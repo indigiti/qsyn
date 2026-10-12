@@ -16,9 +16,9 @@ check(($list['live_data_available'] ?? true) === false, 'not_licensed');
 check(($list['public_redistribution_allowed'] ?? true) === false, 'not_public');
 check(($list['trading_enabled'] ?? true) === false, 'trading_off');
 $keys=array_map(static fn (array $x): string => $x['exchange'] . ':' . $x['symbol'], $list['indexes']);
-check(count($keys)===6 && count(array_unique($keys))===6, 'six_distinct_indexes');
+check(count($keys)===7 && count(array_unique($keys))===7, 'seven_distinct_indexes');
 foreach (['NSE_INDEX:NIFTY','NSE_INDEX:BANKNIFTY','NSE_INDEX:FINNIFTY',
-  'NSE_INDEX:MIDCPNIFTY','BSE_INDEX:SENSEX','NSE_INDEX:INDIAVIX'] as $key) {
+  'NSE_INDEX:MIDCPNIFTY','BSE_INDEX:SENSEX','BSE_INDEX:BANKEX','NSE_INDEX:INDIAVIX'] as $key) {
     check(in_array($key,$keys,true),'missing_index_' . $key);
 }
 [$code,$closed]=IndiaIndexCatalog::dispatch('bars',[
@@ -39,4 +39,4 @@ foreach ([
 }
 [$status]=IndiaIndexCatalog::dispatch('bars',[],['REQUEST_METHOD'=>'POST']);
 check($status===405,'read_only');
-echo "PASS: Six Indian index aliases, source licensing and fail-closed market data route\n";
+echo "PASS: Seven Indian index aliases, source licensing and fail-closed market data route\n";
