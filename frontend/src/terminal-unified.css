@@ -143,3 +143,12 @@
  .terminal-shell .qt-prepare-checks,.terminal-shell .qt-private-prepare-fields{grid-template-columns:1fr}
  .terminal-shell .qt-provider-cards{grid-template-columns:repeat(2,minmax(0,1fr))}
 }
+
+/* Core proof card is deliberately small: show evidence, not another dashboard. */
+.terminal-shell .qt-index-proof{border:1px solid var(--q-line);border-radius:10px;padding:16px;margin-bottom:16px}
+.terminal-shell .qt-index-proof-actions{display:flex;flex-wrap:wrap;align-items:flex-end;gap:10px}
+.terminal-shell .qt-index-proof-actions label{display:flex;flex-direction:column;gap:5px;font-size:12px;color:var(--q-muted)}
+.terminal-shell .qt-index-proof-actions input{padding:8px 10px;background:var(--q-bg);color:var(--q-fg);border:1px solid var(--q-line);border-radius:7px}
+.terminal-shell .qt-index-proof-result{display:flex;flex-direction:column;gap:4px;padding:12px;margin-top:12px;border:1px solid var(--q-line);background:var(--q-hover);border-radius:8px}
+.terminal-shell .qt-index-proof-result strong{font-size:12px;overflow-wrap:anywhere}
+.terminal-shell .qt-index-proof-result small{font-size:11px;color:var(--q-muted)}
