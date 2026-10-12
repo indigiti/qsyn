@@ -34,8 +34,20 @@ final class IndexWebOperations
 
     private static function settings(): array
     {
-        $plan = (string)(getenv('QSYN_UPSTOX_INDEX_WORKER_PLAN_FILE') ?: '');
-        $archive = (string)(getenv('QSYN_INDEX_WEB_ARCHIVE_ROOT') ?: '');
+        $runtime = (string)(getenv('QSYN_RUNTIME_DIR') ?: dirname(__DIR__, 2).'/runtime');
+        // Match the already-supported private Upstox token storage. The web
+        // preparation action, not this read-only status call, creates files.
+        $managed = $runtime.'/upstox-private';
+        $safeManaged = str_starts_with($runtime,'/') && !str_contains($runtime,'/..')
+            && !str_contains($runtime,'//')
+            && !preg_match('~/(?:public_html|webroot|www)(?:/|$)~i',$runtime)
+            && is_dir($managed) && !is_link($managed)
+            && realpath($managed)===$managed
+            && self::privatePath($managed,true);
+        $plan = (string)(getenv('QSYN_UPSTOX_INDEX_WORKER_PLAN_FILE')
+            ?: ($safeManaged ? $managed.'/index-worker-plan.json' : ''));
+        $archive = (string)(getenv('QSYN_INDEX_WEB_ARCHIVE_ROOT')
+            ?: ($safeManaged ? $managed.'/index-history' : ''));
         $bin = dirname(__DIR__) . '/bin';
         $worker = $bin . '/qsyn-upstox-index-worker';
         $history = $bin . '/qsyn-upstox-index-history';
@@ -44,6 +56,13 @@ final class IndexWebOperations
             && function_exists('proc_terminate')
             && function_exists('proc_close');
         $planOk = self::privatePath($plan, false);
+        $draft = false;
+        if ($planOk) {
+            $record=json_decode((string)@file_get_contents($plan),true);
+            $draft=is_array($record) && ($record['rights_expire_ms']??-1)===0
+                && ($record['operator_approved_display']??true)===false
+                && ($record['operator_approved_retention']??true)===false;
+        }
         $archiveOk = self::privatePath($archive, true);
         $binaryOk = is_file($worker) && is_executable($worker) && !is_link($worker)
             && is_file($history) && is_executable($history) && !is_link($history);
@@ -61,7 +80,7 @@ final class IndexWebOperations
             && is_file($ctl) && is_executable($ctl)
             && self::supervisorProgram('worker') !== null
             && self::supervisorProgram('history') !== null;
-        return compact('plan','archive','worker','history','planOk','archiveOk',
+        return compact('plan','archive','worker','history','planOk','draft','archiveOk',
             'binaryOk','enabled','supervisor','ctl','supervisorOk') + [
             'runnerOk'=>$runnerOk,
             'preflightOk'=>$readOnly && $runnerOk && $planOk && $archiveOk && $binaryOk,
@@ -220,7 +239,8 @@ final class IndexWebOperations
                 'schema'=>self::SCHEMA,'csrf'=>RustAdmin::csrf(),
                 'web_operations_enabled'=>$s['enabled'],
                 'preflight_enabled'=>$s['preflightOk'],
-                'private_plan_ready'=>$s['planOk'],'archive_ready'=>$s['archiveOk'],
+                'private_plan_ready'=>$s['planOk'],'private_plan_unapproved_draft'=>$s['draft'],
+                'archive_ready'=>$s['archiveOk'],
                 'rust_binary_ready'=>$s['binaryOk'],
                 'executor_ready'=>$s['runnerOk'],
                 'backfill_enabled'=>$s['backfillOk'],
