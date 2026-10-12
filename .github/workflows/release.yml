@@ -97,6 +97,8 @@ jobs:
           python3 apps/web-php/tests/NativeUpstoxAnalyticsHttpSmoke.py
           php -l apps/web-php/src/NativeUpstoxProfileVerifier.php
           php apps/web-php/tests/NativeUpstoxProfileVerifierTest.php
+          php -l apps/web-php/src/IndexHistoricalProof.php
+          python3 apps/web-php/tests/IndexHistoricalProofHttpSmoke.py
           php -l apps/web-php/src/NativeUpstoxIndexDiscovery.php
           php apps/web-php/tests/NativeUpstoxIndexDiscoveryTest.php
           php -l apps/web-php/src/NativeAdminDiagnostics.php
@@ -254,6 +256,7 @@ jobs:
           cp apps/web-php/src/NativeUpstoxIndexDiscovery.php staging/private/app/src/NativeUpstoxIndexDiscovery.php
           cp apps/web-php/src/NativeAdminDiagnostics.php staging/private/app/src/NativeAdminDiagnostics.php
           cp apps/web-php/src/IndexWebOperations.php staging/private/app/src/IndexWebOperations.php
+          cp apps/web-php/src/IndexHistoricalProof.php staging/private/app/src/IndexHistoricalProof.php
           cp apps/web-php/src/IndexPrivateProvisioning.php staging/private/app/src/IndexPrivateProvisioning.php
           cp apps/web-php/src/FileMockAccountSelection.php staging/private/app/src/FileMockAccountSelection.php
           cp apps/web-php/src/AccountApi.php staging/private/app/src/AccountApi.php
@@ -379,6 +382,8 @@ jobs:
           test -s staging/private/app/src/NativeAdminDiagnostics.php
           test -s staging/private/app/src/IndexWebOperations.php
           test -s staging/private/app/src/IndexPrivateProvisioning.php
+          test -s staging/private/app/src/IndexHistoricalProof.php
+          php -l staging/private/app/src/IndexHistoricalProof.php
           php -l staging/private/app/src/IndexPrivateProvisioning.php
           php -l staging/private/app/src/IndexWebOperations.php
           php -l staging/private/app/src/NativeAdminDiagnostics.php
@@ -549,6 +554,8 @@ jobs:
           test -s verified-release/private/app/src/NativeAdminDiagnostics.php
           test -s verified-release/private/app/src/IndexWebOperations.php
           test -s verified-release/private/app/src/IndexPrivateProvisioning.php
+          test -s verified-release/private/app/src/IndexHistoricalProof.php
+          php -l verified-release/private/app/src/IndexHistoricalProof.php
           php -l verified-release/private/app/src/IndexPrivateProvisioning.php
           php -l verified-release/private/app/src/IndexWebOperations.php
           php -l verified-release/private/app/src/NativeAdminDiagnostics.php
