@@ -26,7 +26,8 @@ export function ProviderStatusPanel(){
             credentials:'same-origin',cache:'no-store',signal:controller.signal,
             headers:{Accept:'application/json'}}).then(r=>r.ok?r.json():null).catch(()=>null);
           const known=status?.schema==='QSYN-INDEX-WEB-OPERATIONS/1';
-          const code=known && !status.private_plan_ready ? 'INDEX_PLAN_NOT_PROVISIONED'
+          const code=known && status.private_plan_unapproved_draft ? 'INDEX_PLAN_DRAFT_PENDING_RIGHTS'
+            :known && !status.private_plan_ready ? 'INDEX_PLAN_NOT_PROVISIONED'
             :known && !status.executor_ready ? 'INDEX_EXECUTOR_UNAVAILABLE'
             :known && !status.rust_binary_ready ? 'INDEX_WORKER_BINARY_UNAVAILABLE'
             :known && !status.archive_ready ? 'INDEX_HISTORY_STORAGE_UNAVAILABLE'
