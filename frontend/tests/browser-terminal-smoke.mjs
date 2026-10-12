@@ -379,12 +379,7 @@ try {
   });
   await page.getByRole('button',{name:'Data Providers & Connections',exact:true}).first().click();
   await page.getByRole('heading',{name:'Data providers & connections'}).waitFor();
-  await page.getByRole('heading',{name:'Indian indices · web operations'}).waitFor();
-  if(await page.getByRole('button',{name:'Validate approved index plan'}).isEnabled() ||
-     await page.getByRole('button',{name:'Import approved historical candles'}).isEnabled() ||
-     await page.getByRole('button',{name:'Start worker'}).isEnabled())
-    throw new Error('Unprovisioned index web operations unexpectedly executable');
-
+  await page.getByRole('button',{name:/Upstox access/}).first().click();
   if(new URL(page.url()).pathname!=='/qsyn/terminal/brokers')
     throw new Error('Broker view not routed in React');
   await page.getByRole('button',{name:'Refresh Upstox status'}).waitFor({timeout:12000});
@@ -392,12 +387,20 @@ try {
     || await page.locator('.qt-broker-grid').count()!==0
     || await page.getByRole('heading',{name:'Configure first OpenAlgo connection'}).count()!==0)
     throw new Error('Unverified OpenAlgo broker selection/setup unexpectedly visible');
-  if(await page.getByRole('heading',{name:'Native Upstox → QSYN Rust V3'}).count()!==1)
-    throw new Error('Native Upstox configuration was lost');
   const lookupButton=page.getByRole('button',{name:'Discover index instrument keys'});
   await lookupButton.waitFor({state:'visible',timeout:12000});
   if(!await lookupButton.isEnabled())
     throw new Error('Configured Upstox failed to render enabled instrument discovery');
+  await page.getByRole('button',{name:/Private setup/}).first().click();
+  await page.getByRole('heading',{name:'Prepare your private index workspace'}).waitFor();
+  if(await page.getByRole('button',{name:'Prepare private index files'}).isEnabled())
+    throw new Error('Unbound private preparation incorrectly allowed');
+  await page.getByRole('button',{name:/Validate/}).first().click();
+  await page.getByRole('heading',{name:'Indian indices · web operations'}).waitFor();
+  if(await page.getByRole('button',{name:'Validate approved index plan'}).isEnabled() ||
+     await page.getByRole('button',{name:'Import approved historical candles'}).isEnabled() ||
+     await page.getByRole('button',{name:'Start worker'}).isEnabled())
+    throw new Error('Unprovisioned index web operations unexpectedly executable');
   if(browserErrors.length)
     throw new Error('Configured broker produced a JavaScript exception: '+JSON.stringify(browserErrors));
   await lookupButton.click();
