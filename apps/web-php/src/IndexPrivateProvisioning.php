@@ -200,7 +200,9 @@ final class IndexPrivateProvisioning
         }
         if (count(array_unique(array_column($instruments,'symbol')))!==6)
             return [409,['error'=>'index_discovery_duplicate']];
-        $lock=@fopen($root.'/.index-prepare.lock','c');
+        $mask=umask(0077);
+        try { $lock=@fopen($root.'/.index-prepare.lock','c'); }
+        finally { umask($mask); }
         if (!$lock||!flock($lock,LOCK_EX|LOCK_NB)) {
             if ($lock) fclose($lock);
             return [409,['error'=>'index_preparation_in_progress']];
