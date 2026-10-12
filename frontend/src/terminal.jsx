@@ -272,11 +272,15 @@ function HomepageChart({ theme, embedded = false,
       <div className="qsyn-crypto-grid" ref={host}/>
       <span className="qsyn-screenreader-status" role="status" aria-live="polite">{message}</span>
       {blockedIndex && <div className="qsyn-india-entitlement-note" role="status">
-        <strong>{blockedIndex.name} · private Upstox data required</strong>
-        <button type="button" onClick={openPrivateIndex}>
-          Open authorized {blockedIndex.symbol} chart
-        </button>
-        <span>No public NSE/BSE index candles are available here. A valid Upstox token alone does not grant display rights or start the private index worker.</span>
+        <div><strong>{blockedIndex.name}</strong><span>Private index feed not yet verified</span></div>
+        <p>Live NSE/BSE candles require an approved Upstox index plan,
+          exchange permissions and an authorized worker.</p>
+        <div className="qsyn-india-note-actions">
+          <a href="/qsyn/terminal/brokers">Configure data source</a>
+          <button type="button" onClick={openPrivateIndex}>
+            Authorized chart →
+          </button>
+        </div>
       </div>}
     </div>
   </main>;

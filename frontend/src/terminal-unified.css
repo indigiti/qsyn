@@ -79,3 +79,67 @@
 .terminal-shell .qt-openalgo-setup .qt-setup-ports input{width:145px;max-width:100%;border:1px solid var(--q-line);color:var(--q-fg);background:var(--q-bg);border-radius:6px;padding:8px 10px}
 .terminal-shell .qt-openalgo-setup label.qt-setup-confirm{display:flex;flex-direction:row;align-items:flex-start;gap:9px;font-size:12px;line-height:1.5;font-weight:500}
 .terminal-shell .qt-openalgo-setup label.qt-setup-confirm input{flex:0 0 auto;width:auto;min-width:0;margin-top:3px}
+
+
+/* Connection onboarding: contained inside restricted terminal, not homepage. */
+.terminal-shell .qt-connections-page{max-width:1420px;margin:0 auto}
+.terminal-shell .qt-setup-progress{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin:4px 0 8px}
+.terminal-shell .qt-setup-step{display:flex;align-items:center;gap:10px;padding:13px;text-align:left;cursor:pointer;border:1px solid var(--q-line);border-radius:12px;background:var(--q-bg);color:var(--q-fg);font:inherit;min-width:0}
+.terminal-shell .qt-setup-step.selected{border-color:var(--q-accent);box-shadow:inset 0 0 0 1px var(--q-accent);background:var(--q-hover)}
+.terminal-shell .qt-setup-step.complete .qt-setup-number{background:var(--q-accent);color:white}
+.terminal-shell .qt-setup-number{flex:none;width:30px;height:30px;display:grid;place-items:center;border-radius:50%;background:var(--q-hover);font-size:13px;font-weight:750}
+.terminal-shell .qt-setup-step strong,.terminal-shell .qt-setup-step small{display:block;line-height:1.35}
+.terminal-shell .qt-setup-step strong{font-size:12px}
+.terminal-shell .qt-setup-step small{font-size:10px;color:var(--q-muted);margin-top:4px}
+.terminal-shell .qt-setup-layout{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(240px,.8fr);gap:16px;align-items:start}
+.terminal-shell .qt-setup-main{min-width:0;padding:24px}
+.terminal-shell .qt-setup-main .qt-setup-heading{margin-bottom:22px}
+.terminal-shell .qt-setup-heading h2{font-size:22px;margin:6px 0}
+.terminal-shell .qt-setup-heading>p:last-child{color:var(--q-muted);font-size:13px}
+.terminal-shell .qt-setup-aside{position:sticky;top:18px;padding:24px;min-width:0}
+.terminal-shell .qt-setup-aside h2{font-size:20px;line-height:1.3;margin:10px 0}
+.terminal-shell .qt-setup-aside>p{color:var(--q-muted);font-size:12px;line-height:1.6}
+.terminal-shell .qt-setup-art{display:grid;place-items:center;min-height:130px;border-radius:12px;background:var(--q-hover);color:var(--q-accent);margin-bottom:20px}
+.terminal-shell .qt-setup-assurances{display:flex;flex-direction:column;gap:14px;margin:22px 0}
+.terminal-shell .qt-setup-assurances>div{display:flex;align-items:flex-start;gap:9px;font-size:12px}
+.terminal-shell .qt-setup-assurances svg{flex:none;color:var(--q-accent)}
+.terminal-shell .qt-setup-navigation{display:flex;justify-content:space-between;gap:12px;margin-top:28px;padding-top:16px;border-top:1px solid var(--q-line)}
+.terminal-shell .qt-setup-inline{display:flex;align-items:start;gap:12px;margin-top:16px;font-size:12px;color:var(--q-muted)}
+.terminal-shell .qt-setup-inline svg{flex:none;color:var(--q-accent)}
+.terminal-shell .qt-provider-header{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 0 16px}
+.terminal-shell .qt-provider-header h3{margin:0 0 5px;font-size:15px}
+.terminal-shell .qt-provider-header p{margin:0}
+.terminal-shell .qt-provider-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(178px,1fr));gap:10px}
+.terminal-shell .qt-provider-tile{border:1px solid var(--q-line);border-radius:10px;padding:14px;display:flex;gap:10px;align-items:flex-start;min-width:0;background:var(--q-bg)}
+.terminal-shell .qt-provider-logo{flex:none;width:32px;height:32px;border-radius:9px;background:var(--q-hover);display:grid;place-items:center;font-size:11px;font-weight:800}
+.terminal-shell .qt-provider-tile-body{min-width:0;display:flex;flex-direction:column;gap:5px}
+.terminal-shell .qt-provider-tile-body>strong{font-size:12px}
+.terminal-shell .qt-provider-tile-body>small{font-size:10px;color:var(--q-muted)}
+.terminal-shell .qt-provider-evidence{font-size:10px;color:var(--q-muted);overflow-wrap:anywhere;line-height:1.4}
+.terminal-shell .qt-provider-evidence.responding{color:#278a62}
+.terminal-shell .qt-status-dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:currentColor;margin-right:6px}
+.terminal-shell .qt-provider-details{margin:18px 0 8px;font-size:12px}
+.terminal-shell .qt-provider-details summary{cursor:pointer;color:var(--q-muted)}
+.terminal-shell .qt-private-prepare>h2{font-size:16px;margin:0 0 8px}
+.terminal-shell .qt-private-prepare>p{font-size:12px}
+.terminal-shell .qt-prepare-checks{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:16px 0}
+.terminal-shell .qt-prepare-checks>div{padding:12px;background:var(--q-hover);border:1px solid var(--q-line);border-radius:8px;min-width:0}
+.terminal-shell .qt-prepare-checks span,.terminal-shell .qt-prepare-checks strong{display:block}
+.terminal-shell .qt-prepare-checks span{font-size:10px;color:var(--q-muted);margin-bottom:5px}
+.terminal-shell .qt-prepare-checks strong{font-size:12px;overflow-wrap:anywhere}
+.terminal-shell .qt-private-prepare-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:14px 0}
+.terminal-shell .qt-private-prepare-fields label{display:flex;flex-direction:column;gap:5px;font-size:12px}
+.terminal-shell .qt-private-prepare-fields input{min-width:0;width:100%;box-sizing:border-box;padding:10px;border-radius:8px;border:1px solid var(--q-line);background:var(--q-bg);color:var(--q-fg)}
+.terminal-shell .qt-prepare-confirm{display:flex;gap:9px;align-items:flex-start;font-size:12px;line-height:1.5}
+.terminal-shell .qt-prepare-confirm input{margin-top:3px;flex:none}
+@media(max-width:1000px){
+ .terminal-shell .qt-setup-layout{grid-template-columns:minmax(0,1fr)}
+ .terminal-shell .qt-setup-aside{position:static}
+ .terminal-shell .qt-setup-step small{display:none}
+}
+@media(max-width:700px){
+ .terminal-shell .qt-setup-progress{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .terminal-shell .qt-setup-main,.terminal-shell .qt-setup-aside{padding:16px}
+ .terminal-shell .qt-prepare-checks,.terminal-shell .qt-private-prepare-fields{grid-template-columns:1fr}
+ .terminal-shell .qt-provider-cards{grid-template-columns:repeat(2,minmax(0,1fr))}
+}

@@ -4,6 +4,7 @@ import {CRYPTO_MARKETS} from './crypto-catalog.js';
 import {INDIA_INDEX_MARKETS} from './india-index-catalog.js';
 import {ProviderStatusPanel} from './provider-console.jsx';
 import {IndexWebOperationsPanel} from './index-ops-panel.jsx';
+import {IndexProvisionPanel} from './index-provision-panel.jsx';
 import './terminal-unified.css';
 
 const VENUES=['BINANCE','BYBIT','OKX','COINBASE','KRAKEN','BITGET','HYPERLIQUID'];
@@ -513,65 +514,88 @@ function NativeUpstoxPanel({refreshTick=0}){
       or permission to redistribute NSE/BSE prices. Trading stays disabled.</p>
   </div>;
 }
+const SETUP_STEPS=Object.freeze([
+  {label:'Providers',detail:'Market source overview'},
+  {label:'Upstox access',detail:'Token and index discovery'},
+  {label:'Private setup',detail:'Prepare safe server files'},
+  {label:'Validate',detail:'History and worker checks'},
+]);
 export function BrokersWorkspace({openView}){
-  // QSYN's supported native read-only Upstox integration is deliberately
-  // independent of OpenAlgo. Do not list unprovisioned brokers or prompt users
-  // to install/configure the OpenAlgo Python service.
   const [nativeRefreshTick,setNativeRefreshTick]=useState(0);
-  const [indexCatalog,setIndexCatalog]=useState(null);
-  useEffect(()=>{
-    const controller=new AbortController();
-    void jsonGet('/qsyn/api/v1/india/indexes',controller.signal)
-      .then(data=>{
-        if(!controller.signal.aborted && data?.schema==='QSYN-INDIA-INDEX-CATALOG/1')
-          setIndexCatalog(data);
-      })
-      .catch(()=>{if(!controller.signal.aborted)setIndexCatalog(null);});
-    return ()=>controller.abort();
-  },[nativeRefreshTick]);
-  return <div className="terminal-page qt-unified">
-    <PanelTitle eyebrow="MARKET DATA · VERIFIED CONNECTIONS" title="Data providers & connections"
-      description="Native market-data connections only. Provider health, read-only tokens and licensed index subscriptions have independent status checks."/>
-    <ProviderStatusPanel/>
-    <IndexWebOperationsPanel/>
-    <div className="qt-summary">
-      <section className="terminal-surface"><Wallet size={19}/><span>Native broker data source</span>
-        <strong>Upstox</strong></section>
-      <section className="terminal-surface"><LockKeyhole size={19}/><span>Exchange display rights</span>
-        <strong>Not verified</strong></section>
-      <section className="terminal-surface"><ShieldCheck size={19}/><span>QSYN order execution</span>
-        <strong>Disabled</strong></section>
+  const [step,setStep]=useState(0);
+  const descriptions=[
+    'Check which exchanges respond and choose a private data source.',
+    'Secure your Upstox connection and discover candidate NSE/BSE instruments.',
+    'Create a private, inactive index plan and archive using QSYN Web.',
+    'Validate operator-approved rights, import permitted history and check the worker.',
+  ];
+  return <div className="terminal-page qt-unified qt-connections-page">
+    <PanelTitle eyebrow="MARKET DATA · CONNECTION CENTER"
+      title="Data providers & connections"
+      description="One guided setup for public exchanges and authenticated private index data."/>
+    <div className="qt-setup-progress" aria-label="Connection setup steps">
+      {SETUP_STEPS.map((entry,i)=><button type="button" key={entry.label}
+        className={'qt-setup-step'+(step===i?' selected':'')+(step>i?' complete':'')}
+        aria-current={step===i?'step':undefined} onClick={()=>setStep(i)}>
+        <span className="qt-setup-number">{step>i?'✓':i+1}</span>
+        <span><strong>{entry.label}</strong><small>{entry.detail}</small></span>
+      </button>)}
     </div>
-    <section className="terminal-surface">
-      <div className="terminal-card-head"><h2>Native Upstox → QSYN Rust V3</h2>
-        <ShieldCheck size={18}/></div>
-      <p>Connect directly to Upstox with its existing OAuth session or a read-only
-        Analytics Token. OpenAlgo configuration is not required.
-        The Rust market-data engine and licensed NSE/BSE subscriptions are checked separately.</p>
-      <div className="qt-actions">
-        <button type="button" className="terminal-action terminal-secondary-action"
-          onClick={()=>setNativeRefreshTick(t=>t+1)}>
-          <RefreshCw size={16}/> Refresh Upstox status
-        </button>
+    <div className="qt-setup-layout">
+      <div className="qt-setup-main terminal-surface">
+        <div className="qt-setup-heading"><p className="terminal-eyebrow">STEP {step+1} OF {SETUP_STEPS.length}</p>
+          <h2>{SETUP_STEPS[step].label}</h2>
+          <p>{descriptions[step]}</p></div>
+        {step===0&&<>
+          <ProviderStatusPanel/>
+          <div className="qt-setup-inline"><ShieldCheck size={18}/>
+            <span>Public crypto health checks do not require a broker token.
+              Indian indices require an independent private feed approval.</span></div>
+        </>}
+        {step===1&&<>
+          <div className="qt-actions"><button type="button"
+            className="terminal-action terminal-secondary-action"
+            onClick={()=>setNativeRefreshTick(t=>t+1)}>
+            <RefreshCw size={16}/> Refresh Upstox status</button></div>
+          <NativeUpstoxPanel refreshTick={nativeRefreshTick}/>
+        </>}
+        {step===2&&<><IndexProvisionPanel/>
+          <div className="qt-market-tags">{INDIA_INDEX_MARKETS.map(item=>
+            <span key={item.id}>{item.name} · {item.exchange==='BSE_INDEX'?'BSE':'NSE'}</span>)}</div>
+        </>}
+        {step===3&&<>
+          <IndexWebOperationsPanel/>
+          <div className="qt-actions">
+            <button type="button" className="terminal-action terminal-secondary-action"
+              onClick={()=>openView('diagnostics')}>Open diagnostics</button>
+            <button type="button" className="terminal-action terminal-secondary-action"
+              onClick={()=>openView('private-live')}>Authorized chart viewer</button>
+          </div>
+        </>}
+        <div className="qt-setup-navigation">
+          <button type="button" className="terminal-action terminal-secondary-action"
+            onClick={()=>setStep(s=>Math.max(0,s-1))} disabled={step===0}>Previous</button>
+          <button type="button" className="terminal-action"
+            onClick={()=>setStep(s=>Math.min(SETUP_STEPS.length-1,s+1))}
+            disabled={step===SETUP_STEPS.length-1}>Next step →</button>
+        </div>
       </div>
-      <NativeUpstoxPanel refreshTick={nativeRefreshTick}/>
-      <p className="terminal-footnote">A stored or verified Analytics Token does not
-        prove that NSE/BSE index display rights, current instrument keys, historical
-        candles or the private Rust feed are activated. No demo data is substituted.</p>
-      <div className="qt-actions">
-        <button type="button" className="terminal-action terminal-secondary-action"
-          onClick={()=>openView('diagnostics')}>Index activation diagnostic</button>
-        <button type="button" className="terminal-action terminal-secondary-action"
-          onClick={()=>openView('private-live')}>View Rust chart readiness</button>
-      </div>
-    </section>
-    <section className="terminal-surface"><h2>NSE / BSE index catalog</h2>
-      <div className="qt-market-tags">{INDIA_INDEX_MARKETS.map(x=><span key={x.id}>
-        {x.name} · {x.exchange==='BSE_INDEX'?'BSE':'NSE'}</span>)}</div>
-      <p className="terminal-footnote">{indexCatalog?.indexes?.length===6
-        ?'Six index aliases available for discovery.':'Index discovery unavailable.'}
-        {' '}Current display entitlement and real exchange candles require independent verification.</p>
-    </section>
+      <aside className="qt-setup-aside terminal-surface" aria-label="Connection help">
+        <div className="qt-setup-art" aria-hidden="true"><ShieldCheck size={42}/></div>
+        <p className="terminal-eyebrow">SECURE BY DESIGN</p>
+        <h2>Private market data, without the console</h2>
+        <p>Set up tokens and draft index files through QSYN. Your browser never
+          receives the private Upstox token, writes a server path, or grants trading access.</p>
+        <div className="qt-setup-assurances">
+          <div><ShieldCheck size={16}/><span>Existing PHP/Rust runtime — no extra worker executable</span></div>
+          <div><LockKeyhole size={16}/><span>Private owner-only files and administrator CSRF checks</span></div>
+          <div><Activity size={16}/><span>Real index data only after verified exchange permissions</span></div>
+        </div>
+        <p className="terminal-footnote">Draft configuration is not an exchange
+          license. Live candles remain unavailable until an authorized worker,
+          private history reader and account-bound chart access are verified.</p>
+      </aside>
+    </div>
   </div>;
 }
 export function OperationsWorkspace(){

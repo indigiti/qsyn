@@ -26,7 +26,8 @@ export function ProviderStatusPanel(){
             credentials:'same-origin',cache:'no-store',signal:controller.signal,
             headers:{Accept:'application/json'}}).then(r=>r.ok?r.json():null).catch(()=>null);
           const known=status?.schema==='QSYN-INDEX-WEB-OPERATIONS/1';
-          const code=known && !status.private_plan_ready ? 'INDEX_PLAN_NOT_PROVISIONED'
+          const code=known && status.private_plan_unapproved_draft ? 'INDEX_PLAN_DRAFT_PENDING_RIGHTS'
+            :known && !status.private_plan_ready ? 'INDEX_PLAN_NOT_PROVISIONED'
             :known && !status.executor_ready ? 'INDEX_EXECUTOR_UNAVAILABLE'
             :known && !status.rust_binary_ready ? 'INDEX_WORKER_BINARY_UNAVAILABLE'
             :known && !status.archive_ready ? 'INDEX_HISTORY_STORAGE_UNAVAILABLE'
@@ -57,23 +58,42 @@ export function ProviderStatusPanel(){
     }).finally(()=>{if(!controller.signal.aborted)setBusy(false)});
     return ()=>controller.abort();
   },[generation]);
-  return <section className="terminal-surface qt-provider-status" aria-label="Market-data provider status">
-    <div className="terminal-card-head"><h2>Data provider registry · live checks</h2>
+  return <section className="qt-provider-status" aria-label="Market-data provider status">
+    <div className="qt-provider-header">
+      <div><h3>Available data sources</h3><p className="terminal-footnote">
+        Connect public venues instantly; licensed Indian indices use a separate private setup.</p></div>
       <button type="button" className="terminal-action terminal-secondary-action"
         disabled={busy} onClick={()=>setGeneration(x=>x+1)}>
-        <RefreshCw size={15}/>{busy?' Checking…':' Recheck'}</button></div>
-    <p className="terminal-footnote">These checks identify a responding public venue
-      or privately stored credential. They do not certify continuously streaming
-      candles, licensed Indian display rights, account identity or execution.</p>
-    <div className="qt-table-wrap"><table className="qt-table">
-      <thead><tr><th>Provider</th><th>Market(s)</th><th>Evidence</th></tr></thead>
-      <tbody>{MARKET_PROVIDERS.map(p=><tr key={p.id}>
-        <td><strong>{p.label}</strong></td>
-        <td>{p.asset_classes.join(', ')}</td>
-        <td>{reports[p.id]?.code||'NOT_CHECKED'}</td>
-      </tr>)}</tbody>
-    </table></div>
-    <p className="terminal-footnote">Checked: {checked||'not yet checked'} ·
-      Run Diagnostics for full source/transport evidence. No broker token is returned.</p>
+        <RefreshCw size={15}/>{busy?' Checking…':' Recheck'}</button>
+    </div>
+    <div className="qt-provider-cards">
+      {MARKET_PROVIDERS.map(p=>{
+        const code=reports[p.id]?.code||'NOT_CHECKED';
+        const live=code==='HEALTH_API_RESPONDING';
+        return <article className="qt-provider-tile" key={p.id}>
+          <div className="qt-provider-logo" aria-hidden="true">{p.label.slice(0,2).toUpperCase()}</div>
+          <div className="qt-provider-tile-body">
+            <strong>{p.label}</strong>
+            <small>{p.asset_classes.join(' · ')}</small>
+            <span className={'qt-provider-evidence'+(live?' responding':'')}>
+              <span className="qt-status-dot" aria-hidden="true"/>{live?'API responding':code.replaceAll('_',' ').toLowerCase()}
+            </span>
+          </div>
+        </article>;
+      })}
+    </div>
+    <details className="qt-provider-details">
+      <summary>Technical source evidence</summary>
+      <p className="terminal-footnote">API response is not proof of streaming market candles,
+        NSE/BSE display rights, account identity or order execution.</p>
+      <div className="qt-table-wrap"><table className="qt-table">
+        <thead><tr><th>Provider</th><th>Status code</th></tr></thead>
+        <tbody>{MARKET_PROVIDERS.map(p=><tr key={p.id}>
+          <td>{p.label}</td><td>{reports[p.id]?.code||'NOT_CHECKED'}</td>
+        </tr>)}</tbody>
+      </table></div>
+    </details>
+    <p className="terminal-footnote">Checked: {checked||'not yet checked'}.
+      No broker credentials or prices are included in this report.</p>
   </section>;
 }
