@@ -4,6 +4,8 @@ import os
 import subprocess
 import tempfile
 from pathlib import Path
+from urllib.request import Request
+from urllib.error import HTTPError
 from IdentityHttpSmoke import await_server, client, open_port, php_server, request
 
 BASE="/qsyn/api/v1/admin/upstox/index-candles"
@@ -40,8 +42,13 @@ def main():
             assert "access_token" not in str(notready)
             assert request(admin,host,BASE+"?symbol=../../NIFTY&interval=1m")[0]==409
             assert request(admin,host,BASE,"POST",{})[0]==405
-            assert request(admin,host,BASE+"?symbol=NIFTY&interval=1m",
-                browser_origin="http://malicious.invalid")[0]==403
+            foreign=Request(host+BASE+"?symbol=NIFTY&interval=1m",
+                headers={"Origin":"http://malicious.invalid","Accept":"application/json"})
+            try:
+                admin.open(foreign,timeout=5)
+                raise AssertionError("foreign origin accepted")
+            except HTTPError as err:
+                assert err.code==403,err.code
             code,logout,_=request(admin,host,
                 "/qsyn/api/v1/admin/rust/logout","POST",{},login["csrf"])
             assert code==200
