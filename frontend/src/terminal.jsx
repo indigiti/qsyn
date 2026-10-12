@@ -19,6 +19,7 @@ import { createWidget, createChartGrid, mountIndicatorSettings } from 'openalgo-
 import {bindIndicatorLegendSettings} from './indicator-legend-settings.js';
 import { observeChartCancellations } from './chart-cancellation.js';
 import { QsynMarketsFeed } from './qsyn-markets-feed.js';
+import {AdminIndexHistoryFeed} from './admin-index-history-feed.js';
 import {saveIndexIntent} from './private-index-intent.js';
 import {MAX_AUTO_BACKFILL_BARS,INITIAL_BACKFILL_BARS} from './crypto-feed.js';
 import {observeWickScienceBackfill} from './wick-science-auto-backfill.js';
@@ -154,7 +155,7 @@ const ignoreHomepageWidget = () => {};
  */
 function HomepageChart({ theme, embedded = false,
   initialExchange = cryptoDefault.exchange+':'+cryptoDefault.market,
-  initialSymbol = cryptoDefault.symbol, onPrivateIndexRequest = null }) {
+  initialSymbol = cryptoDefault.symbol, onPrivateIndexRequest = null, adminIndexHistory = false }) {
   const host=useRef(null);
   const [message,setMessage]=useState('Connecting public exchange candles…');
   const [blockedIndex,setBlockedIndex]=useState(null);
@@ -165,9 +166,12 @@ function HomepageChart({ theme, embedded = false,
     let active=true;
     // Upstream ChartGrid can reject an obsolete internal load when it cancels
     // a refresh or changes interval; a known AbortError is not an app fault.
-    const feed=new QsynMarketsFeed(s=>{if(active)setMessage(s);},{
-      onBlockedIndex:index=>{if(active)setBlockedIndex(index);}
-    });
+    const updateState=s=>{if(active)setMessage(s);};
+    const feed=adminIndexHistory
+      ?new AdminIndexHistoryFeed(updateState)
+      :new QsynMarketsFeed(updateState,{
+        onBlockedIndex:index=>{if(active)setBlockedIndex(index);}
+      });
     const grid=createChartGrid(host.current,{
       feed,symbol:initialSymbol,
       exchange:initialExchange,
@@ -249,7 +253,7 @@ function HomepageChart({ theme, embedded = false,
       slot?.remove();
       grid.destroy();feed.destroy();
     };
-  },[theme,nativeWorkspaces,nativeWatchlists,initialExchange,initialSymbol]);
+  },[theme,nativeWorkspaces,nativeWatchlists,initialExchange,initialSymbol,adminIndexHistory]);
   const openPrivateIndex=()=>{
     if(!blockedIndex)return;
     if(typeof onPrivateIndexRequest==='function'){
