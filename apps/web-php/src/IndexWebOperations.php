@@ -39,6 +39,10 @@ final class IndexWebOperations
         $bin = dirname(__DIR__) . '/bin';
         $worker = $bin . '/qsyn-upstox-index-worker';
         $history = $bin . '/qsyn-upstox-index-history';
+        $runnerOk = function_exists('proc_open')
+            && function_exists('proc_get_status')
+            && function_exists('proc_terminate')
+            && function_exists('proc_close');
         $planOk = self::privatePath($plan, false);
         $archiveOk = self::privatePath($archive, true);
         $binaryOk = is_file($worker) && is_executable($worker) && !is_link($worker)
@@ -50,7 +54,7 @@ final class IndexWebOperations
             && getenv('QSYN_INDEX_WEB_OPERATIONS_ENABLED') === '1';
         $supervisor = (string)(getenv('QSYN_INDEX_WEB_SUPERVISOR_CONFIG') ?: '');
         $ctl = (string)(getenv('QSYN_SUPERVISORCTL_BIN') ?: '/usr/bin/supervisorctl');
-        $supervisorOk = $enabled
+        $supervisorOk = $enabled && $runnerOk
             && getenv('QSYN_INDEX_WEB_SERVICE_CONTROL_ENABLED') === '1'
             && self::privatePath($supervisor, false)
             && in_array($ctl, ['/usr/bin/supervisorctl', '/usr/local/bin/supervisorctl'], true)
@@ -59,7 +63,8 @@ final class IndexWebOperations
             && self::supervisorProgram('history') !== null;
         return compact('plan','archive','worker','history','planOk','archiveOk',
             'binaryOk','enabled','supervisor','ctl','supervisorOk') + [
-            'preflightOk'=>$readOnly && $planOk && $archiveOk && $binaryOk,
+            'runnerOk'=>$runnerOk,
+            'preflightOk'=>$readOnly && $runnerOk && $planOk && $archiveOk && $binaryOk,
             'backfillOk'=>$enabled && getenv('QSYN_INDEX_WEB_BACKFILL_ENABLED') === '1'
                 && getenv('QSYN_UPSTOX_INDEX_HISTORY_ENABLE') === '1'
         ];
@@ -217,6 +222,7 @@ final class IndexWebOperations
                 'preflight_enabled'=>$s['preflightOk'],
                 'private_plan_ready'=>$s['planOk'],'archive_ready'=>$s['archiveOk'],
                 'rust_binary_ready'=>$s['binaryOk'],
+                'executor_ready'=>$s['runnerOk'],
                 'backfill_enabled'=>$s['backfillOk'],
                 'service_controls_enabled'=>$s['supervisorOk'],
                 'services'=>$state,'trading_enabled'=>false,
