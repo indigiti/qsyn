@@ -1,3 +1,24 @@
+#[path = "bin/qsyn-market-archive.rs"]
+mod market_archive_entry;
+#[path = "bin/qsyn-openalgo-feed.rs"]
+mod openalgo_feed_entry;
+#[path = "bin/qsyn-history-import.rs"]
+mod history_import_entry;
+#[path = "bin/qsyn-private-chart.rs"]
+mod private_chart_entry;
+#[path = "bin/qsyn-upstox-worker.rs"]
+mod upstox_worker_entry;
+#[path = "bin/qsyn-upstox-index-worker.rs"]
+mod upstox_index_worker_entry;
+#[path = "bin/qsyn-upstox-history.rs"]
+mod upstox_history_entry;
+#[path = "bin/qsyn-upstox-index-history.rs"]
+mod upstox_index_history_entry;
+#[path = "bin/qsyn-private-index-history.rs"]
+mod private_index_history_entry;
+#[path = "bin/qsyn-private-history.rs"]
+mod private_history_entry;
+
 mod binary_activation;
 mod crypto_public;
 mod process_control;
@@ -71,8 +92,37 @@ async fn demo_session(mut socket: WebSocket) {
     }
 }
 
+/// Opt-in dispatcher for previously separate operator utilities. The CLI
+/// intentionally retains the original restricted worker validations and never
+/// auto-starts a privileged market source from the public web service.
+fn dispatch_operator_mode(args: &[String]) -> bool {
+    if args.first().map(String::as_str) != Some("mode") {
+        return false;
+    }
+    match args.get(1).map(String::as_str) {
+        Some("qsyn-market-archive") => market_archive_entry::main(),
+        Some("qsyn-openalgo-feed") => openalgo_feed_entry::main(),
+        Some("qsyn-history-import") => history_import_entry::main(),
+        Some("qsyn-private-chart") => private_chart_entry::main(),
+        Some("qsyn-upstox-worker") => upstox_worker_entry::main(),
+        Some("qsyn-upstox-index-worker") => upstox_index_worker_entry::main(),
+        Some("qsyn-upstox-history") => upstox_history_entry::main(),
+        Some("qsyn-upstox-index-history") => upstox_index_history_entry::main(),
+        Some("qsyn-private-index-history") => private_index_history_entry::main(),
+        Some("qsyn-private-history") => private_history_entry::main(),
+        _ => {
+            eprintln!("QSYN runtime: unknown operator mode");
+            std::process::exit(2);
+        }
+    }
+    true
+}
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = std::env::args().skip(1).collect::<Vec<_>>();
+    if dispatch_operator_mode(&args) {
+        return Ok(());
+    }
     if let Some(result) = process_control::dispatch(&args) {
         println!("{}", result);
         if result["ok"] == true {

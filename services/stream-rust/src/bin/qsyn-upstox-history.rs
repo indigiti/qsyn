@@ -14,8 +14,8 @@ fn denied() -> io::Error {
     )
 }
 #[tokio::main]
-async fn main() {
-    let args: Vec<String> = env::args().skip(1).collect();
+pub(crate) async fn main() {
+    let args: Vec<String> = qsyn_stream::runtime_cli::operator_args("qsyn-upstox-history");
     let result = match args.as_slice() {
         [mode, settings_file, archive_dir, date] if mode == "check" || mode == "backfill" => {
             let approved =

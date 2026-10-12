@@ -2,8 +2,8 @@
 use qsyn_stream::upstox_index_worker::IndexWorkerSettings;
 use std::path::Path;
 
-fn main() {
-    let args = std::env::args().skip(1).collect::<Vec<_>>();
+pub(crate) fn main() {
+    let args = qsyn_stream::runtime_cli::operator_args("qsyn-upstox-index-worker");
     let result = match args.as_slice() {
         [operation, path] if operation == "check" || operation == "run" => {
             let settings = IndexWorkerSettings::from_private_file(Path::new(path));
