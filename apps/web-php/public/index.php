@@ -266,7 +266,7 @@ if (preg_match('#^/qsyn/api/v1/admin/upstox/(status|setup|begin|verify|discover|
     if (!is_file($src . '/NativeUpstoxWebApi.php')) {
         $src = dirname(__DIR__, 2) . '/private_html/qsyn/app/src';
     }
-    foreach (['RustAdmin','UpstoxOperatorOAuth','NativeUpstoxProfileVerifier','NativeUpstoxIndexDiscovery','NativeUpstoxWebApi'] as $unit) {
+    foreach (['RustAdmin','UpstoxOperatorOAuth','NativeUpstoxProfileVerifier','NativeUpstoxAnalyticsApi','NativeUpstoxIndexDiscovery','NativeUpstoxWebApi'] as $unit) {
         if (!is_file($src . '/' . $unit . '.php')) {
             respond(['error' => 'upstox_web_unavailable'], 503);
         }
