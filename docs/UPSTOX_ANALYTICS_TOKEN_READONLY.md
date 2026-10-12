@@ -102,3 +102,27 @@ WSS reverse proxy, stored index candles or a trading permission.
 - Distinguish *provider market authorization now* from *private index
   feed activated* and *live exchange data verified*. None follows
   automatically from successful token import.
+
+## Verify stored token before operator activation
+
+After an approved Cloudways deployment, open Terminal > Brokers and select
+**Verify stored token**. The administrator-only
+\`POST /qsyn/api/v1/admin/upstox/analytics/verify\` route re-reads the existing
+0600 Analytics Token file, rechecks its strict schema and operator-configured
+Upstox User ID, and makes a single fresh read-only HTTPS V3 feed-authorization
+request. It requires same-origin, administrator session and CSRF; it never
+accepts a token from the browser or returns any token or one-use WSS URL.
+
+A passing result is \`UPSTOX_ANALYTICS_MARKET_AUTHORIZED_NOW\`. A rejected
+token or temporary Upstox outage returns
+\`UPSTOX_ANALYTICS_MARKET_AUTH_UNAVAILABLE\`. Missing/unsafe files fail
+closed. These diagnostics do **not** attest the provider account identity,
+independent NSE/BSE display/retention rights, current BOD mapping, running
+index worker, exchange timestamps, or whether the public site can distribute
+index prices. Do not enable worker or exchange permission flags on the basis
+of a successful token check alone.
+
+Cloudways operator then selects the separate Analytics session file in an
+**independently approved** index worker plan and runs
+\`qsyn-upstox-index-worker check /ABS/PRIVATE/PLAN.json\` to validate the
+current file-based gates before any authorized process activation.
