@@ -171,6 +171,7 @@ jobs:
           node tests/india-index-contract.mjs
           node tests/chart-cancellation-contract.mjs
           node tests/terminal-routes-contract.mjs
+          node tests/market-provider-contract.mjs
       - name: Stage DigiOps-compatible release
         shell: bash
         run: |
@@ -186,6 +187,7 @@ jobs:
           printf 'QSYN private runtime; never store credentials in release artifacts.\n' > staging/private/runtime/README.txt
           cp apps/web-php/public/index.php staging/public/index.php
           cp apps/web-php/public/terminal-routes.json staging/public/terminal-routes.json
+          cp apps/web-php/public/market-provider-registry.json staging/public/market-provider-registry.json
           cp apps/web-php/src/TerminalRoutes.php staging/private/app/src/TerminalRoutes.php
           cp apps/web-php/src/TerminalAdminGate.php staging/private/app/src/TerminalAdminGate.php
           cp apps/web-php/public/admin-rust.php staging/public/admin-rust.php
@@ -333,6 +335,8 @@ jobs:
           test -s staging/public/assets/rust-activation-readiness.js
           test -s staging/public/admin-rust.php
           test -s staging/public/terminal-routes.json
+          test -s staging/public/market-provider-registry.json
+          php -r '$r=json_decode(file_get_contents("staging/public/market-provider-registry.json"),true,64,JSON_THROW_ON_ERROR); if(($r["schema"]??"")!=="QSYN-MARKET-PROVIDER-REGISTRY/1") exit(1);'
           test -s staging/private/app/src/TerminalRoutes.php
           test -s staging/private/app/src/TerminalAdminGate.php
           php -l staging/private/app/src/TerminalAdminGate.php
@@ -495,6 +499,8 @@ jobs:
           test -s verified-release/public/assets/rust-activation-readiness.js
           test -s verified-release/public/admin-rust.php
           test -s verified-release/public/terminal-routes.json
+          test -s verified-release/public/market-provider-registry.json
+          php -r '$r=json_decode(file_get_contents("verified-release/public/market-provider-registry.json"),true,64,JSON_THROW_ON_ERROR); if(($r["schema"]??"")!=="QSYN-MARKET-PROVIDER-REGISTRY/1") exit(1);'
           test -s verified-release/private/app/src/TerminalRoutes.php
           test -s verified-release/private/app/src/TerminalAdminGate.php
           php -l verified-release/private/app/src/TerminalAdminGate.php
