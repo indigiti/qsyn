@@ -38,6 +38,22 @@ try {
     must($stored['schema']==='QSYN-UPSTOX-ANALYTICS-SESSION/1','schema');
     must($stored['user_id']==='expected-account','bound_user');
     must($stored['access_token']===$token,'token_persisted_privately');
+    $callsAtVerify=0;
+    must(Api::verifyStored($base,'expected-account',
+        static function(string $value) use (&$callsAtVerify, $token): bool {
+            $callsAtVerify++;
+            return hash_equals($value, $token);
+        })===true,'existing_token_verified');
+    must($callsAtVerify===1,'provider_called_once');
+    must(Api::verifyStored($base,'other-account',
+        static function(string $value): bool { throw new RuntimeException('should_not_call'); }
+        )===null,'foreign_identity_rejected_before_provider');
+    must(Api::verifyStored($base,'expected-account',
+        static fn(string $value): bool=>false)===false,'provider_refusal_reported');
+    must(Api::verifyStored($base,'expected-account',
+        static function(string $value): bool {
+            throw new RuntimeException('upstox_unavailable');
+        })===false,'provider_error_sanitized');
     must($stored['order_routing_enabled']===false
         && $stored['display_entitlement_verified']===false
         && $stored['retention_entitlement_verified']===false,'no_rights_claim');
@@ -49,6 +65,8 @@ try {
     must(file_get_contents($p)!==false,'previous_valid_token_survives_failed_import');
     must(Api::store($base,'expected-account',$token,$provider),'safe_replacement');
     chmod($p,0644);
+    must(Api::verifyStored($base,'expected-account',
+        static fn(string $value): bool=>true)===null,'unsafe_file_not_verified');
     $failed=false;
     try { Api::store($base,'expected-account',$token,$provider); }
     catch (Throwable) { $failed=true; }
