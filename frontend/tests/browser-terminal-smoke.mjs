@@ -379,6 +379,12 @@ try {
   });
   await page.getByRole('button',{name:'Data Providers & Connections',exact:true}).first().click();
   await page.getByRole('heading',{name:'Data providers & connections'}).waitFor();
+  await page.getByRole('heading',{name:'Indian indices · web operations'}).waitFor();
+  if(await page.getByRole('button',{name:'Validate six-index plan'}).isEnabled() ||
+     await page.getByRole('button',{name:'Import approved historical candles'}).isEnabled() ||
+     await page.getByRole('button',{name:'Start worker'}).isEnabled())
+    throw new Error('Unprovisioned index web operations unexpectedly executable');
+
   if(new URL(page.url()).pathname!=='/qsyn/terminal/brokers')
     throw new Error('Broker view not routed in React');
   await page.getByRole('button',{name:'Refresh Upstox status'}).waitFor({timeout:12000});
