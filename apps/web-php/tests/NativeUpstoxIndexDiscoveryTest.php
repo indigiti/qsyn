@@ -6,6 +6,7 @@ declare(strict_types=1);
  * trading. Validates six bounded server-built INDEX searches and safe results.
  */
 require dirname(__DIR__).'/src/NativeUpstoxProfileVerifier.php';
+require dirname(__DIR__).'/src/NativeUpstoxAnalyticsApi.php';
 require dirname(__DIR__).'/src/NativeUpstoxIndexDiscovery.php';
 
 use QSYN\Broker\NativeUpstoxIndexDiscovery as Discovery;
@@ -135,7 +136,63 @@ try {
     if ($r['mapping_fully_resolved']!==false) {
         throw new RuntimeException('unsafe_oauth_file_accepted');
     }
-    echo "PASS Upstox authenticated fixed-host index search, six strict matches, reject ambiguity/pagination/token leak and unlicensed feed\n";
+    // Real-world gap: a valid Analytics Token may exist without a usable
+    // daily OAuth profile session. Its read-only V3 feed authorization is
+    // enough for instrument lookup, NOT provider account verification.
+    chmod($file,0600);
+    unlink($file);
+    $analyticsFile=$private.'/upstox-analytics-session.json';
+    $analyticsSession=$session;
+    $analyticsSession['schema']='QSYN-UPSTOX-ANALYTICS-SESSION/1';
+    file_put_contents($analyticsFile,json_encode($analyticsSession,JSON_THROW_ON_ERROR));
+    chmod($analyticsFile,0600);
+    $analyticsCalls=0;
+    $auth=static function(string $bearer) use ($token,&$analyticsCalls):bool {
+        ++$analyticsCalls;
+        return hash_equals($token,$bearer);
+    };
+    $calls=[];
+    $r=Discovery::discover($private,'TEST_UPSTOX',$mock,$auth);
+    if ($r['status']!=='resolved_for_review'
+        || $r['mapping_fully_resolved']!==true
+        || $r['credential_source']!=='analytics_read_only'
+        || $r['market_data_token_authorized_now']!==true
+        || $r['session_verified_now']!==false
+        || $r['account_identity_verified_by_analytics']!==false
+        || $r['current_bod_attested']!==false
+        || $r['exchange_display_entitlement_verified']!==false
+        || $r['index_feed_activated']!==false
+        || count($r['instruments'])!==6
+        || count($calls)!==6 || $analyticsCalls!==1) {
+        throw new RuntimeException('analytics_discovery_not_safe:'.json_encode($r));
+    }
+    $serialized=json_encode($r,JSON_THROW_ON_ERROR);
+    if (str_contains($serialized,$token)
+        || str_contains($serialized,'TEST_UPSTOX')
+        || str_contains($serialized,'access_token')) {
+        throw new RuntimeException('analytics_discovery_leaked_credentials');
+    }
+    $calls=[];
+    $denied=Discovery::discover($private,'TEST_UPSTOX',$mock,
+        static fn(string $bearer):bool=>false);
+    if ($denied['mapping_fully_resolved']!==false || $calls!==[]
+        || $denied['code']!=='UPSTOX_ANALYTICS_MARKET_AUTH_UNAVAILABLE') {
+        throw new RuntimeException('revoked_analytics_allowed_search');
+    }
+    $calls=[];
+    $foreign=Discovery::discover($private,'OTHER_USER',$mock,$auth);
+    if ($foreign['mapping_fully_resolved']!==false || $calls!==[]) {
+        throw new RuntimeException('foreign_analytics_user_accepted');
+    }
+    chmod($analyticsFile,0644);
+    $calls=[];
+    $unsafe=Discovery::discover($private,'TEST_UPSTOX',$mock,$auth);
+    if ($unsafe['mapping_fully_resolved']!==false || $calls!==[]) {
+        throw new RuntimeException('unsafe_analytics_file_accepted');
+    }
+    chmod($analyticsFile,0600);
+    unlink($analyticsFile);
+    echo "PASS Upstox authenticated fixed-host index search, OAuth and Analytics six strict matches, reject ambiguity/pagination/token leak and unlicensed feed\n";
 } finally {
     if (is_file($file)) unlink($file);
     rmdir($private);

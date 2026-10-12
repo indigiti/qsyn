@@ -29,7 +29,8 @@ final class NativeUpstoxIndexDiscovery
 
     /** @param ?callable(string,string):array $transport */
     public static function discover(
-        string $privateRoot, string $expectedUserId, ?callable $transport = null
+        string $privateRoot, string $expectedUserId, ?callable $transport = null,
+        ?callable $analyticsAuthorize = null
     ): array {
         $report = [
             'schema'=>self::SCHEMA,
@@ -38,6 +39,9 @@ final class NativeUpstoxIndexDiscovery
             'checked_at_utc'=>gmdate('c'),
             'source'=>'authenticated_upstox_instruments_search',
             'session_verified_now'=>false,
+            'market_data_token_authorized_now'=>false,
+            'account_identity_verified_by_analytics'=>false,
+            'credential_source'=>'none',
             'mapping_fully_resolved'=>false,
             'current_bod_attested'=>false,
             'exchange_display_entitlement_verified'=>false,
@@ -47,18 +51,40 @@ final class NativeUpstoxIndexDiscovery
             'instruments'=>[],
         ];
         try {
+            // OAuth profile verification and read-only Analytics Tokens are
+            // different provider contracts. Analytics cannot be required to
+            // call account-profile APIs (which may need a static IP). It can
+            // only authorize read-only instrument discovery for review, never
+            // identity or licensed market-data display.
             $check = NativeUpstoxProfileVerifier::verify(
                 $privateRoot, $expectedUserId, $transport
             );
-            if ($check['session_verified'] !== true) {
-                $report['code'] = 'UPSTOX_PROFILE_REVERIFICATION_REQUIRED';
-                return $report;
+            $token = null;
+            if (($check['session_verified'] ?? false) === true) {
+                $token = self::readBearer($privateRoot, $expectedUserId, false);
+                if ($token !== null) {
+                    $report['session_verified_now'] = true;
+                    $report['credential_source'] = 'oauth_profile_verified';
+                }
             }
-            $report['session_verified_now'] = true;
-            $token = self::readBearer($privateRoot, $expectedUserId);
             if ($token === null) {
-                $report['code'] = 'UPSTOX_PRIVATE_SESSION_UNAVAILABLE';
-                return $report;
+                $analytics = self::readBearer($privateRoot, $expectedUserId, true);
+                if ($analytics === null) {
+                    $report['code'] = 'UPSTOX_PRIVATE_SESSION_UNAVAILABLE';
+                    return $report;
+                }
+                $authorized = $analyticsAuthorize === null
+                    ? NativeUpstoxAnalyticsApi::marketAuthorize($analytics)
+                    : $analyticsAuthorize($analytics);
+                if ($authorized !== true) {
+                    $report['code'] = 'UPSTOX_ANALYTICS_MARKET_AUTH_UNAVAILABLE';
+                    return $report;
+                }
+                $token = $analytics;
+                $report['market_data_token_authorized_now'] = true;
+                $report['credential_source'] = 'analytics_read_only';
+                // This does not verify the provider's account/user identity.
+                $report['session_verified_now'] = false;
             }
             $all = true;
             foreach (self::TARGETS as $symbol=>$target) {
@@ -156,9 +182,9 @@ final class NativeUpstoxIndexDiscovery
         return $base;
     }
 
-    private static function readBearer(string $root,string $expectedUserId): ?string
+    private static function readBearer(string $root,string $expectedUserId,bool $analytics): ?string
     {
-        $path=$root.'/upstox-session.json';
+        $path=$root.'/'.($analytics?'upstox-analytics-session.json':'upstox-session.json');
         $st=@lstat($path);
         if (!$st || !is_file($path) || is_link($path)
             || ($st['mode'] & 0077) !== 0
@@ -169,7 +195,9 @@ final class NativeUpstoxIndexDiscovery
         if (!is_string($raw)) return null;
         $json=json_decode($raw,true,12,JSON_THROW_ON_ERROR);
         if (!is_array($json)
-            || ($json['schema'] ?? null) !== 'QSYN-UPSTOX-AUTH-SESSION/1'
+            || ($json['schema'] ?? null) !== ($analytics
+                ? 'QSYN-UPSTOX-ANALYTICS-SESSION/1'
+                : 'QSYN-UPSTOX-AUTH-SESSION/1')
             || ($json['broker'] ?? null) !== 'upstox'
             || ($json['user_id'] ?? null) !== $expectedUserId
             || ($json['order_routing_enabled'] ?? null) !== false

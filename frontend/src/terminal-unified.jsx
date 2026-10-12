@@ -482,7 +482,7 @@ function NativeUpstoxPanel({refreshTick=0}){
         disabled={busy||!status.token_stored} onClick={()=>void action('verify',{})}>
         <ShieldCheck size={16}/> Verify current Upstox session</button>
       <button type="button" className="terminal-action terminal-secondary-action"
-        disabled={busy||!status.token_stored} onClick={()=>void action('discover',{})}>
+        disabled={busy||(!status.token_stored&&!analytics?.token_stored)} onClick={()=>void action('discover',{})}>
         <Search size={16}/> Discover index instrument keys</button>
       <button type="button" className="terminal-action terminal-secondary-action" disabled={busy}
         onClick={()=>void load()}><RefreshCw size={16}/> Refresh OAuth status</button>
@@ -501,7 +501,7 @@ function NativeUpstoxPanel({refreshTick=0}){
           <td><code>{item.instrument_key||'Unresolved'}</code></td>
         </tr>)}</tbody>
       </table></div>
-      <p className="terminal-footnote">Read-only provider search. Keys are candidates
+      <p className="terminal-footnote">Read-only provider search. Analytics credentials authorize lookup, but do not verify the provider account identity. Keys are candidates
         for independent operator/BOD verification only. Current-BOD attestation,
         exchange display/retention rights, licensed Rust index streaming, public
         redistribution and trading all remain disabled or unverified.</p>
