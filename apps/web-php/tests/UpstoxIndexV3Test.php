@@ -54,6 +54,31 @@ foreach ([
 ] as $input) {
     expectReject(fn()=>UpstoxIndexV3::intradayPath(...$input),'bad_index_path_accepted');
 }
+// NSE/BSE regular 09:15–15:30 session has 375 distinct 1-minute
+// candle starts, last at 15:29. The old unconditional -300 slice silently
+// dropped the entire first 75 minutes despite Upstox supplying them.
+$fullSession=[];
+$clock=new DateTimeImmutable('2026-10-09T09:15:00+05:30');
+for ($i=0;$i<375;$i++) {
+    $stamp=$clock->modify('+'.$i.' minutes')->format('Y-m-d\\TH:i:sP');
+    $price=25100+$i/10;
+    $fullSession[]=[$stamp,$price,$price+2,$price-2,$price+1,0];
+}
+$providerDay=['status'=>'success','data'=>['candles'=>array_reverse($fullSession)]];
+$legacy=UpstoxIndexV3::normalize($providerDay,'1m',$asof);
+assertTrue(count($legacy)===300,'legacy_default_stays_bounded_300');
+$complete=UpstoxIndexV3::normalize($providerDay,'1m',$asof,400);
+assertTrue(count($complete)===375,'private_day_preserves_all_375');
+assertTrue((new DateTimeImmutable('@'.$complete[0]['time']))
+    ->setTimezone(new DateTimeZone('Asia/Kolkata'))->format('H:i')==='09:15',
+    'full_session_opening_candle_retained');
+assertTrue((new DateTimeImmutable('@'.$complete[374]['time']))
+    ->setTimezone(new DateTimeZone('Asia/Kolkata'))->format('H:i')==='15:29',
+    'full_session_final_candle_retained');
+foreach ([0,401] as $badLimit) {
+    expectReject(fn()=>UpstoxIndexV3::normalize($providerDay,'1m',$asof,$badLimit),
+        'out_of_range_bars_limit_accepted');
+}
 $bad=$upstox;
 $bad['data']['candles'][0][3]=30000;
 expectReject(fn()=>UpstoxIndexV3::normalize($bad,'1h',$asof),'invalid_low_accepted');
