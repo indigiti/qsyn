@@ -218,6 +218,7 @@ function NativeUpstoxPanel({refreshTick=0}){
   const [notice,setNotice]=useState('Checking native Upstox authorization readiness…');
   const [form,setForm]=useState({client_id:'',client_secret:'',expected_user_id:'',confirmed:false});
   const [analytics,setAnalytics]=useState(null);
+  const [analyticsVerification,setAnalyticsVerification]=useState(null);
   const [analyticsToken,setAnalyticsToken]=useState('');
   const [analyticsConfirmed,setAnalyticsConfirmed]=useState(false);
   const load=useCallback(async()=>{
@@ -251,12 +252,15 @@ function NativeUpstoxPanel({refreshTick=0}){
     const token=analyticsToken;
     setAnalyticsToken('');
     setAnalyticsConfirmed(false);
+    setAnalyticsVerification(null);
     setBusy(true);
     const controller=new AbortController();
     const timeout=setTimeout(()=>controller.abort(),20000);
     try{
       setNotice(operation==='import'
         ? 'Verifying read-only market WebSocket authorization with Upstox…'
+        : operation==='verify'
+        ? 'Checking existing private Analytics Token with the read-only Upstox feed API…'
         : 'Removing the locally stored Analytics Token (Upstox revocation remains separate)…');
       const response=await fetch(NATIVE_UPSTOX_API+'analytics/'+operation,{
         method:'POST',credentials:'same-origin',cache:'no-store',
@@ -272,8 +276,19 @@ function NativeUpstoxPanel({refreshTick=0}){
           ? data.error.toUpperCase() : 'ANALYTICS_REQUEST_DENIED');
       if(data.schema!=='QSYN-UPSTOX-ANALYTICS-STATUS/1')
         throw Error('INVALID_ANALYTICS_RESPONSE');
+      if(operation==='verify'){
+        if(typeof data.provider_feed_authorized_now!=='boolean' ||
+            !/^UPSTOX_ANALYTICS_MARKET_AUTH_[A-Z_]+$/.test(data.diagnostic_code||''))
+          throw Error('INVALID_ANALYTICS_VERIFICATION');
+        setAnalyticsVerification({verified:data.provider_feed_authorized_now,
+          checked_at_utc:data.checked_at_utc,code:data.diagnostic_code});
+      }
       setNotice(operation==='import'
         ? 'Read-only market-feed authorization verified at import and token stored privately. Actual account identity, index rights, historical data and live charts still require independent verification.'
+        : operation==='verify'
+        ? data.provider_feed_authorized_now
+          ? 'Analytics Token accepted by Upstox market-feed authorize now. Account identity, index rights, Rust worker and live prices are still unverified.'
+          : 'Stored token was rejected or the provider is unavailable. No index feed started. Check the sanitized diagnostic code.'
         : 'Local Analytics Token removed. If necessary, revoke it in the Upstox Developer Apps dashboard.');
       await loadAnalytics();
     }catch(err){
@@ -407,10 +422,16 @@ function NativeUpstoxPanel({refreshTick=0}){
             token verification does not approve exchange redistribution, retention
             or production feed activation.
           </label>
+          {analyticsVerification&&<p role="status">Stored-token check:
+            {' '}{analyticsVerification.verified?'Market-data authorization verified at check time':'Authorization unavailable'}
+            {' · '}{analyticsVerification.code}</p>}
           <div className="qt-actions">
             <button className="terminal-action" type="submit"
               disabled={busy||!analyticsConfirmed||analyticsToken.length<20}>
               Verify and store Analytics Token</button>
+            <button className="terminal-action terminal-secondary-action" type="button"
+              disabled={busy||!analytics.token_stored}
+              onClick={()=>void analyticsAction('verify')}>Verify stored token</button>
             <button className="terminal-action terminal-secondary-action" type="button"
               disabled={busy||!analytics.token_stored}
               onClick={()=>void analyticsAction('clear')}>Remove local token</button>
