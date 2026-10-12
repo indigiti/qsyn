@@ -3,7 +3,6 @@
 //! Provider OHLCV comes from validated exchange REST history and native
 //! public upstream WebSocket candles, with REST refresh on reconnect.
 mod stream;
-use qsyn_stream::market_pipeline::valid_ohlc;
 use axum::{
     extract::Query,
     http::StatusCode,
@@ -11,6 +10,7 @@ use axum::{
     routing::get,
     Json, Router,
 };
+use qsyn_stream::market_pipeline::valid_ohlc;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::{
