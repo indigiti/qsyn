@@ -70,3 +70,14 @@ A failing guard intentionally prevents packaging. For a genuine new Rust
 capability, first document the reason and expected CPU/RAM/ZIP impact, then
 update code and any explicitly approved policy change together in a reviewed
 PR. Never weaken checks or remove entitlement gates as a quick fix.
+
+## GitHub artifact extraction and permissions
+
+The source/staging guard requires the original Rust ELF and fixed launchers to
+be executable. GitHub Actions artifact extraction may normalize them to 0644,
+so the separate downloaded-artifact CI job validates exact file signatures,
+fixed wrapper content, entrypoint allowlists and compressed size **without**
+assuming extracted permissions survived. This is not a waiver for the
+Cloudways deployment: DigiOps must explicitly restore or preserve executable
+permission for all private/app/bin entries and verify one approved worker
+startup on staging before activating any private market feed.
