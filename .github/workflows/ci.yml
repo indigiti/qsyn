@@ -10,6 +10,16 @@ permissions:
   contents: read
 
 jobs:
+  rust-footprint:
+    name: Rust footprint guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Block unreviewed Rust binary targets and release profile regressions
+        run: python3 ops/rust_footprint_guard.py source .
+      - name: Verify fail-closed regression tests
+        run: python3 -m unittest discover -s ops -p 'test_rust_footprint_guard.py' -v
+
   php:
     name: PHP file-store and HTTP demo
     runs-on: ubuntu-latest

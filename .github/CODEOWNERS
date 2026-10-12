@@ -1,0 +1,7 @@
+# Rust runtime, release packaging, budget policy and gate changes
+/services/stream-rust/ @indigiti
+/.github/workflows/ @indigiti
+/ops/rust_footprint_guard.py @indigiti
+/ops/test_rust_footprint_guard.py @indigiti
+/docs/RUST_RELEASE_GUARDRAILS.md @indigiti
+/.github/CODEOWNERS @indigiti
