@@ -77,7 +77,7 @@ def check_source(root):
             and "--all-targets" not in builds[0], "RUST_RELEASE_MUST_BUILD_ONE_ELF")
     print("PASS: approved 10 source modes, one release ELF build, optimized release profile")
 
-def check_entries(entries):
+def check_entries(entries, enforce_executable=True):
     """entries: normalized relative paths -> (raw bytes, unix file mode)."""
     bins = {name for name in entries if name.startswith(BIN_DIR)}
     expected = {RUNTIME} | {BIN_DIR + name for name in OPERATOR_MODES}
@@ -89,17 +89,19 @@ def check_entries(entries):
             + ",".join(elfs))
     runtime_blob, runtime_mode = entries[RUNTIME]
     require(0 < len(runtime_blob) <= MAX_ELF_BYTES, "RUST_ELF_SIZE_BUDGET_EXCEEDED")
-    require(runtime_mode & 0o111, "RUST_ELF_NOT_EXECUTABLE")
+    if enforce_executable:
+        require(runtime_mode & 0o111, "RUST_ELF_NOT_EXECUTABLE")
     for name in OPERATOR_MODES:
         blob, mode = entries[BIN_DIR + name]
         require(blob == launcher(name), "RUST_WRAPPER_NOT_EXACT:" + name)
-        require(mode & 0o111, "RUST_WRAPPER_NOT_EXECUTABLE:" + name)
+        if enforce_executable:
+            require(mode & 0o111, "RUST_WRAPPER_NOT_EXECUTABLE:" + name)
     require(not any(name.startswith("public/") and blob.startswith(b"\x7fELF")
                     for name, (blob, _) in entries.items()), "RUST_ELF_IN_PUBLIC_WEBROOT")
     print(f"PASS: exactly one private ELF ({len(runtime_blob):,} bytes), "
           f"{len(OPERATOR_MODES)} fixed executable launchers")
 
-def check_staging(root):
+def check_staging(root, enforce_executable=True):
     root = Path(root)
     require(root.is_dir(), "STAGING_ROOT_MISSING")
     entries = {}
@@ -109,7 +111,9 @@ def check_staging(root):
         if path.is_file():
             relative = path.relative_to(root).as_posix()
             entries[relative] = (path.read_bytes(), path.stat().st_mode)
-    check_entries(entries)
+    # actions/download-artifact resets file permissions to 0644 on extract.
+    # The pre-upload staging pass must still require 0755 executable entries.
+    check_entries(entries, enforce_executable=enforce_executable)
     with tempfile.TemporaryDirectory(prefix="qsyn-footprint-") as temp:
         archive = Path(temp) / "payload.zip"
         with ZipFile(archive, "w", ZIP_DEFLATED, compresslevel=9) as output:
@@ -146,13 +150,14 @@ def check_artifact(path):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("mode", choices=("source", "staging", "artifact"))
+    parser.add_argument("mode", choices=("source", "staging", "extracted", "artifact"))
     parser.add_argument("path", type=Path, nargs="?")
     args = parser.parse_args()
     path = args.path or (Path(__file__).resolve().parents[1]
                          if args.mode == "source" else None)
     require(path is not None, "REQUIRED_PATH_MISSING")
     {"source": check_source, "staging": check_staging,
+     "extracted": lambda directory: check_staging(directory, enforce_executable=False),
      "artifact": check_artifact}[args.mode](path)
 
 if __name__ == "__main__":
