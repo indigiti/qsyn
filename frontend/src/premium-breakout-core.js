@@ -273,7 +273,8 @@ export function replayPremiumStrategy(bars,input=PREMIUM_PRESET,syntheticBars=nu
     trading_enabled:false,levels,trades,events,incomplete,
     openPosition:position?{side:position.side,entry:position.entry,time:position.time,
       stop:position.stop,partial:position.partial,
-      unrealizedAtLastClose:(bars.at(-1).close-position.entry)*(position.side==='LONG'?1:-1)}:null,
+      unrealizedAtLastClose:(position.partial?position.firstPoints:0)+
+        (position.partial?0.5:1)*(bars.at(-1).close-position.entry)*(position.side==='LONG'?1:-1)}:null,
     summary:{completed:trades.length,wins:wins.length,losses:losses.length,
       winRate:trades.length?wins.length/trades.length:null,
       realizedPoints:trades.reduce((s,t)=>s+t.points,0),
