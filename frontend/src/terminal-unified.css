@@ -79,3 +79,7 @@
 .terminal-shell .qt-openalgo-setup .qt-setup-ports input{width:145px;max-width:100%;border:1px solid var(--q-line);color:var(--q-fg);background:var(--q-bg);border-radius:6px;padding:8px 10px}
 .terminal-shell .qt-openalgo-setup label.qt-setup-confirm{display:flex;flex-direction:row;align-items:flex-start;gap:9px;font-size:12px;line-height:1.5;font-weight:500}
 .terminal-shell .qt-openalgo-setup label.qt-setup-confirm input{flex:0 0 auto;width:auto;min-width:0;margin-top:3px}
+
+/* Research preset toggles must not inherit global 90px form-input widths. */
+.terminal-shell .qt-actions label.qt-checkbox{flex-direction:row;align-items:center;gap:7px}
+.terminal-shell .qt-actions label.qt-checkbox input[type="checkbox"]{width:15px;min-width:0;height:15px}
