@@ -316,8 +316,11 @@ try {
   // transition with public alias ONLY (no bearer/account/private key).
   await page.evaluate(()=>sessionStorage.setItem('qsyn-public-index-intent-v1','NSE_INDEX:index:NIFTY'));
   let indexHistoryChecks=0;
+  let resolveHistory;
+  const historySeen=new Promise(resolve=>{resolveHistory=resolve;});
   await page.route(/\/qsyn\/api\/v1\/admin\/upstox\/index-candles\?/,async route=>{
     indexHistoryChecks++;
+    resolveHistory();
     const stamp=Math.floor(Date.now()/60000)*60-60;
     await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({
       schema:'QSYN-UPSTOX-ADMIN-INDEX-CANDLES/1',
@@ -338,9 +341,12 @@ try {
   if(await page.getByRole('combobox',{name:'Market instrument'}).inputValue()!=='NSE_INDEX:index:NIFTY')
     throw new Error('Selected NIFTY was lost across administrator navigation');
   await page.waitForFunction(()=>document.querySelectorAll('.terminal-market-embedded .qsyn-crypto-grid canvas').length>0,null,{timeout:12000});
-  await page.waitForTimeout(800);
-  if(indexHistoryChecks<1)
-    throw new Error('Admin NIFTY chart failed to request real Upstox candle route');
+  const observed=await Promise.race([
+    historySeen.then(()=>true),
+    new Promise(resolve=>setTimeout(()=>resolve(false),12000)),
+  ]);
+  if(!observed||indexHistoryChecks<1)
+    throw new Error('Admin NIFTY chart did not request private Upstox candles');
   if(await page.getByRole('heading',{name:'Upstox · authenticated index candles'}).count()!==1)
     throw new Error('NIFTY did not open the direct authenticated candle chart');
   const reused=await page.evaluate(()=>sessionStorage.getItem('qsyn-public-index-intent-v1'));
