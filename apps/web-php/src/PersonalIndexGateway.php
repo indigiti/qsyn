@@ -91,7 +91,18 @@ final class PersonalIndexGateway
                 if(strlen($out)>110000){proc_terminate($proc);break;}
                 $state=proc_get_status($proc);
                 if(!$state['running']){
-                    $success=$state['exitcode']===0;break;
+                    // A normal full-session payload easily exceeds one 8 KiB
+                    // read. The child may exit after writing its final bytes;
+                    // always drain the remaining pipe before JSON decoding.
+                    // Otherwise genuine Rust history is silently truncated.
+                    $remaining=110001-strlen($out);
+                    if($remaining>0) {
+                        $tail=stream_get_contents($pipes[1],$remaining);
+                        if(is_string($tail))$out.=$tail;
+                    }
+                    stream_get_contents($pipes[2],4096);
+                    $success=$state['exitcode']===0 && strlen($out)<=110000;
+                    break;
                 }
                 usleep(30000);
             }
