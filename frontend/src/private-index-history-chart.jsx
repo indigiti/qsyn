@@ -1,5 +1,6 @@
 import React,{useEffect,useRef,useState} from 'react';
 import {createWidget} from 'openalgo-charts/widget';
+import {inRegularIndexSession} from './index-regular-session.js';
 
 
 /**
@@ -81,13 +82,23 @@ class PrivateIndexHistoryFeed {
     const scheduleReconnect=()=>{
       if(stopped||this.closed||controller.signal.aborted)return;
       if(reconnectTimer!==null)clearTimeout(reconnectTimer);
+      // No broker ticket, Upstox redirect or WSS handshake outside
+      // the regular session. Avoid reconnect churn and API quota waste.
+      const inSession=inRegularIndexSession();
+      if(!inSession)
+        this.onLive('Outside regular 09:15–15:30 IST session · live reconnect paused');
       reconnectTimer=setTimeout(()=>{
         reconnectTimer=null;
         void connect();
-      },retryDelay);
-      retryDelay=Math.min(retryDelay*2,30000);
+      },inSession?retryDelay:60000);
+      if(inSession)retryDelay=Math.min(retryDelay*2,30000);
     };
     const connect=async()=>{
+      if(stopped||this.closed||controller.signal.aborted)return;
+      if(!inRegularIndexSession()){
+        scheduleReconnect();
+        return;
+      }
       try{
         const response=await fetch('/qsyn/api/v1/admin/upstox/personal-index/ticket',{
           method:'POST',credentials:'same-origin',cache:'no-store',
@@ -136,11 +147,14 @@ class PrivateIndexHistoryFeed {
         socket.onerror=()=>{
           if(!stopped)this.onLive('RUST_UPSTOX_WEBSOCKET_UNAVAILABLE');
         };
-        socket.onclose=()=>{
-          if(!stopped){
-            this.onLive('Rust WebSocket disconnected · reconnecting');
-            scheduleReconnect();
+        socket.onclose=event=>{
+          if(stopped)return;
+          if(inRegularIndexSession()){
+            this.onLive(event?.code===1006
+              ? 'Rust WebSocket closed abnormally · checking connection'
+              : 'Rust WebSocket disconnected · reconnecting');
           }
+          scheduleReconnect();
         };
       }catch(e){
         if(!stopped&&!controller.signal.aborted){
