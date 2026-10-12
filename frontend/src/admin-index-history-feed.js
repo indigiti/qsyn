@@ -13,7 +13,9 @@ const INTERVALS=Object.freeze({'1m':60,'5m':300,'15m':900,'1h':3600,'1d':86400})
 export class AdminIndexHistoryFeed extends QsynMarketsFeed {
   constructor(onState=()=>{},deps={}){
     super(onState,{onBlockedIndex:()=>{}});
-    this.fetcher=deps.fetcher||fetch;
+    // Native window.fetch requires its browser receiver; calling it as
+    // this.fetcher(url, options) can throw before any HTTP request.
+    this.fetcher=deps.fetcher||((url,options)=>fetch(url,options));
     this.onBlockedIndex=deps.onBlockedIndex||(()=>{});
     this.lastRows=new Map();
     this.pollEveryMs=60000;
