@@ -126,7 +126,7 @@ final class NativeUpstoxIndexCandles
             $buffer='';
             $ok=curl_exec($ch);
             $code=(int)curl_getinfo($ch,CURLINFO_HTTP_CODE);
-            if ($ok!==true || $code!==200 || strlen($buffer)>3200000)
+            if ($ok===false || $code!==200 || strlen($buffer)>3200000)
                 return [$code,null];
             try {$data=json_decode($buffer,true,12,JSON_THROW_ON_ERROR);}
             catch (\Throwable) {return [$code,null];}
