@@ -22,6 +22,7 @@ export function MarketExplorer({theme,openView,CryptoChart,PrivateCharts}){
   const [tokenStatus,setTokenStatus]=useState(null);
   const [audit,setAudit]=useState(null);
   const [checking,setChecking]=useState(false);
+  const [showLicensedStream,setShowLicensedStream]=useState(false);
   const [checkSeq,setCheckSeq]=useState(0);
   const instruments=useMemo(()=>catalogFor(market).filter(row=>
     !family.venues.length||family.venues.includes(row.exchange)),[market]);
@@ -167,8 +168,10 @@ export function MarketExplorer({theme,openView,CryptoChart,PrivateCharts}){
             symbol={currentInstrument.symbol}/>
         : <PrivateCharts embedded onlyIndex selectedIndex={currentInstrument}/>}
       {['NIFTY','SENSEX'].includes(currentInstrument?.symbol)&&
-        <details><summary>Licensed continuous index feed</summary>
-          <PrivateCharts embedded onlyIndex selectedIndex={currentInstrument}/>
+        <details onToggle={event=>setShowLicensedStream(event.currentTarget.open)}>
+          <summary>Licensed continuous index feed</summary>
+          {showLicensedStream&&<PrivateCharts embedded onlyIndex
+            selectedIndex={currentInstrument}/>}
         </details>}
     </>}
     {market==='stocks'&&<section className="terminal-surface">
