@@ -316,7 +316,7 @@ try {
   // transition with public alias ONLY (no bearer/account/private key).
   await page.evaluate(()=>sessionStorage.setItem('qsyn-public-index-intent-v1','NSE_INDEX:index:NIFTY'));
   let indexHistoryChecks=0;
-  await page.route(/\\/qsyn\\/api\\/v1\\/admin\\/upstox\\/index-candles\\?/,async route=>{
+  await page.route(/\/qsyn\/api\/v1\/admin\/upstox\/index-candles\?/,async route=>{
     indexHistoryChecks++;
     const stamp=Math.floor(Date.now()/60000)*60-60;
     await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({
@@ -347,7 +347,7 @@ try {
   if(reused!==null)throw new Error('Index handoff intent was not consumed');
   if(await page.locator('.terminal-private-chart-grid').count()!==0)
     throw new Error('Private index stream started without explicit approval');
-  await page.unroute(/\\/qsyn\\/api\\/v1\\/admin\\/upstox\\/index-candles\\?/);
+  await page.unroute(/\/qsyn\/api\/v1\/admin\/upstox\/index-candles\?/);
   // Unified shell: no iframe, redirect or new page for markets, strategies,
   // broker readiness, diagnostics, operations or saved workspaces.
   await page.goto(origin+'/qsyn/terminal?view=diagnostics',{waitUntil:'domcontentloaded'});
