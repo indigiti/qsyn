@@ -41,7 +41,7 @@ export function PrivateIndexHistoryChart({symbol}){
       : 'Past-date historical chart · choose Today for current quotes');
     try{
       widget=createWidget(chartRef.current,{
-        feed,exchange:'UPSTOX_PERSONAL',symbol,interval:'1m',intervals:['1m'],
+        feed,exchange:'UPSTOX_PERSONAL',symbol,interval:'1m',intervals:['1s','1m'],
         theme:'light',persist:false,panels:true,toolbar:true,branding:false,
         navigation:{defaultVisibleBars:120,mousePan:'horizontal'},
       });
