@@ -147,9 +147,7 @@ fn day_ist(raw: &str, now: u64) -> io::Result<NaiveDate> {
     // Upstox V3 supports minute history back to January 2022, when the
     // specific index was listed. Bound requests to a single historical day;
     // the browser requests more only when the user pans left.
-    if day < NaiveDate::from_ymd_opt(2022, 1, 1).ok_or_else(denied)?
-        || day > today
-    {
+    if day < NaiveDate::from_ymd_opt(2022, 1, 1).ok_or_else(denied)? || day > today {
         return Err(denied());
     }
     Ok(day)
