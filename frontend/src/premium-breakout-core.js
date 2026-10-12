@@ -61,7 +61,7 @@ export function parsePremiumCsv(text) {
     const cells=line.split(',').map(x=>x.trim());
     if(cells.length!==keys.length)throw Error('Invalid column count at row '+(i+2));
     const stamp=cells[idx.time];
-    if(!/^\d{4}-\d\d-\d\dT\d\d:\d\d(?::\d\d)?(?:Z|[+-]\d\d:\d\d)$/.test(stamp))
+    if(!/^\d{4}-\d\d-\d\dT\d\d:\d\d(?::\d\d)?(?:\.\d{1,3})?(?:Z|[+-]\d\d:\d\d)$/.test(stamp))
       throw Error('Time must be ISO 8601 with offset at row '+(i+2));
     const time=Date.parse(stamp);
     if(!Number.isFinite(time)|| (prev!==null&&time<=prev))
