@@ -64,6 +64,22 @@ def main():
         assert request(admin,origin,API,'POST',invalid,status['csrf'])[0]==422,invalid
       code,result,_=request(admin,origin,API,'POST',good,status['csrf'])
       assert code==409 and result['error']=='upstox_analytics_token_not_ready',(code,result)
+      chart='/qsyn/api/v1/admin/upstox/private-index-chart'
+      owner={**good,'private_view_acknowledged':True}
+      assert request(guest,origin,chart,'POST',owner)[0]==401
+      assert request(admin,origin,chart)[0]==405
+      assert request(admin,origin,chart,'POST',owner)[0]==403
+      assert request(admin,origin,chart,'POST',owner,status['csrf'],
+        browser_origin='http://evil.example')[0]==403
+      assert request(admin,origin,chart,'POST',good,status['csrf'])[0]==422
+      assert request(admin,origin,chart,'POST',{**owner,
+        'instrument_key':'NSE_FO|123'},status['csrf'])[0]==422
+      assert request(admin,origin,chart,'POST',{**owner,
+        'private_view_acknowledged':False},status['csrf'])[0]==422
+      assert request(admin,origin,chart,'POST',{**owner,
+        'symbol':'BANKNIFTY'},status['csrf'])[0]==422
+      code,result,_=request(admin,origin,chart,'POST',owner,status['csrf'])
+      assert code==409 and result['error']=='upstox_analytics_token_not_ready',(code,result)
       assert not list(runtime.rglob('*index*'))
       print('PASS core history proof: restricted admin, fixed symbols and date, no secrets or worker activation')
     finally:
