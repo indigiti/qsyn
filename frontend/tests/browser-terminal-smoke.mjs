@@ -545,8 +545,19 @@ try {
   });
   await page.getByRole('button',{name:'Today',exact:true}).click();
   await page.getByRole('button',{name:'Open SENSEX historical chart'}).click();
-  await page.getByText(/Rust WebSocket connected|RUST_UPSTOX_WEBSOCKET_UNAVAILABLE|Rust WebSocket disconnected/)
-    .first().waitFor({timeout:15000});
+  try {
+    await page.getByText(/Rust WebSocket connected|RUST_UPSTOX_WEBSOCKET_UNAVAILABLE|Rust WebSocket disconnected/)
+      .first().waitFor({timeout:15000});
+  } catch(error) {
+    const report=await page.evaluate(()=>({
+      clock:new Date().toISOString(),
+      text:document.querySelector('.qt-private-history-chart')?.innerText?.slice(-900),
+      canvases:document.querySelectorAll('.qt-private-history-host canvas').length,
+    }));
+    throw new Error('Rust WSS session browser mock did not connect: '+JSON.stringify({
+      report,rustTicketCalls,error:String(error)
+    }));
+  }
   if(rustTicketCalls<1)throw Error('Rust WS ticket was never requested');
   // At 19:43 IST the real chart must not burn Upstox tickets or reconnect
   // repeatedly for a closed regular NSE/BSE trading session.
