@@ -35,9 +35,10 @@ private/app/bin/qsyn-upstox-index-worker check /ABSOLUTE/PRIVATE/PLAN.json
   are granted by a compiled binary being present.
 * Before promoting the artifact, confirm DigiOps applies executable permission
   to the `qsyn-stream` ELF **and** its POSIX launchers after extracting the
-  Actions artifact. GitHub upload-artifact does not preserve executable bits.
-  The staging packaging job checks executable bits before upload; extraction
-  must be verified separately by the stage operator.
+  Actions artifact. The reviewed workflow artifact ZIP has executable-mode
+  entries, but host-specific extraction behavior can differ. Confirm modes
+  and smoke-test a launcher on the staging host; packaging alone is not
+  evidence that an existing Supervisor worker can restart.
 * The release ZIP no longer contains separately compiled ELF workers. For
   rollback, redeploy the previous attested release and restore approved
   Supervisor configuration if necessary. Never start two workers on the same
