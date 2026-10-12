@@ -37,16 +37,20 @@ export function observeWickScienceBackfill(widget,feed){
     return ()=>{};
 
   let active=true,sourceKey='',attempted=0;
+  let indexPaging=false,indexPages=0;
   const check=()=>{
     if(!active||widget.isDestroyed)return;
     const interval=widget.interval(),exchange=widget.exchange(),symbol=widget.symbol();
     const step=INTERVAL_SECONDS[interval];
     const key=exchange+':'+symbol+':'+interval;
-    if(key!==sourceKey){sourceKey=key;attempted=0;}
+    if(key!==sourceKey){sourceKey=key;attempted=0;indexPages=0;}
     const required=wickRequiredBars(widget.chart.indicators(),interval);
-    // The ordinary homepage load already fetches 1600 candles. Avoid an
-    // unnecessary reload for default 100-sample 3m/5m setups.
-    if(!step||required<=INITIAL_BACKFILL_BARS)return;
+    if(!step||!required)return;
+    const privateIndex=(exchange==='NSE_INDEX:index'||exchange==='BSE_INDEX:index');
+    // Public crypto loads 1600+ candles by default. Indian indices start
+    // with one 375-minute session; request *older pages* via native
+    // loadMore(), not load(), which would just fetch the same single day.
+    if(!privateIndex&&required<=INITIAL_BACKFILL_BARS)return;
     const state=controller.getState();
     const previous=state?.request;
     // Never cancel an ongoing native initial load, nor load an obsolete symbol
@@ -55,6 +59,18 @@ export function observeWickScienceBackfill(widget,feed){
       previous.exchange!==exchange||previous.interval!==interval)return;
     const bars=typeof controller.bars==='function'?controller.bars():state.bars;
     if((bars?.length||0)>=required)return;
+    if(privateIndex){
+      if(indexPaging || state.hasMore===false || indexPages>=12 ||
+        typeof controller.loadMore!=='function')return;
+      indexPaging=true;
+      indexPages++;
+      const count=bars?.length||0;
+      void controller.loadMore().then(rows=>{
+        indexPaging=false;
+        if(active&&!widget.isDestroyed&&(rows?.length||0)>count)check();
+      }).catch(()=>{indexPaging=false;});
+      return;
+    }
     if(required<=attempted)return;
     attempted=required;
     feed.setHistoryTarget(exchange,symbol,interval,required);
