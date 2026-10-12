@@ -54,6 +54,7 @@ export class QsynMarketsFeed extends QsynCryptoFeed {
     this.personalProof=null;
     this.personalFeeds=new Map();
     this.personalBars=new Map();
+    this.historyStatus=new Map();
     this.activeIndex=null;
   }
   async _proof(){
@@ -86,10 +87,14 @@ export class QsynMarketsFeed extends QsynCryptoFeed {
     if(old?.day===day)return old;
     old?.destroy();
     this.personalBars.delete(key);
+    this.historyStatus.delete(key);
     const feed=new PrivateIndexHistoryFeed({
       symbol:instrument.symbol,day,csrf,
       onStatus:msg=>{if(!this.closed)this.onState(instrument.name+' · '+msg);},
-      onLive:msg=>{if(!this.closed)this.onState(instrument.name+' · '+msg);}
+      onLive:msg=>{
+        if(!this.closed)this.onState((this.historyStatus.get(key)||
+          instrument.name+' · awaiting private Rust history')+' · '+msg);
+      }
     });
     this.personalFeeds.set(key,feed);
     return feed;
@@ -128,9 +133,13 @@ export class QsynMarketsFeed extends QsynCryptoFeed {
       if(this.closed||req.signal?.aborted)return [];
       if(bars.length)this.personalBars.set(instrument.id,bars);
       const result=aggregatePersonalIndexBars(bars,req.interval);
-      if(bars.length)this.onState(instrument.name+' · '+bars.length+
-        ' real Rust Upstox 1m candles · '+day+
-        (req.interval==='1m'?'':' · derived '+req.interval));
+      if(bars.length){
+        const label=instrument.name+' · '+bars.length+
+          ' real Rust Upstox 1m candles · '+day+
+          (req.interval==='1m'?'':' · derived '+req.interval);
+        this.historyStatus.set(instrument.id,label);
+        this.onState(label);
+      }
       return result;
     }catch(error){
       if(this.closed||req.signal?.aborted||error?.name==='AbortError')return [];
@@ -178,6 +187,7 @@ export class QsynMarketsFeed extends QsynCryptoFeed {
     for(const session of this.personalFeeds.values())session.destroy();
     this.personalFeeds.clear();
     this.personalBars.clear();
+    this.historyStatus.clear();
     this.personalProof=null;
     super.destroy();
   }
