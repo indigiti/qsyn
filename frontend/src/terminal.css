@@ -291,28 +291,30 @@ button:focus-visible,a:focus-visible{outline:2px solid var(--q-accent);outline-o
  .qsyn-homepage .oac-topbar::-webkit-scrollbar{display:none}
 }
 
-/* Only appears when an unlicensed India index is deliberately selected.
-   Leave the normal crypto homepage as a clean, edge-to-edge chart. */
+/* The index denial is a compact notice, not a chart-blocking modal. */
 .qsyn-india-entitlement-note{
-  position:absolute;z-index:55;left:50%;top:72px;
-  transform:translateX(-50%);
-  max-width:min(92vw,510px);
-  padding:9px 14px;margin:0;
-  border-radius:7px;
-  border:1px solid rgba(148,163,184,.65);
-  background:rgba(15,23,42,.93);color:#fff;
-  text-align:center;font-size:12px;line-height:1.45;
-  display:flex;flex-direction:column;gap:7px;align-items:center;
-  pointer-events:auto;
+  position:absolute;z-index:55;right:16px;top:62px;left:auto;
+  transform:none;width:min(345px,calc(100vw - 32px));box-sizing:border-box;
+  padding:14px 16px;margin:0;border-radius:11px;
+  border:1px solid #cbd5e1;background:rgba(255,255,255,.97);
+  color:#15243b;text-align:left;box-shadow:0 10px 30px rgba(15,23,42,.10);
+  display:flex;flex-direction:column;gap:9px;pointer-events:auto
 }
-.qsyn-india-entitlement-note strong{font-size:13px;line-height:1.3}
-.qsyn-india-entitlement-note button{
-  cursor:pointer;color:#fff;font:inherit;font-weight:700;
-  padding:7px 13px;background:#185ca0;border:1px solid #5a97cb;
-  border-radius:6px
+.qsyn-india-entitlement-note strong{font-size:13px;line-height:1.35}
+.qsyn-india-entitlement-note span{display:block;color:#69778b;font-size:11px;margin-top:3px}
+.qsyn-india-entitlement-note p{font-size:11px;line-height:1.5;margin:0;color:#526077}
+.qsyn-india-note-actions{display:flex;flex-wrap:wrap;align-items:center;gap:10px}
+.qsyn-india-note-actions a,.qsyn-india-note-actions button{
+  cursor:pointer;font:inherit;font-size:11px;font-weight:700;
+  border-radius:7px;padding:7px 10px;line-height:1.4;text-decoration:none
 }
-.qsyn-india-entitlement-note button:focus-visible{
-  outline:2px solid #fff;outline-offset:3px
+.qsyn-india-note-actions a{background:#135da8;border:1px solid #135da8;color:white}
+.qsyn-india-note-actions button{border:1px solid #cbd5e1;background:white;color:#173a68}
+.qsyn-india-note-actions a:focus-visible,.qsyn-india-note-actions button:focus-visible{
+  outline:2px solid #2563eb;outline-offset:3px
 }
-.qsyn-india-entitlement-note span{font-size:11px;opacity:.9}
+@media(max-width:650px){
+  .qsyn-india-entitlement-note{top:58px;right:8px;width:min(320px,calc(100vw - 16px))}
+}
+
 
