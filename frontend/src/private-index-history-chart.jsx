@@ -1,13 +1,15 @@
 import React,{useEffect,useRef,useState} from 'react';
 import {createWidget} from 'openalgo-charts/widget';
+import {AuthorizedIndexLiveBridge,verifyPrivateIndexLiveGrant} from './private-index-live-bridge.js';
 
 /**
  * Historical 1m charts only. No WSS, live tick synthesis, token transport in
  * browser, persistent OHLC cache, public NSE/BSE API or simulated fallback.
  */
 class PrivateIndexHistoryFeed {
-  constructor({symbol,day,csrf,onStatus}){
+  constructor({symbol,day,csrf,onStatus,liveBridge=null}){
     this.symbol=symbol;this.day=day;this.csrf=csrf;this.onStatus=onStatus;
+    this.liveBridge=liveBridge;
     this.closed=false;this.controllers=new Set();
   }
   async getBars(req){
@@ -65,8 +67,18 @@ class PrivateIndexHistoryFeed {
       this.controllers.delete(ctl);req.signal?.removeEventListener('abort',abort);
     }
   }
-  // Deliberately no subscribeBars(): historical only.
-  destroy(){this.closed=true;for(const c of this.controllers)c.abort();this.controllers.clear();}
+  // Uses only the separately grant-validated operator-private source; a stored
+  // Analytics Token alone can never attach a streaming subscription.
+  subscribeBars(req,onBar){
+    return !this.closed&&this.liveBridge
+      ? this.liveBridge.subscribeBars(req,onBar):()=>{};
+  }
+  destroy(){
+    this.closed=true;
+    for(const c of this.controllers)c.abort();
+    this.controllers.clear();
+    this.liveBridge?.destroy();
+  }
 }
 
 export function PrivateIndexHistoryChart({symbol}){
@@ -76,6 +88,8 @@ export function PrivateIndexHistoryChart({symbol}){
   const [ack,setAck]=useState(false);
   const [opened,setOpened]=useState(false);
   const [status,setStatus]=useState('Checking private account access…');
+  const [liveGrant,setLiveGrant]=useState(null);
+  const [liveStatus,setLiveStatus]=useState('Live index feed not verified.');
   useEffect(()=>{
     const c=new AbortController();
     setOpened(false);setAck(false);setAuth(null);
@@ -93,9 +107,41 @@ export function PrivateIndexHistoryChart({symbol}){
     return()=>c.abort();
   },[symbol]);
   useEffect(()=>{
+    if(!opened||!auth)return;
+    const controller=new AbortController();
+    setLiveGrant(null);
+    setLiveStatus('Checking separately authorized private live index grant…');
+    void verifyPrivateIndexLiveGrant(symbol,{signal:controller.signal})
+      .then(grant=>{
+        if(controller.signal.aborted)return;
+        setLiveGrant(grant);
+        setLiveStatus(grant
+          ? 'Approved viewer grant available; exchange ticks not yet verified.'
+          : 'Historical only · independent live index grant unavailable.');
+      });
+    return()=>controller.abort();
+  },[opened,auth,symbol]);
+  useEffect(()=>{
     if(!opened||!auth||!chartRef.current)return;
     let widget;
-    const feed=new PrivateIndexHistoryFeed({symbol,day:date,csrf:auth,onStatus:setStatus});
+    const liveBridge=liveGrant ? new AuthorizedIndexLiveBridge({
+      symbol,account:liveGrant.account,
+      onStatus:message=>{
+        // WSS authentication alone is not exchange-tick evidence.
+        if(message.includes('chart connected'))
+          setLiveStatus('Private WSS authenticated; awaiting real exchange ticks.');
+        else setLiveStatus(message);
+      },
+      onTick:timeMs=>{
+        const time=new Intl.DateTimeFormat('en-GB',{
+          timeZone:'Asia/Kolkata',hour:'2-digit',minute:'2-digit',
+          second:'2-digit',hourCycle:'h23'
+        }).format(new Date(timeMs));
+        setLiveStatus('Live exchange tick verified · '+time+' IST');
+      },
+    }) : null;
+    const feed=new PrivateIndexHistoryFeed({symbol,day:date,csrf:auth,
+      onStatus:setStatus,liveBridge});
     try{
       widget=createWidget(chartRef.current,{
         feed,exchange:'UPSTOX_PERSONAL',symbol,interval:'1m',intervals:['1m'],
@@ -108,7 +154,7 @@ export function PrivateIndexHistoryChart({symbol}){
       feed.destroy();
       try{widget?.destroy();}catch{}
     };
-  },[opened,auth,date,symbol]);
+  },[opened,auth,date,symbol,liveGrant]);
   function changeDate(next){setDate(next);setOpened(false);}
   return <section className="terminal-surface qt-private-history-chart">
     <div className="terminal-card-head">
@@ -130,8 +176,10 @@ export function PrivateIndexHistoryChart({symbol}){
     {opened&&<div className="terminal-chart-host qt-private-history-host"
       ref={chartRef} aria-label={symbol+' private historical candlestick chart'}/>}
     <p role="status" className="terminal-footnote">{status}</p>
-    <p className="terminal-footnote">Account-only read-only history; no WebSocket,
-      no live update or public homepage publishing. Prices are never stored
-      in browser storage or returned to anonymous users.</p>
+    <p role="status" className="terminal-footnote">{liveStatus}</p>
+    <p className="terminal-footnote">Account-only historical data. Live exchange
+      ticks join this chart only after a separately approved private grant and
+      authenticated Rust WSS; no public homepage publishing. Prices and broker
+      credentials are never stored in browser storage.</p>
   </section>;
 }
