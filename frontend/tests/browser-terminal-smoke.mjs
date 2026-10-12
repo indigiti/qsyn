@@ -337,7 +337,7 @@ try {
     throw new Error('Homepage NIFTY selection did not open India indices');
   if(await page.getByRole('combobox',{name:'Market instrument'}).inputValue()!=='NSE_INDEX:index:NIFTY')
     throw new Error('Selected NIFTY was lost across administrator navigation');
-  await page.waitForFunction(()=>document.querySelector('#qsyn-native-chart canvas')!==null);
+  await page.waitForFunction(()=>document.querySelectorAll('.terminal-market-embedded .qsyn-crypto-grid canvas').length>0,null,{timeout:12000});
   await page.waitForTimeout(800);
   if(indexHistoryChecks<1)
     throw new Error('Admin NIFTY chart failed to request real Upstox candle route');
