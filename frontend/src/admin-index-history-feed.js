@@ -14,6 +14,7 @@ export class AdminIndexHistoryFeed extends QsynMarketsFeed {
   constructor(onState=()=>{},deps={}){
     super(onState,{onBlockedIndex:()=>{}});
     this.fetcher=deps.fetcher||fetch;
+    this.onBlockedIndex=deps.onBlockedIndex||(()=>{});
     this.lastRows=new Map();
     this.pollEveryMs=60000;
   }
@@ -37,6 +38,8 @@ export class AdminIndexHistoryFeed extends QsynMarketsFeed {
         const code=typeof data?.code==='string'&&/^[A-Z0-9_]{4,80}$/.test(data.code)
           ?data.code:'UPSTOX_INDEX_HTTP_'+resp.status;
         this.onState(index.name+' · '+code);
+        if([401,403,409,424,503].includes(resp.status))
+          this.onBlockedIndex({exchange:index.exchange,symbol:index.symbol,name:index.name});
         return [];
       }
       const payload=await resp.json();
@@ -62,6 +65,7 @@ export class AdminIndexHistoryFeed extends QsynMarketsFeed {
         prev=bar.time;
       }
       if(!this.closed){
+        this.onBlockedIndex(null);
         this.onState(index.name+' · '+payload.bars.length+
           ' real Upstox candles · read-only history/intraday · not WebSocket live');
       }
