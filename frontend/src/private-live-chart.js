@@ -81,6 +81,9 @@ export class PrivateAuthorizedChartFeed {
     this.account = account;
     this.instrument = instrument;
     this.onState = onState;
+    // Observer is invoked only after validating an authorized exchange-stamped
+    // quote, never merely after WSS authentication or a demo packet.
+    this.onVerifiedTick = typeof deps.onVerifiedTick === 'function' ? deps.onVerifiedTick : null;
     this.fetcher = deps.fetcher || fetch;
     this.socketFactory = deps.socketFactory || (url => new WebSocket(url));
     this.location = deps.location || location;
@@ -283,6 +286,7 @@ export class PrivateAuthorizedChartFeed {
           // timestamp. Ignore duplicates without clearing chart state.
           if (item.time_ms <= session.lastTimestamp) return;
           session.lastTimestamp = item.time_ms;
+          try { this.onVerifiedTick?.(item.time_ms); } catch { /* observer cannot interrupt feed */ }
           const update = builder.onTick({time:Math.floor(item.time_ms/1000),
             price:item.price, ltq:0});
           if (update) onBar(update.bar, {provisional:update.provisional===true});
