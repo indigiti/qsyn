@@ -65,7 +65,7 @@ export function IndexWebOperationsPanel(){
         /^[a-z0-9_]{3,90}$/i.test(e.message||'')?e.message:'INDEX_OPERATION_FAILED');
     }finally{clearTimeout(timer);setBusy(false);}
   }
-  const available=Boolean(status?.web_operations_enabled &&
+  const available=Boolean(status?.preflight_enabled &&
     status?.private_plan_ready && status?.archive_ready && status?.rust_binary_ready);
   return <section className="terminal-surface" aria-label="Indian index web operations">
     <div className="terminal-card-head"><h2>Indian indices · web operations</h2>
@@ -76,7 +76,7 @@ export function IndexWebOperationsPanel(){
     {status?<div className="qt-market-status-grid">
       <div><small>Private worker plan</small><strong>{status.private_plan_ready?'Present · not validated':'Not provisioned'}</strong></div>
       <div><small>Index history storage</small><strong>{status.archive_ready?'Private directory ready':'Unavailable'}</strong></div>
-      <div><small>Web operator</small><strong>{status.web_operations_enabled?'Enabled by host operator':'Host approval required'}</strong></div>
+      <div><small>Web operator</small><strong>{status.web_operations_enabled?'Imports and service actions approved':status.preflight_enabled?'Read-only checks available':'Private setup required'}</strong></div>
       <div><small>Live data</small><strong>Not verified</strong></div>
     </div>:<p role="status">Operations unavailable or administrator login required.</p>}
     <div className="qt-form qt-index-web-form">
@@ -92,7 +92,7 @@ export function IndexWebOperationsPanel(){
           disabled={busy||!available} onClick={()=>void execute('check')}>
           Validate six-index plan</button>
         <button className="terminal-action" type="button"
-          disabled={busy||!available||!status?.backfill_enabled}
+          disabled={busy||!available||!status?.web_operations_enabled||!status?.backfill_enabled}
           onClick={()=>void execute('backfill')}>
           Import approved historical candles</button>
       </div>
@@ -103,7 +103,7 @@ export function IndexWebOperationsPanel(){
           {' '}{status?.services?.[name]||'not checked'}</span>
         {['start','stop'].map(action=><button type="button"
           className="terminal-action terminal-secondary-action" key={action}
-          disabled={busy||!available||!status?.service_controls_enabled}
+          disabled={busy||!available||!status?.web_operations_enabled||!status?.service_controls_enabled}
           onClick={()=>void execute(action,name)}>
           {action==='start'?'Start':'Stop'} {name==='worker'?'worker':'reader'}
         </button>)}
