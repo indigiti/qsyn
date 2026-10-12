@@ -10,7 +10,7 @@ assert(!validIndexBarTime(epoch('2026-10-09T00:00:00Z'),'1d'),'UTC daily cannot 
 assert(validIndexBarTime(epoch('2026-10-09T09:15:00+05:30'),'15m'),'IST intraday 15m alignment');
 assert(!validIndexBarTime(epoch('2026-10-09T09:16:00+05:30'),'15m'),'reject misaligned minute');
 assert.equal(INDIA_INDEX_MARKETS.length,7);
-assert.equal(new Set(INDIA_INDEX_MARKETS.map(x=>x.id)).size,6);
+assert.equal(new Set(INDIA_INDEX_MARKETS.map(x=>x.id)).size,7);
 assert.equal(findIndiaIndex('NSE_INDEX:index','NIFTY')?.name,'NIFTY 50');
 assert.equal(findIndiaIndex('BSE_INDEX:index','SENSEX')?.name,'SENSEX');
 assert.equal(findIndiaIndex('BSE_INDEX:index','BANKEX')?.name,'S&P BSE BANKEX');
