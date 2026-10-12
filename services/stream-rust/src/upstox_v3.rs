@@ -390,8 +390,8 @@ pub fn decode_personal_index_updates(
         return Err(denied("personal_v3_frame_invalid"));
     }
     let frame = FeedResponse::decode(raw).map_err(|_| denied("personal_v3_protobuf_invalid"))?;
-    let generated_ms = u64::try_from(frame.current_ts)
-        .map_err(|_| denied("personal_v3_clock_invalid"))?;
+    let generated_ms =
+        u64::try_from(frame.current_ts).map_err(|_| denied("personal_v3_clock_invalid"))?;
     if generated_ms == 0
         || generated_ms > received_ms.saturating_add(2_000)
         || received_ms.saturating_sub(generated_ms) > 10_000
@@ -415,8 +415,8 @@ pub fn decode_personal_index_updates(
         let ltpc = feed
             .last_trade()
             .ok_or_else(|| denied("personal_v3_ltp_missing"))?;
-        let last_trade_ms = u64::try_from(ltpc.ltt)
-            .map_err(|_| denied("personal_v3_ltt_invalid"))?;
+        let last_trade_ms =
+            u64::try_from(ltpc.ltt).map_err(|_| denied("personal_v3_ltt_invalid"))?;
         if last_trade_ms == 0
             || last_trade_ms > generated_ms.saturating_add(2_000)
             || !ltpc.ltp.is_finite()
@@ -425,8 +425,11 @@ pub fn decode_personal_index_updates(
             continue;
         }
         out.push(PersonalIndexUpdate {
-            key, time_ms: generated_ms, last_trade_ms,
-            price: ltpc.ltp, snapshot: frame.frame_type == 0,
+            key,
+            time_ms: generated_ms,
+            last_trade_ms,
+            price: ltpc.ltp,
+            snapshot: frame.frame_type == 0,
         });
     }
     Ok(out)
@@ -888,13 +891,14 @@ mod tests {
             received
         )
         .is_err());
-        let stale_ltt = decode_personal_index_frame(
-            &make(1, key, (received - 10_000) as i64),
-            key,
-            received,
-        )
-        .unwrap();
-        assert_eq!(stale_ltt.len(), 1, "fresh currentTs is valid despite stale index ltt");
+        let stale_ltt =
+            decode_personal_index_frame(&make(1, key, (received - 10_000) as i64), key, received)
+                .unwrap();
+        assert_eq!(
+            stale_ltt.len(),
+            1,
+            "fresh currentTs is valid despite stale index ltt"
+        );
         assert_eq!(stale_ltt[0].1, received - 100);
         let info = FeedResponse {
             frame_type: 2,
