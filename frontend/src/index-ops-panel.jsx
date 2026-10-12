@@ -92,8 +92,11 @@ export function IndexWebOperationsPanel(){
         /^[a-z0-9_]{3,90}$/i.test(e.message||'')?e.message:'INDEX_OPERATION_FAILED');
     }finally{setBusy(false);}
   }
-  const available=Boolean(status?.preflight_enabled &&
-    status?.private_plan_ready && status?.archive_ready && status?.rust_binary_ready);
+  const available=Boolean(status?.history_preflight_enabled &&
+    status?.private_plan_ready && status?.archive_ready &&
+    status?.history_rust_binary_ready);
+  const workerAvailable=Boolean(status?.worker_preflight_enabled &&
+    status?.private_plan_ready && status?.worker_rust_binary_ready);
   return <section className="terminal-surface" aria-label="Indian index web operations">
     <div className="terminal-card-head"><h2>Indian indices · web operations</h2>
       <ShieldCheck size={18}/></div>
@@ -130,8 +133,11 @@ export function IndexWebOperationsPanel(){
           {' '}{status?.services?.[name]||'not checked'}</span>
         {['start','stop'].map(action=><button type="button"
           className="terminal-action terminal-secondary-action" key={action}
-          disabled={busy||!status?.web_operations_enabled||!status?.service_controls_enabled||
-             (action==='start'&&!available)}
+          disabled={busy||!status?.web_operations_enabled||
+            !(name==='worker'
+              ? status?.worker_service_controls_enabled
+              : status?.history_service_controls_enabled)||
+             (action==='start'&&!(name==='worker'?workerAvailable:available))}
           onClick={()=>void execute(action,name)}>
           {action==='start'?'Start':'Stop'} {name==='worker'?'worker':'reader'}
         </button>)}
@@ -145,9 +151,11 @@ export function IndexWebOperationsPanel(){
       A successful command does not prove an active exchange feed.</p>}
     {error&&<p role="alert">Index operation unavailable: {error}</p>}
     <p className="terminal-footnote"><LockKeyhole size={13} aria-hidden="true"/>
-      {' '}Buttons are disabled unless Cloudways explicitly provisions the private
-      executable, plan, historical archive, and operation permissions. No tokens,
-      arbitrary paths, trading orders or shell commands are accepted from the browser.
+      {' '}Live worker readiness is independent of the optional history importer.
+      The existing worker still requires its approved plan, current BOD mapping,
+      authentic display/retention rights and restricted host Supervisor control.
+      Historical imports require their own archive and reader. No browser-supplied
+      paths, tokens, trading orders or shell commands are accepted.
       Starting a service does not bypass exchange data rights or activate public redistribution.</p>
   </section>;
 }
