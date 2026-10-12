@@ -72,8 +72,17 @@ class PrivateIndexHistoryFeed {
     if(this.closed||req.symbol!==this.symbol||req.exchange!=='UPSTOX_PERSONAL'||
        req.interval!=='1m'||this.day!==todayIst())return ()=>{};
     const controller=new AbortController();
-    let stopped=false,socket=null,lastTimestamp=0;
+    let stopped=false,socket=null,lastTimestamp=0,retryDelay=2000,reconnectTimer=null;
     this.controllers.add(controller);
+    const scheduleReconnect=()=>{
+      if(stopped||this.closed||controller.signal.aborted)return;
+      if(reconnectTimer!==null)clearTimeout(reconnectTimer);
+      reconnectTimer=setTimeout(()=>{
+        reconnectTimer=null;
+        void connect();
+      },retryDelay);
+      retryDelay=Math.min(retryDelay*2,30000);
+    };
     const connect=async()=>{
       try{
         const response=await fetch('/qsyn/api/v1/admin/upstox/personal-index/ticket',{
@@ -113,6 +122,7 @@ class PrivateIndexHistoryFeed {
              bar.low>Math.min(bar.open,bar.close)||bar.low<=0)
             return;
           lastTimestamp=data.time_ms;
+          retryDelay=2000;
           onBar(bar);
           this.onLive('Rust Upstox V3 tick · '+
             new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Kolkata',
@@ -123,18 +133,23 @@ class PrivateIndexHistoryFeed {
           if(!stopped)this.onLive('RUST_UPSTOX_WEBSOCKET_UNAVAILABLE');
         };
         socket.onclose=()=>{
-          if(!stopped)this.onLive('Rust WebSocket disconnected · no live feed');
+          if(!stopped){
+            this.onLive('Rust WebSocket disconnected · reconnecting');
+            scheduleReconnect();
+          }
         };
       }catch(e){
         if(!stopped&&!controller.signal.aborted){
           this.onLive(/^[a-z0-9_]{3,90}$/i.test(e.message||'')
             ?e.message:'RUST_PERSONAL_DATA_UNAVAILABLE');
+          scheduleReconnect();
         }
       }
     };
     void connect();
     const stop=()=>{
       stopped=true;controller.abort();
+      if(reconnectTimer!==null)clearTimeout(reconnectTimer);
       try{socket?.close(1000,'chart_closed');}catch{}
       this.controllers.delete(controller);
     };
