@@ -171,9 +171,8 @@ export function MarketExplorer({theme,openView,CryptoChart,PrivateCharts}){
         <p>Optional Rust tick streaming remains restricted to separately approved
           instrument rights, private worker and WSS. It is not required to display
           real historical and intraday Upstox candles.</p>
-        <details><summary>Open private WSS chart controls</summary>
-          <PrivateCharts embedded onlyIndex selectedIndex={currentInstrument}/>
-        </details>
+        <button className="terminal-action terminal-secondary-action" type="button"
+          onClick={()=>openView('private-live')}>Open separately authorized Rust WSS controls</button>
       </section>
     </>}
     {market==='stocks'&&<section className="terminal-surface">
