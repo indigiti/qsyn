@@ -217,6 +217,9 @@ function NativeUpstoxPanel({refreshTick=0}){
   const [lastDiagnostic,setLastDiagnostic]=useState(null);
   const [notice,setNotice]=useState('Checking native Upstox authorization readiness…');
   const [form,setForm]=useState({client_id:'',client_secret:'',expected_user_id:'',confirmed:false});
+  const [analytics,setAnalytics]=useState(null);
+  const [analyticsToken,setAnalyticsToken]=useState('');
+  const [analyticsConfirmed,setAnalyticsConfirmed]=useState(false);
   const load=useCallback(async()=>{
     try{
       const data=await jsonGet(NATIVE_UPSTOX_API+'status');
@@ -229,7 +232,61 @@ function NativeUpstoxPanel({refreshTick=0}){
         :data.configured?'Upstox app configured. Authorize using your Upstox login.':'Set up your Upstox Developer App before authorizing.');
     }catch{setStatus(null);setNotice('Native Upstox setup is unavailable; check the QSYN administrator session and private runtime.');}
   },[]);
-  useEffect(()=>{void load();},[load,refreshTick]);
+  const loadAnalytics=useCallback(async()=>{
+    try{
+      const response=await fetch(NATIVE_UPSTOX_API+'analytics/status',{
+        method:'GET',credentials:'same-origin',cache:'no-store',
+        headers:{Accept:'application/json'},
+      });
+      const data=await response.json();
+      setAnalytics(response.ok && data.schema==='QSYN-UPSTOX-ANALYTICS-STATUS/1'
+        ? data : null);
+    }catch{setAnalytics(null);}
+  },[]);
+  useEffect(()=>{void load();void loadAnalytics();},[load,loadAnalytics,refreshTick]);
+
+  async function analyticsAction(operation){
+    if(!analytics?.csrf || busy)return;
+    if(operation==='import' && (!analyticsConfirmed || analyticsToken.length<20))return;
+    const token=analyticsToken;
+    setAnalyticsToken('');
+    setAnalyticsConfirmed(false);
+    setBusy(true);
+    const controller=new AbortController();
+    const timeout=setTimeout(()=>controller.abort(),20000);
+    try{
+      setNotice(operation==='import'
+        ? 'Verifying read-only market WebSocket authorization with Upstox…'
+        : 'Removing the locally stored Analytics Token (Upstox revocation remains separate)…');
+      const response=await fetch(NATIVE_UPSTOX_API+'analytics/'+operation,{
+        method:'POST',credentials:'same-origin',cache:'no-store',
+        signal:controller.signal,
+        headers:{'Content-Type':'application/json',Accept:'application/json',
+          'X-CSRF-Token':analytics.csrf},
+        body:JSON.stringify(operation==='import'
+          ? {token,confirmed:true} : {confirmed:true}),
+      });
+      const data=await response.json();
+      if(!response.ok)throw Error(
+        /^[a-z0-9_]{3,80}$/.test(data?.error||'')
+          ? data.error.toUpperCase() : 'ANALYTICS_REQUEST_DENIED');
+      if(data.schema!=='QSYN-UPSTOX-ANALYTICS-STATUS/1')
+        throw Error('INVALID_ANALYTICS_RESPONSE');
+      setNotice(operation==='import'
+        ? 'Read-only market-feed authorization verified at import and token stored privately. Actual account identity, index rights, historical data and live charts still require independent verification.'
+        : 'Local Analytics Token removed. If necessary, revoke it in the Upstox Developer Apps dashboard.');
+      await loadAnalytics();
+    }catch(err){
+      const code=controller.signal.aborted?'ANALYTICS_REQUEST_TIMEOUT':
+        /^[A-Z0-9_]{3,80}$/.test(err?.message||'')?err.message:
+        'ANALYTICS_NETWORK_OR_RESPONSE_ERROR';
+      setNotice('Analytics Token not activated: '+code+
+        '. Do not share the token or browser request bodies.');
+    }finally{
+      clearTimeout(timeout);
+      setBusy(false);
+    }
+  }
   async function action(operation,payload){
     if(!status?.csrf||busy)return;
     setBusy(true);
@@ -319,9 +376,50 @@ function NativeUpstoxPanel({refreshTick=0}){
     </section>}
     <div className="qt-summary">
       <div><strong>Upstox OAuth token</strong><p>{profileCheck?.session_verified?'Profile verified now · not continuously monitored':status?.token_stored?'Stored privately · verify current session':status?.configured?'Authorization required':'Not configured'}</p></div>
+      <div><strong>Analytics read-only token</strong><p>{analytics?.token_stored
+        ? 'Stored privately · last authorization does not prove current feed'
+        : 'Not stored or operator import disabled'}</p></div>
       <div><strong>Index feed / license</strong><p>Not activated · no live prices</p></div>
       <div><strong>QSYN order execution</strong><p>Disabled</p></div>
     </div>
+    <section className="terminal-surface" aria-label="Upstox Analytics Token setup">
+      <div className="terminal-card-head"><h3>Upstox Analytics Token · read-only</h3><ShieldCheck size={17}/></div>
+      <p>Alternative to daily OAuth/app-secret setup. Generate a 1-year read-only
+        token in Upstox Developer Apps → Analytics. QSYN verifies its market-data
+        feed authorization and stores it in a separate private 0600 file.
+        Your server operator must first bind the expected Upstox account and
+        enable read-only token import; no trading or live feed is activated by importing.</p>
+      {analytics ? <>
+        <p role="status">{analytics.token_stored
+          ? 'Analytics Token is stored privately; exchange account identity and continuous market data remain unverified.'
+          : 'No Analytics Token stored. OAuth remains optional for normal broker operations.'}</p>
+        <form className="qt-form qt-openalgo-setup" autoComplete="off"
+          onSubmit={e=>{e.preventDefault();void analyticsAction('import');}}>
+          <label>Analytics Token (not app API secret)
+            <input type="password" required minLength={20} maxLength={8192}
+              autoComplete="new-password" spellCheck={false}
+              value={analyticsToken} onChange={e=>setAnalyticsToken(e.target.value)}/>
+          </label>
+          <label className="qt-setup-confirm">
+            <input type="checkbox" checked={analyticsConfirmed}
+              onChange={e=>setAnalyticsConfirmed(e.target.checked)}/>
+            This is my own read-only Upstox Analytics Token. I understand that
+            token verification does not approve exchange redistribution, retention
+            or production feed activation.
+          </label>
+          <div className="qt-actions">
+            <button className="terminal-action" type="submit"
+              disabled={busy||!analyticsConfirmed||analyticsToken.length<20}>
+              Verify and store Analytics Token</button>
+            <button className="terminal-action terminal-secondary-action" type="button"
+              disabled={busy||!analytics.token_stored}
+              onClick={()=>void analyticsAction('clear')}>Remove local token</button>
+          </div>
+        </form>
+      </>:<p role="status">Analytics Token import unavailable or operator-disabled.
+        Your server needs QSYN_UPSTOX_ANALYTICS_IMPORT_ENABLED=1 and an expected
+        Upstox User ID bound in private configuration. Do not share tokens in chat.</p>}
+    </section>
     {status&&!status.configured&&<form className="qt-form qt-openalgo-setup"
       onSubmit={e=>{e.preventDefault();void action('setup',form);}} autoComplete="off">
       <h3>Configure Upstox developer application</h3>
