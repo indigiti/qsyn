@@ -422,7 +422,8 @@ try {
   if(String(brokerResponse.headers()['cache-control']||'').includes('no-transform'))
     throw new Error('Brokers unexpectedly disabled Cloudflare JavaScript Detections');
   await page.getByRole('heading',{name:'Data providers & connections'}).waitFor();
-  if(await page.locator('.qt-broker-card,.qt-broker-grid,.qt-openalgo-setup').count()!==0)
+  if(await page.locator('.qt-broker-card,.qt-broker-grid').count()!==0 ||
+    await page.getByRole('heading',{name:'Configure first OpenAlgo connection'}).count()!==0)
     throw new Error('Unconfigured OpenAlgo controls reappeared on reload');
   await page.getByRole('button',{name:'Discover index instrument keys'}).waitFor({state:'visible'});
   if(browserErrors.length)
