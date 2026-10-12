@@ -127,6 +127,44 @@ final class IndexHistoricalProof
         } finally { curl_close($ch); }
     }
 
+    /** Parse only actual Upstox-shaped candles. Never return OHLC or provider errors. */
+    public static function summarize(string $symbol, string $day, array $result): array
+    {
+        if (!array_key_exists($symbol,self::KEYS) || !self::validDay($day))
+            throw new \InvalidArgumentException('invalid_history_proof_scope');
+        $http=$result['http_status']??0;
+        $base=[
+            'schema'=>self::SCHEMA,'symbol'=>$symbol,'day_ist'=>$day,
+            'provider_http_status'=>is_int($http)?$http:0,
+            'candle_count'=>0,'history_verified'=>false,
+            'display_rights_verified'=>false,'live_feed_verified'=>false,
+            'trading_enabled'=>false,
+        ];
+        if ($http!==200) {
+            return $base+['code'=>match($http) {
+                401,403=>'UPSTOX_HISTORY_AUTH_DENIED',
+                404,422=>'UPSTOX_HISTORY_KEY_OR_DATE_REJECTED',
+                429=>'UPSTOX_HISTORY_RATE_LIMITED',
+                default=>'UPSTOX_HISTORY_PROVIDER_UNAVAILABLE',
+            }];
+        }
+        $bars=UpstoxIndexV3::normalize($result['body']??[],'1m',time());
+        $tz=new \DateTimeZone('Asia/Kolkata');
+        foreach ($bars as $bar) {
+            $actual=(new \DateTimeImmutable('@'.$bar['time']))
+                ->setTimezone($tz)->format('Y-m-d');
+            if ($actual!==$day) throw new \RuntimeException('different_day');
+        }
+        $count=count($bars);
+        return $base+[
+            'code'=>$count?'UPSTOX_HISTORY_CANDLES_VERIFIED':'UPSTOX_HISTORY_NO_CANDLES',
+            'provider_http_status'=>200,'candle_count'=>$count,
+            'first_candle_utc'=>$count?gmdate('c',$bars[0]['time']):null,
+            'last_candle_utc'=>$count?gmdate('c',$bars[$count-1]['time']):null,
+            'history_verified'=>$count>0,
+        ];
+    }
+
     /** @return array{0:int,1:array<string,mixed>} */
     public static function dispatch(array $server, ?callable $transport = null): array
     {
@@ -176,41 +214,7 @@ final class IndexHistoricalProof
         try {
             $result=$transport ? $transport($url,$token) : self::request($url,$token);
             if (!is_array($result)) throw new \RuntimeException('invalid_provider_result');
-            $http=$result['http_status']??0;
-            if ($http !== 200) {
-                $code=match($http) {
-                    401,403=>'UPSTOX_HISTORY_AUTH_DENIED',
-                    404,422=>'UPSTOX_HISTORY_KEY_OR_DATE_REJECTED',
-                    429=>'UPSTOX_HISTORY_RATE_LIMITED',
-                    default=>'UPSTOX_HISTORY_PROVIDER_UNAVAILABLE',
-                };
-                return [200,[
-                    'schema'=>self::SCHEMA,'code'=>$code,
-                    'symbol'=>$symbol,'day_ist'=>$day,
-                    'provider_http_status'=>is_int($http)?$http:0,
-                    'candle_count'=>0,'history_verified'=>false,
-                    'display_rights_verified'=>false,'live_feed_verified'=>false,
-                    'trading_enabled'=>false,
-                ]];
-            }
-            $bars=UpstoxIndexV3::normalize($result['body']??[],'1m',time());
-            $tz=new \DateTimeZone('Asia/Kolkata');
-            foreach ($bars as $bar) {
-                $date=(new \DateTimeImmutable('@'.$bar['time']))->setTimezone($tz)->format('Y-m-d');
-                if ($date!==$day) throw new \RuntimeException('different_day');
-            }
-            $count=count($bars);
-            return [200,[
-                'schema'=>self::SCHEMA,
-                'code'=>$count?'UPSTOX_HISTORY_CANDLES_VERIFIED':'UPSTOX_HISTORY_NO_CANDLES',
-                'symbol'=>$symbol,'day_ist'=>$day,
-                'provider_http_status'=>200,'candle_count'=>$count,
-                'first_candle_utc'=>$count?gmdate('c',$bars[0]['time']):null,
-                'last_candle_utc'=>$count?gmdate('c',$bars[$count-1]['time']):null,
-                'history_verified'=>$count>0,
-                'display_rights_verified'=>false,'live_feed_verified'=>false,
-                'trading_enabled'=>false,
-            ]];
+            return [200,self::summarize($symbol,$day,$result)];
         } catch (\Throwable) {
             return [200,[
                 'schema'=>self::SCHEMA,'code'=>'UPSTOX_HISTORY_RESPONSE_INVALID',
