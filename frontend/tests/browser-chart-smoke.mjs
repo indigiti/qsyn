@@ -78,6 +78,63 @@ try{
   await page.waitForFunction(()=>document.querySelectorAll('.qsyn-home-chart canvas').length>0,
     null,{timeout:16000});
   if(await page.locator('.terminal-sidebar').count())throw Error('Homepage acquired sidebar');
+  // The homepage must display the same account-private Rust candles as the
+  // authenticated Markets chart, without redirecting to obsolete worker plans.
+  const sessionDay='2026-10-09';
+  let personalHistoryCalls=0;
+  await page.route('**/qsyn/api/v1/admin/upstox/index-history-proof',route=>
+    route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({
+      schema:'QSYN-INDEX-HISTORICAL-PROOF/1',token_present:true,
+      csrf:'a'.repeat(64),suggested_day_ist:sessionDay,trading_enabled:false
+    })}));
+  await page.route('**/qsyn/api/v1/admin/upstox/personal-index/history',async route=>{
+    personalHistoryCalls++;
+    const body=route.request().postDataJSON();
+    if(route.request().method()!=='POST'||
+       route.request().headers()['x-csrf-token']!=='a'.repeat(64)||
+       body.symbol!=='NIFTY')throw Error('Homepage used an unscoped index request');
+    const open=Math.floor(Date.parse(body.day+'T09:15:00+05:30')/1000);
+    const bars=Array.from({length:375},(_,i)=>({
+      time:open+i*60,open:25000+i/10,high:25003+i/10,
+      low:24998+i/10,close:25001+i/10,volume:0
+    }));
+    await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({
+      schema:'QSYN-UPSTOX-RUST-INDEX-HISTORY/1',
+      source:'upstox_v3_rust_history',symbol:'NIFTY',
+      day_ist:body.day,interval:'1m',bars,
+      public_redistribution_allowed:false,trading_enabled:false
+    })});
+  });
+  await page.evaluate(()=>localStorage.setItem('qsyn-public-chart-selection-v1',JSON.stringify({
+    schema:'QSYN-PUBLIC-CHART-SELECTION/1',exchange:'NSE_INDEX:index',symbol:'NIFTY'
+  })));
+  await page.reload({waitUntil:'domcontentloaded'});
+  await page.waitForFunction(()=>document.querySelector('.qsyn-screenreader-status')?.textContent
+    ?.includes('375 real Rust Upstox 1m candles'),null,{timeout:20000});
+  if(personalHistoryCalls<1)throw Error('Homepage did not load Rust 1m NIFTY history');
+  if(await page.locator('.qsyn-india-entitlement-note').count())
+    throw Error('Authenticated homepage still displayed obsolete index-plan blocker');
+  if(await page.locator('.qsyn-home-chart canvas').count()===0)
+    throw Error('Authenticated NIFTY homepage did not render candles');
+  await page.unroute('**/qsyn/api/v1/admin/upstox/index-history-proof');
+  await page.unroute('**/qsyn/api/v1/admin/upstox/personal-index/history');
+
+  // Anonymous homepage must still fail closed and NEVER probe private Rust
+  // history. Public crypto remains available to non-admin visitors.
+  const anonymous=await browser.newContext({viewport:{width:900,height:600}});
+  const anonPage=await anonymous.newPage();
+  let anonymousHistory=0;
+  await anonPage.route('**/qsyn/api/v1/admin/upstox/personal-index/history',route=>{
+    anonymousHistory++;return route.abort();
+  });
+  await anonPage.goto(origin+'/qsyn/',{waitUntil:'domcontentloaded'});
+  await anonPage.evaluate(()=>localStorage.setItem('qsyn-public-chart-selection-v1',JSON.stringify({
+    schema:'QSYN-PUBLIC-CHART-SELECTION/1',exchange:'BSE_INDEX:index',symbol:'SENSEX'
+  })));
+  await anonPage.reload({waitUntil:'domcontentloaded'});
+  await anonPage.getByText('Personal Upstox access required').waitFor({timeout:20000});
+  if(anonymousHistory!==0)throw Error('Anonymous NSE/BSE private history exposed');
+  await anonymous.close();
   if(errors.length)throw Error('Browser script errors: '+errors.join('; ').slice(0,450));
   console.log('PASS: retired Rust admin + legacy chart redirect into React; unauthenticated controls blocked; homepage unchanged');
 }finally{
