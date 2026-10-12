@@ -392,6 +392,10 @@ try {
     throw new Error('Unverified OpenAlgo broker selection/setup unexpectedly visible');
   const lookupButton=page.getByRole('button',{name:'Discover available indices'});
   await lookupButton.waitFor({state:'visible',timeout:12000});
+  // The button mounts before both independent status fetches settle. Wait
+  // for the *enabled* state, not just its initial disabled DOM presence.
+  for(let attempt=0;attempt<80 && !await lookupButton.isEnabled();attempt++)
+    await page.waitForTimeout(100);
   if(!await lookupButton.isEnabled())
     throw new Error('Configured Upstox failed to render enabled instrument discovery');
   if(await page.getByRole('button',{name:/Private setup/}).count()
