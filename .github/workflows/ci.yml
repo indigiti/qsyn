@@ -79,6 +79,8 @@ jobs:
           python3 apps/web-php/tests/NativeUpstoxAnalyticsHttpSmoke.py
           php -l apps/web-php/src/NativeUpstoxProfileVerifier.php
           php apps/web-php/tests/NativeUpstoxProfileVerifierTest.php
+          php -l apps/web-php/src/IndexHistoricalProof.php
+          python3 apps/web-php/tests/IndexHistoricalProofHttpSmoke.py
           php -l apps/web-php/src/NativeUpstoxIndexDiscovery.php
           php apps/web-php/tests/NativeUpstoxIndexDiscoveryTest.php
           php -l apps/web-php/src/NativeAdminDiagnostics.php
