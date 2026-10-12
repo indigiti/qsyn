@@ -2,6 +2,7 @@ import React, {useEffect,useState,useCallback} from 'react';
 import {Activity,AlertTriangle,CheckCircle2,ClipboardCopy,LockKeyhole,RefreshCw,Search,Server,ShieldCheck,Wallet,Wifi,WifiOff} from 'lucide-react';
 import {CRYPTO_MARKETS} from './crypto-catalog.js';
 import {INDIA_INDEX_MARKETS} from './india-index-catalog.js';
+import {ProviderStatusPanel} from './provider-console.jsx';
 import './terminal-unified.css';
 
 const VENUES=['BINANCE','BYBIT','OKX','COINBASE','KRAKEN','BITGET','HYPERLIQUID'];
@@ -623,8 +624,9 @@ export function BrokersWorkspace({openView}){
     finally{setBusy(false);}
   }
   return <div className="terminal-page qt-unified">
-    <PanelTitle eyebrow="BROKER CONNECTIONS · RUST DATA" title="Accounts & authorizations"
-      description="Native Upstox V3 index market data uses the QSYN Rust WebSocket engine. Other broker plugins remain separately gated."/>
+    <PanelTitle eyebrow="DATA SOURCES · PROVIDERS · CONNECTIONS" title="Data providers & connections"
+      description="Manage exchange data sources, read-only market credentials and independent broker authorizations. Provider status is not permission to publish live NSE/BSE prices."/>
+    <ProviderStatusPanel/>
     <div className="qt-summary">
       <section className="terminal-surface"><Wallet size={19}/><span>Configured accounts</span>
         <strong>{selected==='upstox'?'Native Upstox':(hasAdmin?(inventory?.accounts?.length??'Not provisioned'):'Restricted')}</strong></section>
@@ -634,7 +636,7 @@ export function BrokersWorkspace({openView}){
         <strong>Disabled</strong></section>
     </div>
     <section className="terminal-surface">
-      <div className="terminal-card-head"><h2>Select broker</h2><ShieldCheck size={18}/></div>
+      <div className="terminal-card-head"><h2>Configure a private broker/provider</h2><ShieldCheck size={18}/></div>
       <div className="qt-broker-grid">
         {brokers.map(b=><button type="button" key={b} onClick={()=>{setSelected(b);setLoginTarget(null);}}
           className={'qt-broker-card'+(b===selected?' selected':'')} aria-pressed={b===selected}>
