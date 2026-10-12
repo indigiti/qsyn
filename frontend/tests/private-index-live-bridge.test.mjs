@@ -102,14 +102,17 @@ test('same chart receives only approved timestamped real WSS ticks; disconnect c
   const timeMs=Date.now()-750;
   const item={schema:'QSYN-PRIVATE-CHART-TICK/1',source:'private_verified_ltp',
     account,instrument,tenant:'index-tenant',time_ms:timeMs,price:25010.45};
-  sockets[0].message({...item,source:'simulated'});
-  sockets[0].message({...item,account:'different-account'});
-  assert.equal(ticks.length,0);
   sockets[0].message(item);
   assert.deepEqual(ticks,[timeMs]);
   assert.ok(bars.length>0,'existing CandleBuilder must forward a real 1m update');
   sockets[0].message(item);
   assert.equal(ticks.length,1,'duplicate exchange timestamp ignored');
+  // The current hardened adapter treats an unauthorized packet as a terminal
+  // validation failure: it MUST close, never accept a later valid packet.
+  sockets[0].message({...item,time_ms:timeMs+1,source:'simulated'});
+  assert.equal(sockets[0].closed,true,'invalid packet must terminate WSS');
+  sockets[0].message({...item,time_ms:timeMs+2});
+  assert.equal(ticks.length,1,'closed WSS must not accept further ticks');
   stop();bridge.destroy();
   assert.equal(sockets[0].closed,true);
 });
