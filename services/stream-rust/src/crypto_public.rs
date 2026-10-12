@@ -3,6 +3,7 @@
 //! Provider OHLCV comes from validated exchange REST history and native
 //! public upstream WebSocket candles, with REST refresh on reconnect.
 mod stream;
+use qsyn_stream::market_pipeline::valid_ohlc;
 use axum::{
     extract::Query,
     http::StatusCode,
@@ -114,17 +115,9 @@ fn bar(
     if time < 1_500_000_000
         || time > now.saturating_add(step)
         || !time.is_multiple_of(step)
-        || open <= 0.0
-        || high <= 0.0
-        || low <= 0.0
-        || close <= 0.0
+        || !valid_ohlc(open, high, low, close)
+        || !volume.is_finite()
         || volume < 0.0
-        || ![open, high, low, close, volume]
-            .iter()
-            .all(|v| v.is_finite())
-        || high < open.max(close)
-        || low > open.min(close)
-        || low > high
     {
         return None;
     }
