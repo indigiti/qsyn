@@ -136,6 +136,7 @@ jobs:
           cargo test --manifest-path services/stream-rust/Cargo.toml
           cargo build --release --manifest-path services/stream-rust/Cargo.toml
           QSYN_MARKET_ARCHIVE_BINARY=services/stream-rust/target/release/qsyn-market-archive python3 services/stream-rust/tests/market_archive_cli_smoke.py
+          QSYN_MARKET_ARCHIVE_BINARY=services/stream-rust/target/release/qsyn-stream QSYN_MARKET_ARCHIVE_UNIFIED=1 python3 services/stream-rust/tests/market_archive_cli_smoke.py
           QSYN_RUST_BINARY=services/stream-rust/target/release/qsyn-stream python3 services/stream-rust/tests/smoke_service.py
           QSYN_RUST_BINARY=services/stream-rust/target/release/qsyn-stream python3 services/stream-rust/tests/direct_control_smoke.py
           QSYN_RUST_BINARY=services/stream-rust/target/release/qsyn-stream python3 services/stream-rust/tests/auto_activation_smoke.py
@@ -256,6 +257,7 @@ jobs:
             printf '#!/bin/sh\nexec "$(dirname "$0")/qsyn-stream" mode "%s" "$@"\n' "$mode" > "staging/private/app/bin/$mode"
             chmod 0755 "staging/private/app/bin/$mode"
           done
+          QSYN_MARKET_ARCHIVE_BINARY=staging/private/app/bin/qsyn-market-archive python3 services/stream-rust/tests/market_archive_cli_smoke.py
           cp ops/cloudways/qsyn-upstox-v3.supervisor.conf.example staging/private/app/ops/qsyn-upstox-v3.supervisor.conf.example
           cp ops/cloudways/qsyn-private-feed.supervisor.conf.example staging/private/app/ops/qsyn-private-feed.supervisor.conf.example
           cp ops/openalgo/qsyn-openalgo-upstox.supervisor.conf.example staging/private/app/ops/qsyn-openalgo-upstox.supervisor.conf.example
