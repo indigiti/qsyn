@@ -138,13 +138,13 @@ const ignoreHomepageWidget = () => {};
 
 /**
  * The /qsyn/ landing page mirrors the supplied edge-to-edge OpenAlgo Charts
- * reference without removing any upstream chart controls. Its candles remain
- * explicitly simulated. Full workspace features remain at /qsyn/terminal.
+ * reference without removing upstream chart controls. Public crypto stays
+ * unauthenticated; private Indian indices reuse the account-scoped Rust feed.
  */
 /**
  * The public landing page deliberately renders only the native OpenAlgo
  * chart. Navigation and all trading workspaces still exist at /qsyn/terminal.
- * Keep the simulated-data disclosure below the chart, outside its controls.
+ * Keep authenticated Upstox prices protected by the server-side admin session.
  */
 /**
  * Single source of symbol selection: the native OpenAlgo symbol search and
@@ -260,8 +260,8 @@ function HomepageChart({ theme, embedded = false,
       onPrivateIndexRequest(blockedIndex);
       return;
     }
-    // The homepage is public. Only a previously authorized operator can
-    // access licensed history in the private terminal. Persist alias only.
+    // Homepage is public, so persist only the stable symbol alias; protected
+    // Rust bars remain behind the existing administrator cookie and CSRF.
     saveIndexIntent(blockedIndex);
     window.location.assign('/qsyn/terminal/markets');
   };
@@ -270,13 +270,14 @@ function HomepageChart({ theme, embedded = false,
       <div className="qsyn-crypto-grid" ref={host}/>
       <span className="qsyn-screenreader-status" role="status" aria-live="polite">{message}</span>
       {blockedIndex && <div className="qsyn-india-entitlement-note" role="status">
-        <div><strong>{blockedIndex.name}</strong><span>Private index feed not yet verified</span></div>
-        <p>Live NSE/BSE candles require an approved Upstox index plan,
-          exchange permissions and an authorized worker.</p>
+        <div><strong>{blockedIndex.name}</strong><span>Personal Upstox access required</span></div>
+        <p>Sign in to QSYN and use your existing read-only Upstox Analytics Token.
+          NIFTY/SENSEX history and tick updates use the same private Rust source
+          as Markets. No OAuth or index-worker plan is required.</p>
         <div className="qsyn-india-note-actions">
-          <a href="/qsyn/terminal/brokers">Configure data source</a>
+          <a href="/qsyn/terminal/brokers">Upstox Token</a>
           <button type="button" onClick={openPrivateIndex}>
-            Authorized chart →
+            Open personal chart →
           </button>
         </div>
       </div>}

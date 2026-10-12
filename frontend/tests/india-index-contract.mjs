@@ -41,83 +41,98 @@ assert.equal(saveIndexIntent({exchange:'NSE_INDEX',symbol:'../../foreign'},stora
 assert.equal(privateIndexTarget({exchange:'BSE_INDEX',symbol:'NIFTY'}),null);
 assert(saveIndexIntent(indexIntentFor('BSE_INDEX','SENSEX'),storage));
 assert.equal(consumeIndexIntent(storage).symbol,'SENSEX');
-const blockedEvents=[];
-const blockedFeed=new QsynMarketsFeed(()=>{},{
-  onBlockedIndex:entry=>blockedEvents.push(entry)
-});
-assert.deepEqual(await blockedFeed.getBars({
-  exchange:'NSE_INDEX:index',symbol:'NIFTY',interval:'1m',
-}),[],'public NIFTY must remain strictly blocked');
-assert.equal(blockedEvents[0].symbol,'NIFTY');
-assert.equal(blockedEvents[0].exchange,'NSE_INDEX');
-assert.deepEqual(await blockedFeed.getBars({
-  exchange:'NSE_INDEX:index',symbol:'NIFTY',interval:'1m',
-}),[]);
-assert.equal(blockedEvents.length,1,'unchanged blocked index should not duplicate events');
-blockedFeed.destroy();
 const originalFetch=globalThis.fetch;
-let cancellationCount=0;
 try {
-  globalThis.fetch=async ()=>{
-    cancellationCount++;
-    const err=new Error('The user aborted a request.');
-    err.name='AbortError';
-    throw err;
-  };
-  const abortFeed=new QsynMarketsFeed(()=>{},{indexAccessApproved:true});
-  assert.deepEqual(await abortFeed.getBars({
-    exchange:'NSE_INDEX:index',symbol:'NIFTY',interval:'1m'
-  }),[],'index abort must settle without an unhandled promise');
-  assert.deepEqual(await abortFeed.getBars({
-    exchange:'BINANCE:spot',symbol:'BTCUSDT',interval:'1m'
-  }),[],'crypto abort must settle without an unhandled promise');
-  assert.equal(cancellationCount,2);
-  abortFeed.destroy();
-} finally {globalThis.fetch=originalFetch;}
-
-let calls=0;
-try{
+  const blockedEvents=[];
+  const blockedFeed=new QsynMarketsFeed(()=>{},{
+    onBlockedIndex:item=>blockedEvents.push(item),
+  });
+  let blockedPrivateRequests=0;
   globalThis.fetch=async url=>{
-    calls++;
-    assert(String(url).startsWith('/qsyn/api/v1/india/bars?'));
-    assert(String(url).includes('symbol=NIFTY'));
-    return {ok:false,status:503};
+    if(String(url).includes('/personal-index/history'))blockedPrivateRequests++;
+    return {ok:false,status:401};
   };
-  const index={exchange:'NSE_INDEX:index',symbol:'NIFTY',interval:'1m'};
-  assert.deepEqual(await feed.getBars(index),[]);
-  assert.equal(calls,0,'public homepage must not even request unlicensed index bars');
-  assert(status.at(-1).includes('authorization required'));
-  assert.deepEqual(await feed.getBars(index),[]);
-  assert.equal(calls,0,'locked index must never poll an unauthorized public route');
+  const indexReq={exchange:'NSE_INDEX:index',symbol:'NIFTY',interval:'1m'};
+  assert.deepEqual(await blockedFeed.getBars(indexReq),[],
+    'anonymous homepage must not reveal Upstox candles');
+  assert.equal(blockedPrivateRequests,0,
+    'anonymous visitor cannot request Rust personal history without verified session');
+  assert.equal(blockedEvents[0].symbol,'NIFTY');
+  assert.equal(blockedEvents[0].exchange,'NSE_INDEX');
+  assert.equal(blockedEvents.length,1);
+  assert.deepEqual(await blockedFeed.getBars(indexReq),[]);
+  assert.equal(blockedEvents.length,1,'blocked index state must not repeat');
+  blockedFeed.destroy();
 
-  // The full contract remains fail-closed even if a separately authorized
-  // PRIVATE chart opts into request attempts; credentials are still checked
-  // server-side and a 503 returns no fabricated NSE/BSE candles.
-  const approved=new QsynMarketsFeed(s=>status.push(s),{indexAccessApproved:true});
-  assert.deepEqual(await approved.getBars(index),[]);
-  assert.equal(calls,1);
-  assert.deepEqual(await approved.getBars(index),[]);
-  assert.equal(calls,1,'permission denial must stop repeat queries per key');
-  approved.destroy();
-
-  // Even an accidentally misconfigured endpoint cannot inject demo candles
-  // or unauthenticated data into an NSE/BSE index chart.
-  globalThis.fetch=async()=>({ok:true,status:200,json:async()=>({
-    schema:'QSYN-LICENSED-INDIA-INDEX-BARS/1',
-    source:'simulated',exchange:'BSE_INDEX',symbol:'SENSEX',
-    interval:'1m',account_scoped:true,trading_enabled:false,
-    public_redistribution_allowed:false,bars:[{
-      time:1696982400,open:100,high:102,low:99,close:101,volume:1,
-    }],
-  })});
-  const privateCandidate=new QsynMarketsFeed(s=>status.push(s),{indexAccessApproved:true});
-  await assert.rejects(
-    privateCandidate.getBars({exchange:'BSE_INDEX:index',symbol:'SENSEX',interval:'1m'}),
-    /source\/entitlement validation failed/
-  );
-  privateCandidate.destroy();
-}finally{
+  let proofCalls=0,historyCalls=0,publicIndexRequests=0;
+  const scoped=[];
+  globalThis.fetch=async (url,opts)=>{
+    if(String(url).includes('/india/bars')){publicIndexRequests++;throw Error('PUBLIC_INDEX_ENDPOINT_USED');}
+    if(url==='/qsyn/api/v1/admin/upstox/index-history-proof'){
+      proofCalls++;
+      assert.equal(opts.credentials,'same-origin');
+      return {ok:true,status:200,json:async()=>({
+        schema:'QSYN-INDEX-HISTORICAL-PROOF/1',token_present:true,
+        csrf:'a'.repeat(64),suggested_day_ist:'2026-10-09',
+        trading_enabled:false
+      })};
+    }
+    if(url==='/qsyn/api/v1/admin/upstox/personal-index/history'){
+      historyCalls++;
+      assert.equal(opts.method,'POST');
+      assert.equal(opts.credentials,'same-origin');
+      assert.equal(opts.headers['X-CSRF-Token'],'a'.repeat(64));
+      const body=JSON.parse(opts.body);
+      assert.deepEqual(Object.keys(body).sort(),['day','symbol']);
+      scoped.push(body.symbol);
+      const start=epoch(body.day+'T09:15:00+05:30');
+      const bars=Array.from({length:375},(_,n)=>{
+        const p=25000+n/10;
+        return {time:start+n*60,open:p,high:p+2,low:p-2,close:p+1,volume:0};
+      });
+      return {ok:true,status:200,json:async()=>({
+        schema:'QSYN-UPSTOX-RUST-INDEX-HISTORY/1',
+        source:'upstox_v3_rust_history',
+        symbol:body.symbol,day_ist:body.day,interval:'1m',
+        bars,public_redistribution_allowed:false,trading_enabled:false
+      })};
+    }
+    throw Error('UNEXPECTED_ENDPOINT_'+url);
+  };
+  const statuses=[],events=[];
+  const authed=new QsynMarketsFeed(s=>statuses.push(s),{
+    onBlockedIndex:item=>events.push(item)
+  });
+  const minute=await authed.getBars(indexReq);
+  assert.equal(minute.length,375,'homepage must show entire authenticated Rust session');
+  assert.equal(minute[0].time%60,0);
+  assert.equal(minute[374].close,25000+374/10+1);
+  assert.equal(historyCalls,1);
+  assert.equal(proofCalls,1);
+  assert.equal(publicIndexRequests,0);
+  assert(events.some(item=>item===null),'personal chart must clear obsolete approval popup');
+  const quarter=await authed.getBars({...indexReq,interval:'15m'});
+  assert.equal(quarter.length,25,'15m homepage bars aggregate real Upstox 1m source');
+  assert.equal(quarter[0].open,minute[0].open);
+  assert.equal(quarter[0].close,minute[14].close);
+  assert.equal(quarter[0].high,Math.max(...minute.slice(0,15).map(b=>b.high)));
+  const hour=await authed.getBars({...indexReq,interval:'1h'});
+  assert.equal(hour.length,7);
+  assert.equal(hour[0].time,minute[0].time,'1h candles start at 09:15 IST');
+  assert.equal(hour[0].close,minute[59].close);
+  const daily=await authed.getBars({...indexReq,interval:'1d'});
+  assert.equal(daily.length,1);
+  assert(validIndexBarTime(daily[0].time,'1d'));
+  assert.equal(daily[0].close,minute.at(-1).close);
+  assert.deepEqual(await authed.getBarsPage({...indexReq,before:minute[0].time}),
+    {bars:[],hasMore:false},'single private session must not page anonymous crypto API');
+  const sensex=await authed.getBars({exchange:'BSE_INDEX:index',symbol:'SENSEX',interval:'1m'});
+  assert.equal(sensex.length,375);
+  assert(scoped.includes('NIFTY')&&scoped.includes('SENSEX'));
+  assert.equal(proofCalls,1,'one cached admin proof per browser feed instance');
+  authed.destroy();
+} finally {
   globalThis.fetch=originalFetch;
   feed.destroy();
 }
-console.log('PASS: India indexes appear in native search; unlicensed candles fail closed');
+console.log('PASS: private Rust 375-bar indices render on homepage only with QSYN administrator access');
