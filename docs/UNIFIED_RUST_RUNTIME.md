@@ -54,3 +54,18 @@ private/app/bin/qsyn-upstox-index-worker check /ABSOLUTE/PRIVATE/PLAN.json
    strict permissions and index-rights gates on the target Cloudways host.
 6. Verify actual NSE/BSE WSS ticks/timestamps and rights separately. This
    optimization does not claim those services are activated.
+
+## Shared OHLC invariant
+
+The Rust `market_pipeline::valid_ohlc` contract now validates positive finite
+prices and consistent open/high/low/close bounds for public crypto exchange
+candles and privately calculated synthetic observations. `Candle::observe`
+is the shared synthetic price-aggregation primitive in both the scoped basket
+and private OpenAlgo basket; the latter retains separate close-out and gap
+detection. None of these helpers authorizes a feed or fabricates volume.
+
+Exchange-reported crypto volume stays a separate field. Synthetic
+`observations` are *counts of synchronized premium observations* and must
+never be shown as executed trade volume. Broker credentials, BOD instrument
+keys, exchange entitlements, access grants and historic data retention remain
+restricted to their adapters. Historical crypto bars stay exchange-authoritative.
