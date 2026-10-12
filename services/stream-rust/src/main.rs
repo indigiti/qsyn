@@ -1,23 +1,23 @@
+#[path = "bin/qsyn-history-import.rs"]
+mod history_import_entry;
 #[path = "bin/qsyn-market-archive.rs"]
 mod market_archive_entry;
 #[path = "bin/qsyn-openalgo-feed.rs"]
 mod openalgo_feed_entry;
-#[path = "bin/qsyn-history-import.rs"]
-mod history_import_entry;
 #[path = "bin/qsyn-private-chart.rs"]
 mod private_chart_entry;
-#[path = "bin/qsyn-upstox-worker.rs"]
-mod upstox_worker_entry;
-#[path = "bin/qsyn-upstox-index-worker.rs"]
-mod upstox_index_worker_entry;
+#[path = "bin/qsyn-private-history.rs"]
+mod private_history_entry;
+#[path = "bin/qsyn-private-index-history.rs"]
+mod private_index_history_entry;
 #[path = "bin/qsyn-upstox-history.rs"]
 mod upstox_history_entry;
 #[path = "bin/qsyn-upstox-index-history.rs"]
 mod upstox_index_history_entry;
-#[path = "bin/qsyn-private-index-history.rs"]
-mod private_index_history_entry;
-#[path = "bin/qsyn-private-history.rs"]
-mod private_history_entry;
+#[path = "bin/qsyn-upstox-index-worker.rs"]
+mod upstox_index_worker_entry;
+#[path = "bin/qsyn-upstox-worker.rs"]
+mod upstox_worker_entry;
 
 mod binary_activation;
 mod crypto_public;
