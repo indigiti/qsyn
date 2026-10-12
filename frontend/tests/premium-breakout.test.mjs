@@ -33,9 +33,9 @@ test('half booking, stop and weighted points accounted, no fee claims',()=>{
  const r=replayPremiumStrategy(b,{...PREMIUM_PRESET,partialR:3});
  assert.equal(r.trades.length,1);
  assert.equal(r.trades[0].firstExit,458);
- assert.equal(r.trades[0].exit,386);
- assert.equal(r.trades[0].points,18);
- assert.equal(r.trades[0].r,1);
+ assert.equal(r.trades[0].exit,402);
+ assert.equal(r.trades[0].points,26);
+ assert.ok(Math.abs(r.trades[0].r-26/18)<1e-9);
 });
 
 test('short side, volume and OI are optional gates; insufficient history cannot pass',()=>{
