@@ -44,8 +44,12 @@ final class UpstoxIndexV3
     }
 
     /** Normalize only genuine Upstox V3 OHLCV from its documented candle array. */
-    public static function normalize(array $payload, string $interval, int $asofSeconds): array
+    public static function normalize(array $payload, string $interval, int $asofSeconds, int $maxBars = 300): array
     {
+        // Keep legacy consumers at 300 by default; a private single-day
+        // 1m index chart needs room for all 375 normal NSE/BSE session minutes.
+        if ($maxBars < 1 || $maxBars > 400)
+            throw new RuntimeException('invalid_upstox_index_history_limit');
         if (!isset(self::INTERVALS[$interval])
             || ($payload['status'] ?? null) !== 'success'
             || !is_array($payload['data']['candles'] ?? null)
@@ -96,8 +100,9 @@ final class UpstoxIndexV3
             $rows[$t]=compact('open','high','low','close','volume') + ['time'=>$t];
         }
         ksort($rows, SORT_NUMERIC);
-        // The first release keeps at most the most recent 300 verified bars.
-        return array_values(array_slice($rows,-300,null,true));
+        // Never discard the opening 09:15 candles for an account-private full
+        // session requested with $maxBars=400. Other callers stay at 300.
+        return array_values(array_slice($rows,-$maxBars,null,true));
     }
 
     /** Qualified result contract: caller MUST authorize account before use. */
