@@ -69,6 +69,7 @@ $bad=['status'=>'success','data'=>['candles'=>[
 ]]];
 check(Index::parseCandles($bad,60,300,time())===null,'invalid_high_low');
 $bad['data']['candles'][0][3]=99;
+$bad['data']['candles'][0][4]=100.5;
 check(Index::parseCandles($bad,60,300,time())!==null,'corrected_low_valid');
 $bad['data']['candles'][0][4]=102;
 check(Index::parseCandles($bad,60,300,time())===null,'invalid_close_exceeds_high');
