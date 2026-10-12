@@ -201,7 +201,7 @@ fn chart_ipc() -> io::Result<Option<(UnixDatagram, std::path::PathBuf)>> {
 }
 
 #[tokio::main]
-async fn main() {
+pub(crate) async fn main() {
     let result = async {
         if std::env::var("QSYN_PRIVATE_BROKER_GATEWAY").as_deref() != Ok("1")
             || std::env::var("QSYN_PRIVATE_FEED_PROBE_ENABLED").as_deref() != Ok("1")
@@ -210,7 +210,7 @@ async fn main() {
         {
             return Err(rejected());
         }
-        let args: Vec<String> = std::env::args().skip(1).collect();
+        let args: Vec<String> = qsyn_stream::runtime_cli::operator_args("qsyn-openalgo-feed");
         let [cmd, tenant, owner, account, instruments] = args.as_slice() else {
             return Err(rejected());
         };

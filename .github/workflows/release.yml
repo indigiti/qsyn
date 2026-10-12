@@ -134,12 +134,23 @@ jobs:
           QSYN_SOURCE_SHA: ${{ github.sha }}
         run: |
           cargo test --manifest-path services/stream-rust/Cargo.toml
-          cargo build --release --manifest-path services/stream-rust/Cargo.toml
-          QSYN_MARKET_ARCHIVE_BINARY=services/stream-rust/target/release/qsyn-market-archive python3 services/stream-rust/tests/market_archive_cli_smoke.py
+          # Build the sole deployable ELF; CI separately exercises every
+          # old standalone CLI target. Release smoke tests the same archive
+          # operations through the unified Rust runtime.
+          cargo build --release --bin qsyn-stream --manifest-path services/stream-rust/Cargo.toml
+          QSYN_MARKET_ARCHIVE_BINARY=services/stream-rust/target/release/qsyn-stream QSYN_MARKET_ARCHIVE_UNIFIED=1 python3 services/stream-rust/tests/market_archive_cli_smoke.py
           QSYN_RUST_BINARY=services/stream-rust/target/release/qsyn-stream python3 services/stream-rust/tests/smoke_service.py
           QSYN_RUST_BINARY=services/stream-rust/target/release/qsyn-stream python3 services/stream-rust/tests/direct_control_smoke.py
           QSYN_RUST_BINARY=services/stream-rust/target/release/qsyn-stream python3 services/stream-rust/tests/auto_activation_smoke.py
           QSYN_RUST_BINARY=services/stream-rust/target/release/qsyn-stream python3 apps/web-php/tests/RustWebProbeSmoke.py
+          # Unified dispatcher must keep every previous operator mode closed
+          # without approved private configuration and enabling flags.
+          for mode in qsyn-market-archive qsyn-openalgo-feed qsyn-history-import qsyn-private-chart qsyn-upstox-worker qsyn-upstox-index-worker qsyn-upstox-history qsyn-upstox-index-history qsyn-private-index-history qsyn-private-history; do
+            if services/stream-rust/target/release/qsyn-stream mode "$mode" >/dev/null 2>&1; then
+              echo "FAIL: restricted Rust mode unexpectedly succeeded: $mode" >&2
+              exit 1
+            fi
+          done
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
@@ -237,16 +248,15 @@ jobs:
           cp apps/web-php/src/RustDemoConfig.php staging/private/app/src/RustDemoConfig.php
           cp apps/web-php/src/RustSupervisor.php staging/private/app/src/RustSupervisor.php
           cp services/stream-rust/target/release/qsyn-stream staging/private/app/bin/qsyn-stream
-          cp services/stream-rust/target/release/qsyn-market-archive staging/private/app/bin/qsyn-market-archive
-          cp services/stream-rust/target/release/qsyn-openalgo-feed staging/private/app/bin/qsyn-openalgo-feed
-          cp services/stream-rust/target/release/qsyn-history-import staging/private/app/bin/qsyn-history-import
-          cp services/stream-rust/target/release/qsyn-private-chart staging/private/app/bin/qsyn-private-chart
-          cp services/stream-rust/target/release/qsyn-upstox-worker staging/private/app/bin/qsyn-upstox-worker
-          cp services/stream-rust/target/release/qsyn-upstox-index-worker staging/private/app/bin/qsyn-upstox-index-worker
-          cp services/stream-rust/target/release/qsyn-upstox-history staging/private/app/bin/qsyn-upstox-history
-          cp services/stream-rust/target/release/qsyn-upstox-index-history staging/private/app/bin/qsyn-upstox-index-history
-          cp services/stream-rust/target/release/qsyn-private-index-history staging/private/app/bin/qsyn-private-index-history
-          cp services/stream-rust/target/release/qsyn-private-history staging/private/app/bin/qsyn-private-history
+          # Deploy only one linked Rust executable. Preserve all historical
+          # operator paths as tiny exact-mode launchers, so existing approved
+          # Supervisor commands, diagnostics and private workflows remain valid.
+          # They contain no credentials or arbitrary user-derived shell input.
+          for mode in qsyn-market-archive qsyn-openalgo-feed qsyn-history-import qsyn-private-chart qsyn-upstox-worker qsyn-upstox-index-worker qsyn-upstox-history qsyn-upstox-index-history qsyn-private-index-history qsyn-private-history; do
+            printf '#!/bin/sh\nexec "$(dirname "$0")/qsyn-stream" mode "%s" "$@"\n' "$mode" > "staging/private/app/bin/$mode"
+            chmod 0755 "staging/private/app/bin/$mode"
+          done
+          QSYN_MARKET_ARCHIVE_BINARY=staging/private/app/bin/qsyn-market-archive python3 services/stream-rust/tests/market_archive_cli_smoke.py
           cp ops/cloudways/qsyn-upstox-v3.supervisor.conf.example staging/private/app/ops/qsyn-upstox-v3.supervisor.conf.example
           cp ops/cloudways/qsyn-private-feed.supervisor.conf.example staging/private/app/ops/qsyn-private-feed.supervisor.conf.example
           cp ops/openalgo/qsyn-openalgo-upstox.supervisor.conf.example staging/private/app/ops/qsyn-openalgo-upstox.supervisor.conf.example
@@ -360,6 +370,11 @@ jobs:
           test -s staging/public/assets/account-chart.js
           test -s staging/private/app/src/RustProbe.php
           test -x staging/private/app/bin/qsyn-stream
+          # All compatibility entries are launchers, not independently linked ELF.
+          for mode in qsyn-market-archive qsyn-openalgo-feed qsyn-history-import qsyn-private-chart qsyn-upstox-worker qsyn-upstox-index-worker qsyn-upstox-history qsyn-upstox-index-history qsyn-private-index-history qsyn-private-history; do
+            test -x "staging/private/app/bin/$mode"
+            grep -Fq 'exec "$(dirname "$0")/qsyn-stream" mode' "staging/private/app/bin/$mode"
+          done
           test -x staging/private/app/bin/qsyn-market-archive
           test -x staging/private/app/bin/qsyn-openalgo-feed
           test -x staging/private/app/bin/qsyn-history-import

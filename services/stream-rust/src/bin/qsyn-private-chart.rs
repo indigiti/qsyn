@@ -17,7 +17,7 @@ async fn run() -> io::Result<()> {
     }
     let rights = env::var("QSYN_PRIVATE_CHART_RIGHTS_FILE").map_err(|_| denied())?;
     let key = env::var("QSYN_PRIVATE_CHART_SIGNING_KEY_FILE").map_err(|_| denied())?;
-    let args: Vec<String> = env::args().skip(1).collect();
+    let args: Vec<String> = qsyn_stream::runtime_cli::operator_args("qsyn-private-chart");
     match args.as_slice() {
         [cmd, instrument] if cmd == "issue" => {
             // The caller must authenticate the user via a separate access
@@ -39,7 +39,7 @@ async fn run() -> io::Result<()> {
     }
 }
 #[tokio::main]
-async fn main() {
+pub(crate) async fn main() {
     if run().await.is_err() {
         eprintln!("QSYN private chart gateway rejected; verify operator access and permissions");
         std::process::exit(2);

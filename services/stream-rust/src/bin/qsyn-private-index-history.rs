@@ -10,8 +10,8 @@ fn denied() -> io::Error {
     )
 }
 #[tokio::main]
-async fn main() {
-    let args: Vec<String> = env::args().skip(1).collect();
+pub(crate) async fn main() {
+    let args: Vec<String> = qsyn_stream::runtime_cli::operator_args("qsyn-private-index-history");
     let result = match args.as_slice() {
         [cmd, plan, signing_key, archive, port] if cmd == "check" || cmd == "serve" => {
             let cfg = IndexHistoryConfig {

@@ -10,6 +10,7 @@ use axum::{
     routing::get,
     Json, Router,
 };
+use qsyn_stream::market_pipeline::valid_ohlc;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::{
@@ -114,17 +115,9 @@ fn bar(
     if time < 1_500_000_000
         || time > now.saturating_add(step)
         || !time.is_multiple_of(step)
-        || open <= 0.0
-        || high <= 0.0
-        || low <= 0.0
-        || close <= 0.0
+        || !valid_ohlc(open, high, low, close)
+        || !volume.is_finite()
         || volume < 0.0
-        || ![open, high, low, close, volume]
-            .iter()
-            .all(|v| v.is_finite())
-        || high < open.max(close)
-        || low > open.min(close)
-        || low > high
     {
         return None;
     }

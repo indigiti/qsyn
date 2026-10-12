@@ -16,6 +16,7 @@ BINARY = Path(os.environ.get(
     "QSYN_MARKET_ARCHIVE_BINARY",
     ROOT / "services/stream-rust/target/release/qsyn-market-archive"
 ))
+MODE_ARGS = ["mode", "qsyn-market-archive"] if os.environ.get("QSYN_MARKET_ARCHIVE_UNIFIED") == "1" else []
 
 
 def frame(sequence, account, price):
@@ -34,7 +35,7 @@ def run_binary(root, operation, repair=False):
     env = os.environ.copy()
     env["QSYN_ARCHIVE_REPAIR_APPROVED"] = "1" if repair else "0"
     return subprocess.run(
-        [str(BINARY), operation, str(root)],
+        [str(BINARY), *MODE_ARGS, operation, str(root)],
         text=True, capture_output=True, timeout=10, env=env,
     )
 

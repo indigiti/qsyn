@@ -10,8 +10,8 @@ fn denied() -> io::Error {
     )
 }
 #[tokio::main]
-async fn main() {
-    let args = env::args().skip(1).collect::<Vec<_>>();
+pub(crate) async fn main() {
+    let args = qsyn_stream::runtime_cli::operator_args("qsyn-private-history");
     let result = match args.as_slice() {
         [cmd, settings, key, history, port] if cmd == "check" || cmd == "serve" => {
             let cfg = HistoryConfig {

@@ -4,8 +4,8 @@ use qsyn_stream::durable_market_wal::{audit, repair_incomplete_tail};
 use serde_json::json;
 use std::path::Path;
 
-fn main() {
-    let args: Vec<String> = std::env::args().skip(1).collect();
+pub(crate) fn main() {
+    let args: Vec<String> = qsyn_stream::runtime_cli::operator_args("qsyn-market-archive");
     let result = match args.as_slice() {
         [operation, root] if operation == "audit" => audit(Path::new(root)).map(|summary| {
             json!({

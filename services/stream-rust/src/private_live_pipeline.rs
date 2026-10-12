@@ -170,43 +170,23 @@ impl PrivateBasket {
         let previous = self.forming.take();
         let (forming, finalized) = match previous {
             Some(mut candle) if candle.open_time_ms == opening => {
-                candle.low = candle.low.min(premium);
-                candle.high = candle.high.max(premium);
-                candle.close = premium;
-                candle.observations = candle.observations.saturating_add(1);
+                if !candle.observe(premium) {
+                    self.forming = Some(candle);
+                    return None;
+                }
                 (candle, None)
             }
             Some(candle) if candle.open_time_ms < opening => {
                 if opening - candle.open_time_ms > 60_000 {
                     self.gap_detected = true;
                 }
-                (
-                    Candle {
-                        open_time_ms: opening,
-                        open: premium,
-                        low: premium,
-                        high: premium,
-                        close: premium,
-                        observations: 1,
-                    },
-                    Some(candle),
-                )
+                (Candle::from_observation(opening, premium)?, Some(candle))
             }
             Some(candle) => {
                 self.forming = Some(candle);
                 return None;
             }
-            None => (
-                Candle {
-                    open_time_ms: opening,
-                    open: premium,
-                    low: premium,
-                    high: premium,
-                    close: premium,
-                    observations: 1,
-                },
-                None,
-            ),
+            None => (Candle::from_observation(opening, premium)?, None),
         };
         self.forming = Some(forming.clone());
         self.last_event_ms = newest;

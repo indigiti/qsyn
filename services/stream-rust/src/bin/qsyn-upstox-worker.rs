@@ -3,8 +3,8 @@
 use qsyn_stream::upstox_worker::WorkerSettings;
 use std::path::Path;
 
-fn main() {
-    let args = std::env::args().skip(1).collect::<Vec<_>>();
+pub(crate) fn main() {
+    let args = qsyn_stream::runtime_cli::operator_args("qsyn-upstox-worker");
     let result = match args.as_slice() {
         [op, path] if op == "check" || op == "run" => {
             let settings = WorkerSettings::from_private_file(Path::new(path));

@@ -42,7 +42,7 @@ fn run() -> io::Result<()> {
     {
         return Err(denied());
     }
-    let args: Vec<String> = std::env::args().skip(1).collect();
+    let args: Vec<String> = qsyn_stream::runtime_cli::operator_args("qsyn-history-import");
     let [cmd, source, root] = args.as_slice() else {
         return Err(denied());
     };
@@ -67,7 +67,7 @@ fn run() -> io::Result<()> {
     );
     Ok(())
 }
-fn main() {
+pub(crate) fn main() {
     if run().is_err() {
         eprintln!("QSYN private history import rejected; check operator approval, account data and private paths");
         std::process::exit(2);
