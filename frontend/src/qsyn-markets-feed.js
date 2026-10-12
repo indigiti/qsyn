@@ -7,6 +7,14 @@ const STEPS=Object.freeze({'1m':60,'5m':300,'15m':900,'1h':3600,'1d':86400});
 const IST_OFFSET=19800;
 const PROOF='/qsyn/api/v1/admin/upstox/index-history-proof';
 
+export function validIndexBarTime(time,interval){
+  if(!Number.isSafeInteger(time)||time<=0||time%60!==0)return false;
+  if(interval==='1d')return (time+IST_OFFSET)%86400===0;
+  if(interval==='5m'||interval==='15m')
+    return (time+IST_OFFSET)%STEPS[interval]===0;
+  return INTERVALS.has(interval);
+}
+
 /** Aggregate REAL Rust-returned 1m OHLC into native chart intervals.
  * Never synthesize missing periods or exchange prices. Session 1h buckets
  * start at the exchange open (09:15 IST); 1d candles use IST midnight.
@@ -77,6 +85,7 @@ export class QsynMarketsFeed extends QsynCryptoFeed {
     const old=this.personalFeeds.get(key);
     if(old?.day===day)return old;
     old?.destroy();
+    this.personalBars.delete(key);
     const feed=new PrivateIndexHistoryFeed({
       symbol:instrument.symbol,day,csrf,
       onStatus:msg=>{if(!this.closed)this.onState(instrument.name+' · '+msg);},
