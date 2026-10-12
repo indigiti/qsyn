@@ -404,7 +404,7 @@ pub fn decode_personal_index_updates(
     if frame.frame_type != 0 && frame.frame_type != 1 {
         return Err(denied("personal_v3_type_invalid"));
     }
-    if frame.feeds.len() > 6 {
+    if frame.feeds.len() > crate::personal_index::INDEX_SYMBOLS.len() {
         return Err(denied("personal_v3_excessive_keys"));
     }
     let mut out = Vec::with_capacity(frame.feeds.len());
