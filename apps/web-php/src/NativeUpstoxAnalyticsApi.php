@@ -24,8 +24,11 @@ final class NativeUpstoxAnalyticsApi
 
     private static function directory(bool $create): string
     {
-        $runtime = getenv('QSYN_RUNTIME_DIR');
-        if (!is_string($runtime) || $runtime === '' || $runtime[0] !== '/'
+        // Use the same private runtime as NativeUpstoxWebApi and RustAdmin.
+        // Cloudways often configures this through its owner-only application
+        // directory rather than exporting a PHP-FPM environment variable.
+        $runtime = (string)(getenv('QSYN_RUNTIME_DIR') ?: dirname(__DIR__, 2) . '/runtime');
+        if ($runtime === '' || $runtime[0] !== '/'
             || str_contains($runtime, '/..') || is_link($runtime)
             || realpath($runtime) !== $runtime
             || preg_match('~/(?:public_html|webroot|www)(?:/|$)~i', $runtime)
@@ -235,7 +238,12 @@ final class NativeUpstoxAnalyticsApi
         }
         if (getenv('QSYN_TRADING_ENABLED') === '1'
             || getenv('QSYN_ENABLE_LIVE_TRADING') === '1'
-            || getenv('QSYN_UPSTOX_ANALYTICS_IMPORT_ENABLED') !== '1') {
+            || getenv('QSYN_CONTROL_ENABLED') === '0'
+            // A secured QSYN administrator + pinned private Upstox account
+            // can import a *read-only* token without a second server flag.
+            // Keep an explicit operator kill switch. This NEVER starts Rust
+            // workers, grants market-data licenses or permits order routing.
+            || getenv('QSYN_UPSTOX_ANALYTICS_IMPORT_ENABLED') === '0') {
             return [503, ['error'=>'analytics_token_import_disabled']];
         }
         if (!RustAdmin::originAllowed($server)) {
@@ -249,7 +257,8 @@ final class NativeUpstoxAnalyticsApi
             $root = self::directory($action === 'import');
             $user = self::expectedUser($root);
         } catch (\Throwable) {
-            return [503, ['error'=>'analytics_account_binding_unavailable']];
+            return [503, ['error'=>'analytics_account_binding_unavailable',
+                'code'=>'UPSTOX_ANALYTICS_BIND_EXPECTED_USER_REQUIRED']];
         }
         if ($action === 'status') {
             $stored = self::privateFile($root . '/' . self::FILE, 16384);
@@ -259,6 +268,8 @@ final class NativeUpstoxAnalyticsApi
                 'provider_account_identity_verified'=>false,
                 'index_feed_activated'=>false,'trading_enabled'=>false,
                 'token_type'=>'analytics_read_only',
+                'import_available'=>true,
+                'account_binding_present'=>true,
                 'csrf'=>RustAdmin::csrf(),
             ]];
         }

@@ -29,15 +29,19 @@ process liveness, or an actual index tick.
 2. Set `QSYN_RUNTIME_DIR` to an existing absolute private server directory
    outside any webroot (not world-writable). The importer creates or uses a
    child `upstox-private/` directory with owner-only 0700 permissions.
-3. Set `QSYN_UPSTOX_ANALYTICS_EXPECTED_USER_ID` to your expected Upstox
+3. Optionally set `QSYN_UPSTOX_ANALYTICS_EXPECTED_USER_ID` to your expected Upstox
    user ID, *or* retain the existing owner-only
    `upstox-private/upstox-app.json` with the correct expected user ID.
    This is **operator-supplied binding, not provider account verification**.
    No app API key, app secret or OAuth callback is otherwise needed.
-4. Set `QSYN_UPSTOX_ANALYTICS_IMPORT_ENABLED=1` with trading flags disabled.
-   Restart only the relevant PHP application process if required.
-   **Do not** set `QSYN_UPSTOX_INDEX_WORKER_ENABLE`, licensed display,
-   retention or private chart flags unless separately authorized.
+4. No separate import-enable flag is required when the secure private
+   Upstox app account binding already exists. An authenticated QSYN
+   administrator can import a read-only token by confirming consent in the
+   Brokers UI. For emergency operator lockdown set
+   `QSYN_UPSTOX_ANALYTICS_IMPORT_ENABLED=0`, which explicitly blocks import.
+   Keep both trading flags off. **Do not** set
+   `QSYN_UPSTOX_INDEX_WORKER_ENABLE`, licensed display, retention or
+   private chart flags unless separately authorized.
 5. Generate an Analytics Token on the Upstox Developer Apps **Analytics**
    page. Copy it directly into the administrator-only **Analytics Token**
    field in QSYN Brokers over HTTPS. Never provide it in ChatGPT, GitHub,
@@ -85,7 +89,7 @@ WSS reverse proxy, stored index candles or a trading permission.
   Apps; QSYN cannot revoke it through the local button.
 - The public `/qsyn/api/v1/india/bars` stays unavailable to unlicensed
   viewers. Broker trading remains disabled.
-- To roll back, disable `QSYN_UPSTOX_ANALYTICS_IMPORT_ENABLED`, stop the
+- To roll back, set `QSYN_UPSTOX_ANALYTICS_IMPORT_ENABLED=0`, stop the
   independently supervised worker (if any), and revoke the Upstox token
   through Upstox.
 
@@ -126,3 +130,25 @@ Cloudways operator then selects the separate Analytics session file in an
 **independently approved** index worker plan and runs
 \`qsyn-upstox-index-worker check /ABS/PRIVATE/PLAN.json\` to validate the
 current file-based gates before any authorized process activation.
+
+## Administrator onboarding without a Cloudways PHP environment edit
+
+When a previously configured Upstox OAuth app is already shown on Brokers,
+QSYN reuses the existing owner-only `upstox-app.json` account binding and
+the same private runtime directory as the normal OAuth service.
+An independently authenticated QSYN administrator can then add the Analytics
+Token directly in Brokers without exporting a second enable flag or storing
+another app secret. This only unlocks **credential intake**; it does not grant
+market-data rights, change account mapping, activate workers, or place orders.
+
+If no account binding exists, the status response now reports the safe code
+`UPSTOX_ANALYTICS_BIND_EXPECTED_USER_REQUIRED`. Resolve that through the
+existing protected Upstox app configuration or an operator-provided
+`QSYN_UPSTOX_ANALYTICS_EXPECTED_USER_ID`; QSYN must not accept a free-form
+account ID alongside an unverified browser token.
+
+The operator may force-disable intake with
+`QSYN_UPSTOX_ANALYTICS_IMPORT_ENABLED=0`. This override takes priority over
+the existing app binding. Private 0700/0600 storage, an authenticated admin
+session, CSRF, read-only Upstox feed-authorization check, and non-trading
+guards remain mandatory.

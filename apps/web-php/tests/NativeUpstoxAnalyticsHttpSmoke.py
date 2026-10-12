@@ -17,13 +17,21 @@ def run():
         sessions=Path(tmp)/"sessions"
         for item in [runtime,private,sessions]:
             item.mkdir(mode=0o700)
+        # Reuse the existing Upstox OAuth account binding. No app-secret
+        # exchange or additional PHP-FPM enable flag is required for token import.
+        app=private/"upstox-app.json"
+        app.write_text(json.dumps({
+            "schema":"QSYN-UPSTOX-WEB-APP/1",
+            "expected_user_id":"TEST_ACCOUNT",
+            "client_id":"existing-app-fixture",
+            "redirect_uri":"https://stage.invalid/qsyn/api/v1/admin/upstox/callback"
+        }))
+        app.chmod(0o600)
         hashed=subprocess.check_output(["php","-r",
             "echo password_hash($argv[1], PASSWORD_DEFAULT);",PASSWORD],text=True).strip()
         env={**os.environ,
             "QSYN_CONTROL_ENABLED":"1",
             "QSYN_ALLOW_HTTP_TEST":"1",
-            "QSYN_UPSTOX_ANALYTICS_IMPORT_ENABLED":"1",
-            "QSYN_UPSTOX_ANALYTICS_EXPECTED_USER_ID":"TEST_ACCOUNT",
             "QSYN_RUNTIME_DIR":str(runtime),
             "QSYN_ADMIN_PASSWORD_HASH":hashed,
             "QSYN_TRADING_ENABLED":"0","QSYN_ENABLE_LIVE_TRADING":"0"}
@@ -43,6 +51,8 @@ def run():
             status,report,headers=request(admin,origin,BASE+"status")
             assert status==200,(status,report)
             assert report["schema"]=="QSYN-UPSTOX-ANALYTICS-STATUS/1"
+            assert report["import_available"] is True
+            assert report["account_binding_present"] is True
             assert report["token_stored"] is False
             assert report["provider_feed_authorized_now"] is False
             assert report["provider_account_identity_verified"] is False
@@ -64,6 +74,12 @@ def run():
                 {"confirmed":True},report["csrf"])[0]==409
             assert request(anon,origin,BASE+"verify","POST",
                 {"confirmed":True},report["csrf"])[0]==401
+            # Removing the existing secure OAuth account binding blocks new
+            # token entry; it cannot trust a browser-submitted identity.
+            app.rename(private/"upstox-app.saved.json")
+            assert request(admin,origin,BASE+"status")[0]==503
+            (private/"upstox-app.saved.json").rename(app)
+            assert request(admin,origin,BASE+"status")[0]==200
             assert request(admin,origin,BASE+"clear","POST",
                 {"confirmed":True},report["csrf"])[0]==200
             assert not (private/"upstox-analytics-session.json").exists()
