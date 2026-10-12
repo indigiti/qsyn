@@ -486,6 +486,55 @@ try {
   await page.getByRole('heading',{name:'SENSEX · Upstox historical candles'}).waitFor();
   if(await page.getByRole('button',{name:'Open SENSEX historical chart'}).isEnabled())
     throw Error('Private index chart opened without account and explicit viewing scope');
+  // Offline-only browser fixture: prove OpenAlgo renders a complete Upstox-
+  // shaped 09:15–15:29 IST day instead of silently dropping the first 75 bars.
+  const fullDayDate='2026-10-09';
+  const start=Math.floor(Date.parse(fullDayDate+'T09:15:00+05:30')/1000);
+  const sessionBars=Array.from({length:375},(_,i)=>{
+    const p=25100+i*0.11;
+    return {time:start+i*60,open:p,high:p+2,low:p-2,close:p+1,volume:0};
+  });
+  await page.route('**/qsyn/api/v1/admin/upstox/index-history-proof',route=>
+    route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({
+      schema:'QSYN-INDEX-HISTORICAL-PROOF/1',csrf:'a'.repeat(64),
+      token_present:true,suggested_day_ist:fullDayDate,
+      symbols:['NIFTY','SENSEX'],history_verified:false,
+      live_feed_verified:false,trading_enabled:false,
+    })}));
+  let privateChartRequests=0;
+  await page.route('**/qsyn/api/v1/admin/upstox/private-index-chart',async route=>{
+    const body=route.request().postDataJSON();
+    if(route.request().method()!=='POST'||body.confirmed!==true||
+       body.private_view_acknowledged!==true||body.symbol!=='SENSEX'||
+       body.day!==fullDayDate||
+       route.request().headers()['x-csrf-token']!=='a'.repeat(64))
+      throw Error('Unscoped historical chart request');
+    privateChartRequests++;
+    await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({
+      schema:'QSYN-PRIVATE-UPSTOX-HISTORY-CHART/1',
+      source:'upstox_private_analytics_history',exchange:'BSE_INDEX',
+      symbol:'SENSEX',interval:'1m',day_ist:fullDayDate,
+      bars:sessionBars,account_scoped:true,personal_private_view_only:true,
+      public_redistribution_allowed:false,display_rights_approved_by_app:false,
+      live_stream_verified:false,trading_enabled:false,
+    })});
+  });
+  // The current tokenless component has already mounted. Remount after the
+  // mocked account is enabled, rather than mutating production credentials.
+  await page.getByRole('button',{name:'Crypto',exact:true}).click();
+  await page.getByRole('button',{name:'Indices',exact:true}).click();
+  await page.getByRole('combobox',{name:'Exchange venue'}).selectOption('BSE_INDEX');
+  await page.getByRole('combobox',{name:'Market instrument'}).selectOption('BSE_INDEX:index:SENSEX');
+  await page.getByRole('checkbox',{name:/Personal account view only/}).check();
+  await page.getByRole('button',{name:'Open SENSEX historical chart'}).click();
+  await page.getByText(/375 Upstox 1-minute historical candles/).waitFor({timeout:14000});
+  await page.getByText(/09:15–15:29 IST/).waitFor({timeout:14000});
+  if(privateChartRequests!==1)
+    throw Error('Expected one private history call per selected date');
+  if(await page.locator('.qt-private-history-host canvas').count()===0)
+    throw Error('Complete private index history did not mount an OpenAlgo canvas');
+  await page.unroute('**/qsyn/api/v1/admin/upstox/private-index-chart');
+  await page.unroute('**/qsyn/api/v1/admin/upstox/index-history-proof');
   await page.getByRole('button',{name:'Stocks',exact:true}).click();
   await page.getByText('Stock market adapter not operationally verified').first().waitFor();
   await page.getByRole('button',{name:'Options',exact:true}).click();

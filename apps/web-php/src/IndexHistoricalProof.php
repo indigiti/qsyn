@@ -148,7 +148,7 @@ final class IndexHistoricalProof
                 default=>'UPSTOX_HISTORY_PROVIDER_UNAVAILABLE',
             }];
         }
-        $bars=UpstoxIndexV3::normalize($result['body']??[],'1m',time());
+        $bars=UpstoxIndexV3::normalize($result['body']??[],'1m',time(),400);
         $tz=new \DateTimeZone('Asia/Kolkata');
         foreach ($bars as $bar) {
             $actual=(new \DateTimeImmutable('@'.$bar['time']))
@@ -212,7 +212,7 @@ final class IndexHistoricalProof
                 return [502,['error'=>'private_upstox_history_unavailable',
                     'provider_http_status'=>(int)($provider['http_status']??0)]];
             }
-            $bars=UpstoxIndexV3::normalize($provider['body']??[],'1m',time());
+            $bars=UpstoxIndexV3::normalize($provider['body']??[],'1m',time(),400);
             $tz=new \DateTimeZone('Asia/Kolkata');
             foreach ($bars as $bar) {
                 if ((new \DateTimeImmutable('@'.$bar['time']))

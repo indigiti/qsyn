@@ -35,7 +35,7 @@ class PrivateIndexHistoryFeed {
         json.trading_enabled!==false||json.live_stream_verified!==false||
         json.symbol!==this.symbol||json.day_ist!==this.day||json.interval!=='1m'||
         json.exchange!==(this.symbol==='SENSEX'?'BSE_INDEX':'NSE_INDEX')||
-        !Array.isArray(json.bars)||json.bars.length<1||json.bars.length>300)
+        !Array.isArray(json.bars)||json.bars.length<1||json.bars.length>400)
         throw Error('PRIVATE_INDEX_HISTORY_INVALID');
       let previous=0;
       for(const bar of json.bars){
@@ -46,8 +46,15 @@ class PrivateIndexHistoryFeed {
           throw Error('PRIVATE_INDEX_CANDLE_INVALID');
         previous=bar.time;
       }
-      if(!this.closed&&!ctl.signal.aborted)
-        this.onStatus(json.bars.length+' authentic Upstox 1-minute historical candles · '+this.day);
+      if(!this.closed&&!ctl.signal.aborted){
+        const clock=new Intl.DateTimeFormat('en-GB',{
+          timeZone:'Asia/Kolkata',hour:'2-digit',minute:'2-digit',hourCycle:'h23'
+        });
+        const first=clock.format(new Date(json.bars[0].time*1000));
+        const last=clock.format(new Date(json.bars[json.bars.length-1].time*1000));
+        this.onStatus(json.bars.length+' Upstox 1-minute historical candles · '+
+          this.day+' · '+first+'–'+last+' IST');
+      }
       return this.closed||ctl.signal.aborted?[]:json.bars;
     }catch(e){
       if(this.closed||ctl.signal.aborted||e?.name==='AbortError')return [];
