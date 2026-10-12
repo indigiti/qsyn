@@ -20,6 +20,7 @@ import {bindIndicatorLegendSettings} from './indicator-legend-settings.js';
 import { observeChartCancellations } from './chart-cancellation.js';
 import { QsynMarketsFeed } from './qsyn-markets-feed.js';
 import {saveIndexIntent} from './private-index-intent.js';
+import {loadPublicChartSelection,observePublicChartSelection} from './public-chart-selection.js';
 import {MAX_AUTO_BACKFILL_BARS,INITIAL_BACKFILL_BARS} from './crypto-feed.js';
 import {observeWickScienceBackfill} from './wick-science-auto-backfill.js';
 import { cryptoDefault } from './crypto-catalog.js';
@@ -156,6 +157,10 @@ function HomepageChart({ theme, embedded = false,
   initialExchange = cryptoDefault.exchange+':'+cryptoDefault.market,
   initialSymbol = cryptoDefault.symbol, onPrivateIndexRequest = null }) {
   const host=useRef(null);
+  const [savedSelection]=useState(()=>loadPublicChartSelection(browserStorage()));
+  // Browser preference is loaded once; it must not reset on a theme change.
+  const firstExchange=initialExchange===cryptoDefault.exchange+':'+cryptoDefault.market && initialSymbol===cryptoDefault.symbol ? savedSelection.exchange : initialExchange;
+  const firstSymbol=initialExchange===cryptoDefault.exchange+':'+cryptoDefault.market && initialSymbol===cryptoDefault.symbol ? savedSelection.symbol : initialSymbol;
   const [message,setMessage]=useState('Connecting public exchange candles…');
   const [blockedIndex,setBlockedIndex]=useState(null);
   const nativeWorkspaces=useMemo(()=>cryptoNativeWorkspaceStore(),[]);
@@ -169,8 +174,8 @@ function HomepageChart({ theme, embedded = false,
       onBlockedIndex:index=>{if(active)setBlockedIndex(index);}
     });
     const grid=createChartGrid(host.current,{
-      feed,symbol:initialSymbol,
-      exchange:initialExchange,
+      feed,symbol:firstSymbol,
+      exchange:firstExchange,
       interval:'1m',intervals:['1m','5m','15m','1h','1d'],
       theme,branding:false,panels:true,toolbar:true,bottombar:true,
       preset:'1x1',workspaces:nativeWorkspaces||undefined,
@@ -234,6 +239,7 @@ function HomepageChart({ theme, embedded = false,
     const updateGrid=()=>{syncToolbar();syncLegendSettings();syncWick();};
     const offActive=grid.on('active',updateGrid);
     const offLayout=grid.on('layout',updateGrid);
+    const stopSelection=observePublicChartSelection(grid,browserStorage());
     window.addEventListener('resize',syncToolbar);
     host.current.addEventListener('scroll',syncToolbar,true);
     void grid.ready.then(updateGrid).catch(()=>{
@@ -243,13 +249,13 @@ function HomepageChart({ theme, embedded = false,
     return ()=>{
       active=false;stopWick();
       for(const stop of legendStops.values())stop();legendStops.clear();
-      observer.disconnect();offActive?.();offLayout?.();
+      observer.disconnect();offActive?.();offLayout?.();stopSelection();
       window.removeEventListener('resize',syncToolbar);
       host.current?.removeEventListener('scroll',syncToolbar,true);
       slot?.remove();
       grid.destroy();feed.destroy();
     };
-  },[theme,nativeWorkspaces,nativeWatchlists,initialExchange,initialSymbol]);
+  },[theme,nativeWorkspaces,nativeWatchlists,firstExchange,firstSymbol]);
   const openPrivateIndex=()=>{
     if(!blockedIndex)return;
     if(typeof onPrivateIndexRequest==='function'){

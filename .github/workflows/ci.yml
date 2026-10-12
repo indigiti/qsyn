@@ -246,6 +246,9 @@ jobs:
       - name: Verify India index native discovery and strict license gates
         run: node tests/india-index-contract.mjs
         working-directory: frontend
+      - name: Preserve homepage chart symbol across refreshes
+        run: node tests/public-chart-selection.test.mjs
+        working-directory: frontend
       - name: Confirm chart-cancellation guard never masks app errors
         run: node tests/chart-cancellation-contract.mjs
         working-directory: frontend

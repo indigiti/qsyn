@@ -22,11 +22,20 @@ export function ProviderStatusPanel(){
             credentials:'same-origin',cache:'no-store',signal:controller.signal,
             headers:{Accept:'application/json'}});
           const data=res.ok?await res.json():null;
-          return [provider.id,{
-            code:data?.schema==='QSYN-UPSTOX-ANALYTICS-STATUS/1' &&
-              data.token_stored===true?'TOKEN_STORED_NOT_LIVE':'FEED_NOT_VERIFIED',
-            status:'not_verified'
-          }];
+          const status=await fetch('/qsyn/api/v1/admin/index-ops/status',{
+            credentials:'same-origin',cache:'no-store',signal:controller.signal,
+            headers:{Accept:'application/json'}}).then(r=>r.ok?r.json():null).catch(()=>null);
+          const known=status?.schema==='QSYN-INDEX-WEB-OPERATIONS/1';
+          const code=known && !status.private_plan_ready ? 'INDEX_PLAN_NOT_PROVISIONED'
+            :known && !status.executor_ready ? 'INDEX_EXECUTOR_UNAVAILABLE'
+            :known && !status.rust_binary_ready ? 'INDEX_WORKER_BINARY_UNAVAILABLE'
+            :known && !status.archive_ready ? 'INDEX_HISTORY_STORAGE_UNAVAILABLE'
+            :known && !status.preflight_enabled ? 'INDEX_PREFLIGHT_NOT_READY'
+            :known && status.services?.worker==='running' ? 'WORKER_RUNNING_FEED_NOT_VERIFIED'
+            :known && status.services?.worker==='stopped' ? 'INDEX_WORKER_STOPPED'
+            :data?.schema==='QSYN-UPSTOX-ANALYTICS-STATUS/1' && data.token_stored===true
+              ? 'TOKEN_STORED_FEED_NOT_VERIFIED':'FEED_NOT_VERIFIED';
+          return [provider.id,{code,status:'not_verified'}];
         }catch{return [provider.id,{code:'ADMIN_STATUS_UNAVAILABLE',status:'not_verified'}];}
       }
       const venue=provider.venues[0];

@@ -130,7 +130,8 @@ export function IndexWebOperationsPanel(){
           {' '}{status?.services?.[name]||'not checked'}</span>
         {['start','stop'].map(action=><button type="button"
           className="terminal-action terminal-secondary-action" key={action}
-          disabled={busy||!available||!status?.web_operations_enabled||!status?.service_controls_enabled}
+          disabled={busy||!status?.web_operations_enabled||!status?.service_controls_enabled||
+             (action==='start'&&!available)}
           onClick={()=>void execute(action,name)}>
           {action==='start'?'Start':'Stop'} {name==='worker'?'worker':'reader'}
         </button>)}
