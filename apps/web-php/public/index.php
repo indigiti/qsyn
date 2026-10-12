@@ -211,6 +211,27 @@ if ($route === '/qsyn/api/v1/studio/market' || $route === '/qsyn/api/v1/studio/b
     }
 }
 
+// Single read-only Upstox history proof. Never exposes OHLC publicly.
+if ($route === '/qsyn/api/v1/admin/upstox/index-history-proof') {
+    $src=dirname(__DIR__).'/src';
+    if (!is_file($src.'/IndexHistoricalProof.php')) {
+        $src=dirname(__DIR__,2).'/private_html/qsyn/app/src';
+    }
+    foreach (['RustAdmin','UpstoxIndexV3','IndexHistoricalProof'] as $unit) {
+        if (!is_file($src.'/'.$unit.'.php')) respond(['error'=>'index_proof_module_unavailable'],503);
+        require_once $src.'/'.$unit.'.php';
+    }
+    header('Cache-Control: private, no-store');
+    header('Pragma: no-cache');
+    header('X-Robots-Tag: noindex, nofollow');
+    [$status,$payload]=\QSYN\MarketData\IndexHistoricalProof::dispatch($_SERVER);
+    if ($status===405) header('Allow: GET, POST');
+    $requestId=bin2hex(random_bytes(8));
+    header('X-QSYN-Request-ID: '.$requestId);
+    $payload['request_id']=$requestId;
+    respond($payload,$status);
+}
+
 // Prepare private index drafts from the existing Upstox private runtime.
 // No rights, BOD approval, executable path or broker token can be submitted.
 if (preg_match('#^/qsyn/api/v1/admin/index-prepare/(status|prepare)$#', $route, $preparation)) {
