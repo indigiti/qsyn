@@ -193,12 +193,12 @@ try {
   if(await page.locator('html').getAttribute('data-qsyn-theme')!=='light')throw new Error('First-visit light theme lost');
   // The /qsyn/terminal route retains existing chart compare, watchlist,
   // private-workspace and broker-safety behavior.
-  await page.goto(origin+'/qsyn/terminal',{waitUntil:'domcontentloaded'});
-  await page.getByRole('heading',{name:'Market explorer'}).waitFor();
+  await page.goto(origin+'/qsyn/terminal/trading',{waitUntil:'domcontentloaded'});
+  await page.getByRole('heading',{name:'Legacy Chart Lab'}).waitFor();
   await page.waitForFunction(()=>document.querySelectorAll('#qsyn-native-chart canvas').length>0,
     null,{timeout:12000});
   const source = await page.locator('.terminal-alert').innerText();
-  if(!source.includes('Simulation workspace')||!source.includes('No live market data'))
+  if(!source.includes('Research-only workspace')||!source.includes('Simulated data'))
     throw new Error('Missing unambiguous simulation provenance label');
   if(await page.locator('.terminal-nav-item.locked:disabled').count()!==0)
     throw new Error('Retired broker/order navigation is still displayed');
@@ -251,8 +251,8 @@ try {
   if(!(await page.getByRole('button',{name:/Strategy Studio/}).count()>0))
     throw new Error('Unified Strategy Studio tool missing');
   // Public terminal stays browser-only without opt-in identity/private storage.
-  await page.getByRole('button',{name:'Trading',exact:true}).first().click();
-  await page.getByRole('heading',{name:'Market explorer'}).waitFor();
+  await page.goto(origin+'/qsyn/terminal/trading',{waitUntil:'domcontentloaded'});
+  await page.getByRole('heading',{name:'Legacy Chart Lab'}).waitFor();
   if(await page.getByRole('button',{name:'Load private file'}).count()!==0)
     throw new Error('Private workspace controls unexpectedly available without authentication');
 
