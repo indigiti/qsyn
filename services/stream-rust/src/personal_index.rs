@@ -54,6 +54,18 @@ struct Analytics {
     display_entitlement_verified: bool,
     retention_entitlement_verified: bool,
 }
+/// Match QSYN PHP's private/runtime layout without new env configuration.
+/// Installed binary: private/app/bin/qsyn-stream -> private/runtime.
+/// An explicit runtime path takes precedence and is validated by read_token.
+pub fn runtime_dir() -> io::Result<std::path::PathBuf> {
+    if let Some(configured) = std::env::var_os("QSYN_RUNTIME_DIR") {
+        return Ok(std::path::PathBuf::from(configured));
+    }
+    let exe = std::env::current_exe()?;
+    Ok(exe.parent().and_then(|p| p.parent()).and_then(|p| p.parent())
+        .ok_or_else(denied)?.join("runtime"))
+}
+
 pub fn read_token(runtime: &Path) -> io::Result<String> {
     if !runtime.is_absolute() || runtime.to_str().is_none() {
         return Err(denied());
