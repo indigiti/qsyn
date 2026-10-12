@@ -3,6 +3,7 @@ import {Activity,CandlestickChart,Layers,Plus,Save,Trash2} from 'lucide-react';
 import {createWidget} from 'openalgo-charts/widget';
 import 'openalgo-charts/indicators';
 import './terminal-unified.css';
+import {PremiumBreakoutResearch} from './premium-breakout-research.jsx';
 
 const UNDERLYINGS=['NIFTY','BANKNIFTY','FINNIFTY'];
 const HORIZONS=['W1','W2','M1'];
@@ -225,6 +226,7 @@ export function StrategyWorkspace({theme}){
       {error&&<p role="alert" className="terminal-error">{error}</p>}
       <p className="terminal-footnote">All data here is deterministic simulation. Templates remain in this browser, never in an unscoped private broker workspace.</p>
     </section>
+    <PremiumBreakoutResearch/>
     {series&&result&&<>
       <div className="qt-summary">
         <section className="terminal-surface"><Activity size={18}/><span>Basket premium</span><strong>{money(result.bars.at(-1).close)} points</strong></section>
