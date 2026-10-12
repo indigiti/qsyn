@@ -101,6 +101,16 @@ class FootprintGuardTest(unittest.TestCase):
         self.assert_denied(lambda: guard.check_staging(root),
                            "RUST_ELF_SIZE_BUDGET_EXCEEDED")
 
+    def test_download_artifact_permission_normalization(self):
+        root = self.stage()
+        for path in (root / guard.BIN_DIR).iterdir():
+            path.chmod(0o644)
+        self.assert_denied(lambda: guard.check_staging(root),
+                           "RUST_ELF_NOT_EXECUTABLE")
+        # The extracted copy must retain strict ELF count, launcher bytes,
+        # size and placement checks even though ZIP extraction strips modes.
+        guard.check_staging(root, enforce_executable=False)
+
     def test_zip_entry_security_and_artifact_cap(self):
         root = self.stage()
         artifact = self.root / "release.zip"
