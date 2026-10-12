@@ -117,7 +117,7 @@ export function IndexWebOperationsPanel(){
           <RefreshCw size={16}/> Refresh readiness</button>
         <button className="terminal-action terminal-secondary-action" type="button"
           disabled={busy||!available} onClick={()=>void execute('check')}>
-          Validate six-index plan</button>
+          Validate approved index plan</button>
         <button className="terminal-action" type="button"
           disabled={busy||!available||!status?.web_operations_enabled||!status?.backfill_enabled}
           onClick={()=>void execute('backfill')}>
