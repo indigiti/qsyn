@@ -124,7 +124,8 @@ final class PersonalIndexGateway
         if($runtime===null||!is_file($binary)||!is_executable($binary)
             ||is_link($binary))return self::deny('rust_personal_index_unavailable');
         $result=self::invoke([
-            $binary,'mode','qsyn-personal-index','history',$body['symbol'],$day,$runtime
+            $binary,'mode','qsyn-upstox-index-worker','personal-history',
+            $body['symbol'],$day,$runtime
         ]);
         if(($result['schema']??null)!=='QSYN-UPSTOX-RUST-INDEX-HISTORY/1'
             ||($result['symbol']??null)!==$body['symbol']
