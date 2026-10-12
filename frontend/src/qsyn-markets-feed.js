@@ -57,6 +57,7 @@ export class QsynMarketsFeed extends QsynCryptoFeed {
     this.personalFeeds=new Map();
     this.personalBars=new Map();
     this.historyStatus=new Map();
+    this.indexHistoryDays=new Map();
     this.activeIndex=null;
   }
   async _proof(){
@@ -138,7 +139,10 @@ export class QsynMarketsFeed extends QsynCryptoFeed {
         bars=await feed.getBars(scoped);
       }
       if(this.closed||req.signal?.aborted)return [];
-      if(bars.length)this.personalBars.set(instrument.id,bars);
+      if(bars.length){
+        this.personalBars.set(instrument.id,bars);
+        this._cacheIndexDay(instrument,day,bars);
+      }
       const result=aggregatePersonalIndexBars(bars,req.interval);
       if(bars.length){
         const label=instrument.name+' · '+bars.length+
@@ -161,12 +165,92 @@ export class QsynMarketsFeed extends QsynCryptoFeed {
       return [];
     }
   }
-  // One completed day is already returned in full by Rust; do not pass
-  // personal index cursors to the public crypto pagination path.
+  // Unlike the live feed, history reads have no browser WebSocket side
+  // effects. LRU bounds memory and prevents repeated daily Upstox requests
+  // as the user scrolls left/right through the same session.
+  _cacheIndexDay(instrument,day,bars){
+    const key=instrument.id+':'+day;
+    this.indexHistoryDays.delete(key);
+    this.indexHistoryDays.set(key,bars);
+    while(this.indexHistoryDays.size>64)
+      this.indexHistoryDays.delete(this.indexHistoryDays.keys().next().value);
+  }
+  async _historicalDay(instrument,day,csrf,signal){
+    const key=instrument.id+':'+day;
+    if(this.indexHistoryDays.has(key))return this.indexHistoryDays.get(key);
+    const temp=new PrivateIndexHistoryFeed({symbol:instrument.symbol,day,csrf,
+      onStatus:()=>{},onLive:()=>{}});
+    try{
+      const bars=await temp.getBars({symbol:instrument.symbol,
+        exchange:'UPSTOX_PERSONAL',interval:'1m',signal,strictHistory:true});
+      if(this.closed||signal?.aborted)return [];
+      this._cacheIndexDay(instrument,day,bars);
+      return bars;
+    }finally{
+      temp.destroy();
+    }
+  }
+  /** Native OpenAlgo left-scroll cursor. One private Rust 1m trading-day
+   * request per date, never a PHP price poll or public API. Historical dates
+   * are requested only on demand; no fabricated holiday candles.
+   */
   async getBarsPage(req){
-    if(findIndiaIndex(req.exchange,req.symbol))
+    const instrument=findIndiaIndex(req.exchange,req.symbol);
+    if(!instrument)return super.getBarsPage(req);
+    if(this.closed||req.signal?.aborted||!INTERVALS.has(req.interval)||
+      req.interval==='1s'||!Number.isSafeInteger(req.before))
       return {bars:[],hasMore:false};
-    return super.getBarsPage(req);
+    const minTime=Math.floor(Date.parse('2022-01-01T00:00:00+05:30')/1000);
+    if(req.before<=minTime||req.before>Date.now()/1000+86400)
+      return {bars:[],hasMore:false};
+    const count=Math.max(1,Math.min(300,
+      Number.isSafeInteger(req.countBack)?req.countBack:300));
+    // Bounded pagination: at most 10 calendar dates, no unbounded Upstox
+    // calls in one scroll gesture. Higher intervals assemble from true 1m
+    // candles, so fewer than count bars per page is expected.
+    const rawTarget=req.interval==='1m'?count:Math.min(1500,
+      count*(req.interval==='5m'?5:req.interval==='15m'?15:
+        req.interval==='1h'?60:375));
+    const candidateStart=req.before-1;
+    const collected=new Map();
+    let searched=0,oldestSearched=null;
+    try{
+      const proof=await this._proof();
+      for(let d=0;d<10 && collected.size<rawTarget;d++){
+        if(this.closed||req.signal?.aborted)return {bars:[],hasMore:false};
+        const cursor=candidateStart-d*86400;
+        if(cursor<minTime)break;
+        const date=new Date(cursor*1000+IST_OFFSET*1000);
+        const weekday=date.getUTCDay();
+        if(weekday===0||weekday===6)continue;
+        const day=date.toISOString().slice(0,10);
+        if(day<'2022-01-01')break;
+        oldestSearched=day;
+        const bars=await this._historicalDay(instrument,day,proof.csrf,req.signal);
+        searched++;
+        for(const bar of bars){
+          if(bar.time<req.before)collected.set(bar.time,bar);
+        }
+      }
+      if(this.closed||req.signal?.aborted)return {bars:[],hasMore:false};
+      const raw=[...collected.values()].sort((a,b)=>a.time-b.time);
+      let bars=aggregatePersonalIndexBars(raw,req.interval)
+        .filter(b=>b.time<req.before);
+      if(bars.length>count)bars=bars.slice(-count);
+      const nextBefore=bars[0]?.time;
+      if(bars.length)this.onState(instrument.name+' · '+bars.length+
+        ' older Upstox '+req.interval+' candles · verified Rust 1m history');
+      // Empty trading days/holidays are not history exhaustion; a later
+      // gesture can extend the search when provider data is available.
+      return {bars,hasMore:!!bars.length&&
+        (oldestSearched===null||oldestSearched>'2022-01-01'),
+        ...(nextBefore===undefined?{}:{nextBefore})};
+    }catch(error){
+      if(this.closed||req.signal?.aborted||error?.name==='AbortError')
+        return {bars:[],hasMore:false};
+      this.onState(instrument.name+' · older Rust history unavailable; retry later');
+      throw error;
+    }
   }
   subscribeBars(req,onBar,opts={}){
     const instrument=findIndiaIndex(req.exchange,req.symbol);
@@ -200,6 +284,7 @@ export class QsynMarketsFeed extends QsynCryptoFeed {
     this.personalFeeds.clear();
     this.personalBars.clear();
     this.historyStatus.clear();
+    this.indexHistoryDays.clear();
     this.personalProof=null;
     super.destroy();
   }
