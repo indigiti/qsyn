@@ -480,8 +480,8 @@ try {
   await page.getByRole('button',{name:'Indices',exact:true}).click();
   await page.getByRole('combobox',{name:'Exchange venue'}).selectOption('BSE_INDEX');
   await page.getByRole('combobox',{name:'Market instrument'}).selectOption('BSE_INDEX:index:SENSEX');
-  if(await page.getByText('Licensed index chart').count()!==1)
-    throw Error('Index chart readiness was not integrated into Markets');
+  if(await page.getByRole('heading',{name:'Upstox · authenticated index candles'}).count()!==1)
+    throw Error('Direct authenticated Upstox index chart is missing from Markets');
   await page.getByRole('button',{name:'Stocks',exact:true}).click();
   await page.getByText('Stock market adapter not operationally verified').first().waitFor();
   await page.getByRole('button',{name:'Options',exact:true}).click();
