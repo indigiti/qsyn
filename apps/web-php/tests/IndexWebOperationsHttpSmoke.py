@@ -37,6 +37,7 @@ def main():
       assert status['web_operations_enabled'] is False
       assert status['preflight_enabled'] is False
       assert status['private_plan_ready'] is False
+      assert isinstance(status['executor_ready'],bool)
       assert status['backfill_enabled'] is False
       assert status['service_controls_enabled'] is False
       assert status['live_index_prices_verified'] is False
