@@ -156,6 +156,40 @@ try {
     'Upstox has no historical 1s BANKEX candles; live stream must supply updates');
   assert.equal(proofCalls,1,'one cached admin proof per browser feed instance');
   authed.destroy();
+
+  // An empty current/upcoming session must not disable today's live socket.
+  // Read previous genuine trading-day history through the independent Rust
+  // historical path while retaining the original current-day feed.
+  const fallbacks=[],liveSessions=[];
+  const fallbackFeed=new QsynMarketsFeed();
+  fallbackFeed._proof=async()=>({csrf:'a'.repeat(64),suggested_day_ist:'2026-10-09'});
+  fallbackFeed._session=(_instrument,day)=>{
+    liveSessions.push(day);
+    return {getBars:async()=>[]};
+  };
+  fallbackFeed._historicalDay=async (_instrument,day)=>{
+    fallbacks.push(day);
+    const start=epoch(day+'T09:15:00+05:30');
+    return Array.from({length:375},(_,n)=>({
+      time:start+n*60,open:25100,high:25102,low:25099,close:25101,volume:0
+    }));
+  };
+  const fallbackBars=await fallbackFeed.getBars(indexReq);
+  assert.equal(fallbackBars.length,375,'empty latest session uses actual earlier Rust candles');
+  assert.equal(liveSessions.length,1,'older-history fallback must preserve live session');
+  assert.equal(fallbacks.length,1,'first available real trading day stops lookback');
+  assert(fallbackBars.every(b=>b.time<Math.floor(Date.now()/1000)));
+  fallbackFeed.destroy();
+
+  let fallbackTriggered=false;
+  const failedFeed=new QsynMarketsFeed();
+  failedFeed._proof=async()=>({csrf:'a'.repeat(64),suggested_day_ist:'2026-10-09'});
+  failedFeed._session=()=>({getBars:async()=>{throw Error('RUST_HISTORY_REJECTED');}});
+  failedFeed._historicalDay=async()=>{fallbackTriggered=true;return [];};
+  assert.deepEqual(await failedFeed.getBars(indexReq),[],
+    'failed authenticated Upstox history cannot be replaced with another source');
+  assert.equal(fallbackTriggered,false,'provider errors must not trigger a request storm');
+  failedFeed.destroy();
 } finally {
   globalThis.fetch=originalFetch;
   feed.destroy();
