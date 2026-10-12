@@ -64,6 +64,16 @@ def main():
         assert request(admin,origin,API,'POST',invalid,status['csrf'])[0]==422,invalid
       code,result,_=request(admin,origin,API,'POST',good,status['csrf'])
       assert code==409 and result['error']=='upstox_analytics_token_not_ready',(code,result)
+      quote='/qsyn/api/v1/admin/upstox/personal-index-ohlc'
+      assert request(guest,origin,quote,'POST',{'symbol':'NIFTY'})[0]==401
+      assert request(admin,origin,quote)[0]==405
+      assert request(admin,origin,quote,'POST',{'symbol':'NIFTY'})[0]==403
+      assert request(admin,origin,quote,'POST',{'symbol':'NIFTY'},
+        status['csrf'],browser_origin='http://example.invalid')[0]==403
+      assert request(admin,origin,quote,'POST',{'symbol':'OTHER'},status['csrf'])[0]==422
+      assert request(admin,origin,quote,'POST',{'symbol':'NIFTY','extra':1},status['csrf'])[0]==422
+      code,report,_=request(admin,origin,quote,'POST',{'symbol':'NIFTY'},status['csrf'])
+      assert code==409 and report['error']=='upstox_analytics_token_not_ready'
       chart='/qsyn/api/v1/admin/upstox/private-index-chart'
       owner={**good,'private_view_acknowledged':True}
       assert request(guest,origin,chart,'POST',owner)[0]==401
