@@ -43,9 +43,11 @@ final class IndexWebOperations
         $archiveOk = self::privatePath($archive, true);
         $binaryOk = is_file($worker) && is_executable($worker) && !is_link($worker)
             && is_file($history) && is_executable($history) && !is_link($history);
-        $enabled = getenv('QSYN_INDEX_WEB_OPERATIONS_ENABLED') === '1'
+        $readOnly = getenv('QSYN_INDEX_WEB_OPERATIONS_ENABLED') !== '0'
             && getenv('QSYN_TRADING_ENABLED') !== '1'
             && getenv('QSYN_ENABLE_LIVE_TRADING') !== '1';
+        $enabled = $readOnly
+            && getenv('QSYN_INDEX_WEB_OPERATIONS_ENABLED') === '1';
         $supervisor = (string)(getenv('QSYN_INDEX_WEB_SUPERVISOR_CONFIG') ?: '');
         $ctl = (string)(getenv('QSYN_SUPERVISORCTL_BIN') ?: '/usr/bin/supervisorctl');
         $supervisorOk = $enabled
@@ -57,6 +59,7 @@ final class IndexWebOperations
             && self::supervisorProgram('history') !== null;
         return compact('plan','archive','worker','history','planOk','archiveOk',
             'binaryOk','enabled','supervisor','ctl','supervisorOk') + [
+            'preflightOk'=>$readOnly && $planOk && $archiveOk && $binaryOk,
             'backfillOk'=>$enabled && getenv('QSYN_INDEX_WEB_BACKFILL_ENABLED') === '1'
                 && getenv('QSYN_UPSTOX_INDEX_HISTORY_ENABLE') === '1'
         ];
@@ -211,6 +214,7 @@ final class IndexWebOperations
             return [200,[
                 'schema'=>self::SCHEMA,'csrf'=>RustAdmin::csrf(),
                 'web_operations_enabled'=>$s['enabled'],
+                'preflight_enabled'=>$s['preflightOk'],
                 'private_plan_ready'=>$s['planOk'],'archive_ready'=>$s['archiveOk'],
                 'rust_binary_ready'=>$s['binaryOk'],
                 'backfill_enabled'=>$s['backfillOk'],
@@ -233,7 +237,7 @@ final class IndexWebOperations
         if (!is_array($body) || array_is_list($body)
             || ($body['confirmed']??null)!==true)
             return [422,['error'=>'explicit_confirmation_required']];
-        if (!$s['enabled'] || !$s['planOk'] || !$s['archiveOk'] || !$s['binaryOk'])
+        if (!$s['preflightOk'] || ($action!=='check' && !$s['enabled']))
             return [503,['error'=>'index_web_operator_not_provisioned']];
         $date=$body['date']??null;
         if (!is_string($date) || !self::validDay($date))
