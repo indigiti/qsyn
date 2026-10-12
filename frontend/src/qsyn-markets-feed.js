@@ -129,14 +129,29 @@ export class QsynMarketsFeed extends QsynCryptoFeed {
         timeZone:'Asia/Kolkata',hour:'2-digit',minute:'2-digit',hourCycle:'h23'
       }).format(new Date()).replace(':',''));
       const todayIsAvailable=weekday&&minutes>=915;
-      let day=todayIsAvailable?istNow:proof.suggested_day_ist;
-      let feed=this._session(instrument,day,proof.csrf);
-      const scoped={...req,exchange:'UPSTOX_PERSONAL',symbol:instrument.symbol,interval:'1m'};
+      const requestedDay=todayIsAvailable?istNow:proof.suggested_day_ist;
+      // Live subscriptions remain scoped to the selected/current trading
+      // day even when its Upstox intraday history is legitimately empty.
+      // Previous-day history must never replace today's live WSS session.
+      const feed=this._session(instrument,requestedDay,proof.csrf);
+      const scoped={...req,exchange:'UPSTOX_PERSONAL',
+        symbol:instrument.symbol,interval:'1m',strictHistory:true};
       let bars=await feed.getBars(scoped);
-      if(bars.length===0&&day!==proof.suggested_day_ist){
-        day=proof.suggested_day_ist;
-        feed=this._session(instrument,day,proof.csrf);
-        bars=await feed.getBars(scoped);
+      let day=requestedDay;
+      if(!bars.length){
+        const start=Math.floor(Date.parse(requestedDay+'T00:00:00+05:30')/1000);
+        for(let d=1;d<=7 && !bars.length;d++){
+          if(this.closed||req.signal?.aborted)return [];
+          const local=new Date((start-d*86400+IST_OFFSET)*1000);
+          if(local.getUTCDay()===0||local.getUTCDay()===6)continue;
+          const olderDay=local.toISOString().slice(0,10);
+          if(olderDay<'2022-01-01')break;
+          const previous=await this._historicalDay(instrument,olderDay,proof.csrf,req.signal);
+          if(previous.length){
+            bars=previous;
+            day=olderDay;
+          }
+        }
       }
       if(this.closed||req.signal?.aborted)return [];
       if(bars.length){
@@ -156,7 +171,9 @@ export class QsynMarketsFeed extends QsynCryptoFeed {
       if(this.closed||req.signal?.aborted||error?.name==='AbortError')return [];
       this.onState(error?.message==='QSYN_ADMIN_LOGIN_REQUIRED'
         ?'Private index · sign in to QSYN Terminal'
-        :'Private index · store or verify your Upstox Analytics Token');
+        :error?.message==='UPSTOX_PERSONAL_TOKEN_UNAVAILABLE'
+          ?'Private index · store or verify your Upstox Analytics Token'
+          :'Private index · Rust 1-minute Upstox history unavailable; retry after checking your account');
       if(this.activeIndex!==instrument.id){
         this.activeIndex=instrument.id;
         this.onBlockedIndex({exchange:instrument.exchange,
