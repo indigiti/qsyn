@@ -127,8 +127,24 @@ try {
   assert.equal(daily.length,1);
   assert(validIndexBarTime(daily[0].time,'1d'));
   assert.equal(daily[0].close,minute.at(-1).close);
-  assert.deepEqual(await authed.getBarsPage({...indexReq,before:minute[0].time}),
-    {bars:[],hasMore:false},'single private session must not page anonymous crypto API');
+  const older=await authed.getBarsPage({...indexReq,before:minute[0].time,countBack:300});
+  assert.equal(older.bars.length,300,'native left-scroll appends older real Rust candles');
+  assert.equal(older.bars[0].time,epoch('2026-10-08T10:30:00+05:30'));
+  assert.equal(older.bars.at(-1).time,epoch('2026-10-08T15:29:00+05:30'));
+  assert(older.bars.every(b=>b.time<minute[0].time));
+  assert.equal(older.nextBefore,older.bars[0].time);
+  assert.equal(older.hasMore,true);
+  assert.equal(historyCalls,2,'older page fetches one bounded Rust trading day');
+  const olderAgain=await authed.getBarsPage({...indexReq,before:minute[0].time,countBack:300});
+  assert.deepEqual(olderAgain,older,'repeated native history cursor is stable');
+  assert.equal(historyCalls,2,'day cache prevents duplicate provider requests');
+  const olderMinute=await authed.getBarsPage({...indexReq,before:older.nextBefore,countBack:300});
+  assert.equal(olderMinute.bars.length,300,'cursor continues beyond one market session');
+  assert(olderMinute.bars.at(-1).time<older.nextBefore);
+  assert.equal(historyCalls,3,'overlapping older day is served from local cache');
+  assert.deepEqual(await authed.getBarsPage({...indexReq,before:epoch('2021-12-31T00:00:00+05:30')}),
+    {bars:[],hasMore:false},'provider minimum historical date is enforced');
+  assert.equal(publicIndexRequests,0,'index pagination never touches public crypto provider');
   const sensex=await authed.getBars({exchange:'BSE_INDEX:index',symbol:'SENSEX',interval:'1m'});
   assert.equal(sensex.length,375);
   assert(scoped.includes('NIFTY')&&scoped.includes('SENSEX'));
