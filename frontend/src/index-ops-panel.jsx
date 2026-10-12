@@ -40,30 +40,57 @@ export function IndexWebOperationsPanel(){
     if(busy||!status?.csrf)return;
     if((action==='start'||action==='stop'||action==='backfill') &&
        !window.confirm(action==='backfill'
-         ? 'Import licensed historical candles for the approved index allowlist on '+date+'?'
+         ? 'Import the approved index allowlist for '+date+'? This may require several consecutive requests.'
          : 'Confirm '+action+' the approved private index '+service+' service?'))
        return;
     setBusy(true);setError('');setReport(null);
-    const controller=new AbortController();
-    const timer=setTimeout(()=>controller.abort(),45000);
+    const submit=async(body)=>{
+      const controller=new AbortController();
+      const timer=setTimeout(()=>controller.abort(),30000);
+      try{
+        const r=await fetch(ROOT+action,{
+          method:'POST',credentials:'same-origin',cache:'no-store',
+          signal:controller.signal,
+          headers:{'Content-Type':'application/json','Accept':'application/json',
+            'X-CSRF-Token':status.csrf},
+          body:JSON.stringify(body)
+        });
+        const j=await r.json();
+        if(!r.ok)throw Error(j.error||'INDEX_OPERATION_DENIED');
+        if(j.schema!=='QSYN-INDEX-WEB-OPERATIONS/1')
+          throw Error('INDEX_RESPONSE_INVALID');
+        return j;
+      }finally{clearTimeout(timer);}
+    };
     try{
-      const r=await fetch(ROOT+action,{
-        method:'POST',credentials:'same-origin',cache:'no-store',signal:controller.signal,
-        headers:{'Content-Type':'application/json','Accept':'application/json',
-          'X-CSRF-Token':status.csrf},
-        body:JSON.stringify({confirmed:true,date,...(service?{service}:{})})
-      });
-      const j=await r.json();
-      if(!r.ok)throw Error(j.error||'INDEX_OPERATION_DENIED');
-      if(j.schema!=='QSYN-INDEX-WEB-OPERATIONS/1')
-        throw Error('INDEX_RESPONSE_INVALID');
-      setReport({action,code:j.result_code,approved:j.approved_instrument_count,
-        processed:j.processed_instrument_count,service:j.service});
+      if(action==='backfill'){
+        let approved=null,step=0,candles=0;
+        do{
+          const j=await submit({confirmed:true,date,step});
+          if(j.result_code!=='INDEX_HISTORY_STEP_COMPLETED' ||
+              j.step!==step||j.next_step!==step+1 ||
+              !Number.isInteger(j.approved_instrument_count) ||
+              j.approved_instrument_count<1||j.approved_instrument_count>8 ||
+              (approved!==null&&approved!==j.approved_instrument_count) ||
+              !Number.isInteger(j.candle_count)||j.candle_count<0)
+            throw Error('INDEX_STEP_RESPONSE_INVALID');
+          approved=j.approved_instrument_count;
+          candles+=j.candle_count;step=j.next_step;
+          setReport({action,code:'INDEX_IMPORT_IN_PROGRESS',
+            approved,processed:step,candles});
+        }while(step<approved);
+        setReport({action,code:'INDEX_HISTORY_BATCH_COMPLETED',
+          approved,processed:step,candles});
+      }else{
+        const j=await submit({confirmed:true,date,...(service?{service}:{})});
+        setReport({action,code:j.result_code,approved:j.approved_instrument_count,
+          processed:j.processed_instrument_count,service:j.service});
+      }
       await reload();
     }catch(e){
-      setError(controller.signal.aborted?'INDEX_OPERATION_TIMED_OUT':
+      setError(e.name==='AbortError'?'INDEX_OPERATION_TIMED_OUT':
         /^[a-z0-9_]{3,90}$/i.test(e.message||'')?e.message:'INDEX_OPERATION_FAILED');
-    }finally{clearTimeout(timer);setBusy(false);}
+    }finally{setBusy(false);}
   }
   const available=Boolean(status?.preflight_enabled &&
     status?.private_plan_ready && status?.archive_ready && status?.rust_binary_ready);
@@ -112,6 +139,7 @@ export function IndexWebOperationsPanel(){
     {report&&<p role="status" className="terminal-footnote">
       {report.code} · {report.approved!==undefined?'Approved instruments: '+report.approved+' · ':''}
       {report.processed!==undefined?'Processed: '+report.processed+' · ':''}
+      {report.candles!==undefined?'Candles returned: '+report.candles+' · ':''}
       {report.service?'Service: '+report.service+' · ':''}
       A successful command does not prove an active exchange feed.</p>}
     {error&&<p role="alert">Index operation unavailable: {error}</p>}
