@@ -315,6 +315,11 @@ try {
   // Homepage index selection survives the password-protected Terminal
   // transition with public alias ONLY (no bearer/account/private key).
   await page.evaluate(()=>sessionStorage.setItem('qsyn-public-index-intent-v1','NSE_INDEX:index:NIFTY'));
+  const networkTrace=[];
+  const traceIndexRequest=req=>{
+    if(req.url().includes('/qsyn/api/v1/'))networkTrace.push(req.url().slice(0,240));
+  };
+  page.on('request',traceIndexRequest);
   let indexHistoryChecks=0;
   let resolveHistory;
   const historySeen=new Promise(resolve=>{resolveHistory=resolve;});
@@ -346,7 +351,9 @@ try {
     new Promise(resolve=>setTimeout(()=>resolve(false),12000)),
   ]);
   if(!observed||indexHistoryChecks<1)
-    throw new Error('Admin NIFTY chart did not request private Upstox candles');
+    throw new Error('Admin NIFTY chart did not request private Upstox candles; chart='+
+      (await page.locator('.qsyn-screenreader-status').allTextContents()).join(' | ')+
+      '; requests='+JSON.stringify(networkTrace.slice(-16)));
   if(await page.getByRole('heading',{name:'Upstox · authenticated index candles'}).count()!==1)
     throw new Error('NIFTY did not open the direct authenticated candle chart');
   const reused=await page.evaluate(()=>sessionStorage.getItem('qsyn-public-index-intent-v1'));
@@ -354,6 +361,7 @@ try {
   if(await page.locator('.terminal-private-chart-grid').count()!==0)
     throw new Error('Private index stream started without explicit approval');
   await page.unroute(/\/qsyn\/api\/v1\/admin\/upstox\/index-candles\?/);
+  page.off('request',traceIndexRequest);
   // Unified shell: no iframe, redirect or new page for markets, strategies,
   // broker readiness, diagnostics, operations or saved workspaces.
   await page.goto(origin+'/qsyn/terminal?view=diagnostics',{waitUntil:'domcontentloaded'});
