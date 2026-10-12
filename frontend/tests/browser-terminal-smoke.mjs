@@ -482,6 +482,9 @@ try {
   await page.getByRole('combobox',{name:'Market instrument'}).selectOption('BSE_INDEX:index:SENSEX');
   if(await page.getByText('Licensed index chart').count()!==1)
     throw Error('Index chart readiness was not integrated into Markets');
+  await page.getByRole('heading',{name:'SENSEX · Upstox historical candles'}).waitFor();
+  if(await page.getByRole('button',{name:'Open SENSEX historical chart'}).isEnabled())
+    throw Error('Private index chart opened without account and explicit viewing scope');
   await page.getByRole('button',{name:'Stocks',exact:true}).click();
   await page.getByText('Stock market adapter not operationally verified').first().waitFor();
   await page.getByRole('button',{name:'Options',exact:true}).click();
