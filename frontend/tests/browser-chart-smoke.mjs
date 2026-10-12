@@ -81,12 +81,18 @@ try{
   // The homepage must display the same account-private Rust candles as the
   // authenticated Markets chart, without redirecting to obsolete worker plans.
   const sessionDay='2026-10-09';
-  let personalHistoryCalls=0;
-  await page.route('**/qsyn/api/v1/admin/upstox/index-history-proof',route=>
-    route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({
+  let personalHistoryCalls=0,proofRequests=0;
+  const browserRequests=[];
+  page.on('request',req=>{
+    if(req.url().includes('upstox'))browserRequests.push(req.method()+' '+req.url().split('/api/')[1]);
+  });
+  await page.route('**/qsyn/api/v1/admin/upstox/index-history-proof',route=>{
+    proofRequests++;
+    return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({
       schema:'QSYN-INDEX-HISTORICAL-PROOF/1',token_present:true,
       csrf:'a'.repeat(64),suggested_day_ist:sessionDay,trading_enabled:false
-    })}));
+    })});
+  });
   await page.route('**/qsyn/api/v1/admin/upstox/personal-index/history',async route=>{
     personalHistoryCalls++;
     const body=route.request().postDataJSON();
@@ -109,8 +115,22 @@ try{
     schema:'QSYN-PUBLIC-CHART-SELECTION/1',exchange:'NSE_INDEX:index',symbol:'NIFTY'
   })));
   await page.reload({waitUntil:'domcontentloaded'});
-  await page.waitForFunction(()=>document.querySelector('.qsyn-screenreader-status')?.textContent
-    ?.includes('375 real Rust Upstox 1m candles'),null,{timeout:20000});
+  try {
+    await page.waitForFunction(()=>document.querySelector('.qsyn-screenreader-status')?.textContent
+      ?.includes('375 real Rust Upstox 1m candles'),null,{timeout:18000});
+  } catch(e) {
+    const diag=await page.evaluate(()=>({
+      status:document.querySelector('.qsyn-screenreader-status')?.textContent,
+      blocked:document.querySelector('.qsyn-india-entitlement-note')?.textContent,
+      symbol:document.querySelector('input')?.value,
+      selection:localStorage.getItem('qsyn-public-chart-selection-v1'),
+      grids:document.querySelectorAll('.qsyn-home-chart canvas').length
+    }));
+    throw Error('Homepage Rust chart browser fixture failed '+JSON.stringify({
+      diag,proofRequests,personalHistoryCalls,browserRequests:browserRequests.slice(-12),
+      errors:errors.slice(-6),cause:String(e)
+    }));
+  }
   if(personalHistoryCalls<1)throw Error('Homepage did not load Rust 1m NIFTY history');
   if(await page.locator('.qsyn-india-entitlement-note').count())
     throw Error('Authenticated homepage still displayed obsolete index-plan blocker');
