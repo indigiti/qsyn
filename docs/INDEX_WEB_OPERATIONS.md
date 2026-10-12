@@ -4,6 +4,25 @@ After deployment, open **Terminal → Data Providers & Connections → Indian in
 
 Available controls: Refresh readiness, Validate six-index plan, Import approved historical candles (chosen previous IST trading date), and Start/Stop approved index worker or private history reader. Results are bounded, redacted machine codes. The UI never accepts a shell command, remote URL, executable path, account ID, Upstox credential or arbitrary Supervisor program.
 
+## Live worker and history importer are independently controlled
+
+The live index worker is a separate **mode of the same consolidated Rust ELF**,
+not a new service binary. The **Start worker** control requires its private
+worker plan, existing Rust worker shim, PHP bounded executor, separately
+approved index-only Supervisor worker program, and a **successful Rust worker
+check** (which revalidates account, BOD, rights, session and expiry).
+
+It does **not** require the optional historical archive, importer shim,
+history preflight or history Supervisor program. **Stop worker** remains
+available when the worker's plan expires or its history component disappears,
+as long as the existing restricted host Supervisor authorization remains.
+
+Historical **Validate approved index plan**, **Backfill**, and **Start reader**
+still require the independent history importer/archive and their corresponding
+checks. Status exposes per-mode readiness, never a fabricated live tick.
+Operator configuration and actual market-data permissions are still independent
+host prerequisites. A successful worker start is not live-feed verification.
+
 ## One-time operator provisioning remains necessary
 
 A web application cannot grant itself exchange rights or Cloudways privileges. An authorized Cloudways operator must first provision the existing private files and dedicated Supervisor policy. Use private file management and host configuration, not browser-submitted paths.
