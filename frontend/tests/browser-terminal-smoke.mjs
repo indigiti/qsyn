@@ -315,11 +315,20 @@ try {
   // Homepage index selection survives the password-protected Terminal
   // transition with public alias ONLY (no bearer/account/private key).
   await page.evaluate(()=>sessionStorage.setItem('qsyn-public-index-intent-v1','NSE_INDEX:index:NIFTY'));
-  await page.route('**/qsyn/api/v1/admin/upstox/private-chart-access',async route=>{
+  let indexHistoryChecks=0;
+  await page.route(/\\/qsyn\\/api\\/v1\\/admin\\/upstox\\/index-candles\\?/,async route=>{
+    indexHistoryChecks++;
+    const stamp=Math.floor(Date.now()/60000)*60-60;
     await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({
-      schema:'QSYN-PRIVATE-OPERATOR-CHART-ACCESS/1',profile:'operator-admin',
-      authenticated:true,account_id:'fixture-account',csrf:'a'.repeat(64),
-      trading_enabled:false,
+      schema:'QSYN-UPSTOX-ADMIN-INDEX-CANDLES/1',
+      source:'upstox_authenticated_personal_history',
+      exchange:'NSE_INDEX',symbol:'NIFTY',interval:'1m',
+      provider_authenticated:true,live_socket_verified:false,
+      public_redistribution_allowed:false,trading_enabled:false,
+      bars:[
+        {time:stamp-60,open:24000,high:24050,low:23990,close:24030,volume:0},
+        {time:stamp,open:24030,high:24060,low:24020,close:24040,volume:0},
+      ]
     })});
   });
   await page.goto(origin+'/qsyn/terminal/markets',{waitUntil:'domcontentloaded'});
@@ -328,14 +337,17 @@ try {
     throw new Error('Homepage NIFTY selection did not open India indices');
   if(await page.getByRole('combobox',{name:'Market instrument'}).inputValue()!=='NSE_INDEX:index:NIFTY')
     throw new Error('Selected NIFTY was lost across administrator navigation');
-  await page.getByRole('textbox',{name:'Private index instrument key'}).waitFor();
-  if(await page.getByRole('textbox',{name:'Private index instrument key'}).inputValue()!=='NSE_INDEX|Nifty 50')
-    throw new Error('Private NIFTY candidate key not prefilled for explicit grant validation');
+  await page.waitForFunction(()=>document.querySelector('#qsyn-native-chart canvas')!==null);
+  await page.waitForTimeout(800);
+  if(indexHistoryChecks<1)
+    throw new Error('Admin NIFTY chart failed to request real Upstox candle route');
+  if(await page.getByRole('heading',{name:'Upstox · authenticated index candles'}).count()!==1)
+    throw new Error('NIFTY did not open the direct authenticated candle chart');
   const reused=await page.evaluate(()=>sessionStorage.getItem('qsyn-public-index-intent-v1'));
   if(reused!==null)throw new Error('Index handoff intent was not consumed');
   if(await page.locator('.terminal-private-chart-grid').count()!==0)
     throw new Error('Private index stream started without explicit approval');
-  await page.unroute('**/qsyn/api/v1/admin/upstox/private-chart-access');
+  await page.unroute(/\\/qsyn\\/api\\/v1\\/admin\\/upstox\\/index-candles\\?/);
   // Unified shell: no iframe, redirect or new page for markets, strategies,
   // broker readiness, diagnostics, operations or saved workspaces.
   await page.goto(origin+'/qsyn/terminal?view=diagnostics',{waitUntil:'domcontentloaded'});
