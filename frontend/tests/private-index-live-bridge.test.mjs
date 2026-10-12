@@ -66,13 +66,14 @@ test('scope validation preserves the approved exact instrument and local ticket 
 
 test('same chart receives only approved timestamped real WSS ticks; disconnect cleans up',async()=>{
   const sockets=[],ticks=[],statuses=[],bars=[];
+  const expiresMs=Date.now()+20_000;
   const fetcher=async path=>{
     if(path.endsWith('/private-chart-access'))return {ok:true,json:async()=>passAccess};
     return {ok:true,json:async()=>({
       schema:'QSYN-PRIVATE-CHART-GRANT-RESPONSE/1',account_id:account,
       instrument,transport:'operator_private_wss_only',
       public_redistribution_allowed:false,trading_enabled:false,
-      ticket:'short-lived-private-ticket',expires_ms:Date.now()+20_000
+      ticket:'short-lived-private-ticket',expires_ms:expiresMs
     })};
   };
   const bridge=new AuthorizedIndexLiveBridge({
@@ -96,7 +97,7 @@ test('same chart receives only approved timestamped real WSS ticks; disconnect c
   sockets[0].onopen();
   assert.equal(sockets[0].sent.action,'authenticate');
   sockets[0].message({type:'authentication_success',source:'licensed_private_chart',
-    expires_ms:Date.now()+20_000});
+    expires_ms:expiresMs});
   assert.equal(ticks.length,0,'authenticated WSS cannot claim verified live tick');
   const timeMs=Date.now()-750;
   const item={schema:'QSYN-PRIVATE-CHART-TICK/1',source:'private_verified_ltp',
