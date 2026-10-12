@@ -64,8 +64,12 @@ final class IndexWebOperations
                 && ($record['operator_approved_retention']??true)===false;
         }
         $archiveOk = self::privatePath($archive, true);
-        $binaryOk = is_file($worker) && is_executable($worker) && !is_link($worker)
-            && is_file($history) && is_executable($history) && !is_link($history);
+        // Worker and importer are separate modes of the SAME deployed ELF.
+        // A missing history shim/archive must never prevent authorized live
+        // worker controls or the emergency stop of an existing worker.
+        $workerBinaryOk = is_file($worker) && is_executable($worker) && !is_link($worker);
+        $historyBinaryOk = is_file($history) && is_executable($history) && !is_link($history);
+        $binaryOk = $workerBinaryOk && $historyBinaryOk;
         $readOnly = getenv('QSYN_INDEX_WEB_OPERATIONS_ENABLED') !== '0'
             && getenv('QSYN_TRADING_ENABLED') !== '1'
             && getenv('QSYN_ENABLE_LIVE_TRADING') !== '1';
@@ -73,17 +77,22 @@ final class IndexWebOperations
             && getenv('QSYN_INDEX_WEB_OPERATIONS_ENABLED') === '1';
         $supervisor = (string)(getenv('QSYN_INDEX_WEB_SUPERVISOR_CONFIG') ?: '');
         $ctl = (string)(getenv('QSYN_SUPERVISORCTL_BIN') ?: '/usr/bin/supervisorctl');
-        $supervisorOk = $enabled && $runnerOk
+        $supervisorBase = $enabled && $runnerOk
             && getenv('QSYN_INDEX_WEB_SERVICE_CONTROL_ENABLED') === '1'
             && self::privatePath($supervisor, false)
             && in_array($ctl, ['/usr/bin/supervisorctl', '/usr/local/bin/supervisorctl'], true)
-            && is_file($ctl) && is_executable($ctl)
-            && self::supervisorProgram('worker') !== null
-            && self::supervisorProgram('history') !== null;
+            && is_file($ctl) && is_executable($ctl);
+        $workerSupervisorOk = $supervisorBase && self::supervisorProgram('worker') !== null;
+        $historySupervisorOk = $supervisorBase && self::supervisorProgram('history') !== null;
+        // Full historical preflight still requires both binaries and archive.
+        $workerPreflightOk = $readOnly && $runnerOk && $planOk && $workerBinaryOk;
+        $historyPreflightOk = $workerPreflightOk && $historyBinaryOk && $archiveOk;
         return compact('plan','archive','worker','history','planOk','draft','archiveOk',
-            'binaryOk','enabled','supervisor','ctl','supervisorOk') + [
+            'binaryOk','workerBinaryOk','historyBinaryOk','enabled','supervisor','ctl',
+            'workerSupervisorOk','historySupervisorOk','workerPreflightOk',
+            'historyPreflightOk') + [
             'runnerOk'=>$runnerOk,
-            'preflightOk'=>$readOnly && $runnerOk && $planOk && $archiveOk && $binaryOk,
+            'preflightOk'=>$historyPreflightOk,
             'backfillOk'=>$enabled && getenv('QSYN_INDEX_WEB_BACKFILL_ENABLED') === '1'
                 && getenv('QSYN_UPSTOX_INDEX_HISTORY_ENABLE') === '1'
         ];
@@ -179,10 +188,26 @@ final class IndexWebOperations
             'output'=>$output];
     }
 
-    private static function runCheck(array $settings, string $day): array
+    private static function runWorkerCheck(array $settings): array
     {
+        // Rust validates the full current private BOD mapping, account,
+        // rights, expiry and OAuth session; web flags are never approvals.
         $w=self::invoke([$settings['worker'],'check',$settings['plan']],4);
         if (!$w['ok']) return ['ok'=>false,'code'=>'INDEX_WORKER_PREFLIGHT_REJECTED'];
+        $data=json_decode(trim($w['output']),true);
+        if (!is_array($data)
+            || ($data['schema']??null)!=='QSYN-UPSTOX-INDEX-WORKER-READINESS/1'
+            || ($data['operator_configuration_accepted']??false)!==true
+            || ($data['trading_enabled']??true)!==false
+            || ($data['live_index_stream_activated']??true)!==false)
+            return ['ok'=>false,'code'=>'INDEX_WORKER_PREFLIGHT_RESPONSE_INVALID'];
+        return ['ok'=>true,'code'=>'INDEX_WORKER_PLAN_VALIDATED_NO_FEED_STARTED'];
+    }
+
+    private static function runCheck(array $settings, string $day): array
+    {
+        $worker=self::runWorkerCheck($settings);
+        if (!$worker['ok']) return $worker;
         $h=self::invoke([$settings['history'],'check-all',
             $settings['plan'],$settings['archive'],$day],5);
         if (!$h['ok']) return ['ok'=>false,'code'=>'INDEX_HISTORY_PREFLIGHT_REJECTED'];
@@ -199,9 +224,29 @@ final class IndexWebOperations
             'approved_instrument_count'=>$report['approved_instrument_count']];
     }
 
+    /** Distinct read-only service readiness; no shell paths from HTTP. */
+    public static function serviceControlReady(array $settings, string $kind): bool
+    {
+        return match ($kind) {
+            'worker' => ($settings['workerSupervisorOk']??false) === true,
+            'history' => ($settings['historySupervisorOk']??false) === true,
+            default => false,
+        };
+    }
+
+    private static function servicePreflightReady(array $settings, string $kind): bool
+    {
+        return match ($kind) {
+            'worker' => ($settings['workerPreflightOk']??false) === true,
+            'history' => ($settings['historyPreflightOk']??false) === true,
+            default => false,
+        };
+    }
+
     private static function supervisorAction(array $s, string $kind, string $operation): array
     {
-        if (!$s['supervisorOk']) return ['ok'=>false,'code'=>'INDEX_SUPERVISOR_NOT_PROVISIONED'];
+        if (!self::serviceControlReady($s,$kind))
+            return ['ok'=>false,'code'=>'INDEX_SUPERVISOR_NOT_PROVISIONED'];
         $program=self::supervisorProgram($kind);
         if ($program===null) return ['ok'=>false,'code'=>'INDEX_SERVICE_NAME_INVALID'];
         $result=self::invoke([$s['ctl'],'-c',$s['supervisor'],$operation,$program],6,8192);
@@ -232,8 +277,9 @@ final class IndexWebOperations
         $s=self::settings();
         if ($action==='status') {
             $state=['worker'=>'not_checked','history'=>'not_checked'];
-            if ($s['supervisorOk']) foreach (['worker','history'] as $name) {
-                $state[$name]=self::supervisorAction($s,$name,'status')['state']??'unknown';
+            foreach (['worker','history'] as $name) {
+                if (self::serviceControlReady($s,$name))
+                    $state[$name]=self::supervisorAction($s,$name,'status')['state']??'unknown';
             }
             return [200,[
                 'schema'=>self::SCHEMA,'csrf'=>RustAdmin::csrf(),
@@ -242,9 +288,15 @@ final class IndexWebOperations
                 'private_plan_ready'=>$s['planOk'],'private_plan_unapproved_draft'=>$s['draft'],
                 'archive_ready'=>$s['archiveOk'],
                 'rust_binary_ready'=>$s['binaryOk'],
+                'worker_rust_binary_ready'=>$s['workerBinaryOk'],
+                'history_rust_binary_ready'=>$s['historyBinaryOk'],
+                'worker_preflight_enabled'=>$s['workerPreflightOk'],
+                'history_preflight_enabled'=>$s['historyPreflightOk'],
                 'executor_ready'=>$s['runnerOk'],
                 'backfill_enabled'=>$s['backfillOk'],
-                'service_controls_enabled'=>$s['supervisorOk'],
+                'worker_service_controls_enabled'=>$s['workerSupervisorOk'],
+                'history_service_controls_enabled'=>$s['historySupervisorOk'],
+                'service_controls_enabled'=>$s['workerSupervisorOk'] || $s['historySupervisorOk'],
                 'services'=>$state,'trading_enabled'=>false,
                 'rights_verified_by_browser'=>false,
                 'live_index_prices_verified'=>false
@@ -269,7 +321,7 @@ final class IndexWebOperations
         if ($action==='stop') {
             if (count($body)!==3 || !in_array($body['service']??null,['worker','history'],true))
                 return [422,['error'=>'invalid_service_selection']];
-            if (!$s['enabled'] || !$s['supervisorOk'])
+            if (!$s['enabled'] || !self::serviceControlReady($s,$body['service']))
                 return [503,['error'=>'index_supervisor_not_provisioned']];
             session_write_close();
             $stopped=self::supervisorAction($s,$body['service'],'stop');
@@ -279,7 +331,11 @@ final class IndexWebOperations
                 'live_index_prices_verified'=>false,'trading_enabled'=>false
             ]];
         }
-        if (!$s['preflightOk'] || ($action!=='check' && !$s['enabled']))
+        $selectedKind=($action==='start') ? ($body['service']??null) : 'history';
+        $requiredPreflight=($action==='start' && $selectedKind==='worker')
+            ? 'worker' : 'history';
+        if (!self::servicePreflightReady($s,$requiredPreflight)
+            || ($action!=='check' && !$s['enabled']))
             return [503,['error'=>'index_web_operator_not_provisioned']];
         $date=$body['date']??null;
         if (!is_string($date) || !self::validDay($date))
@@ -287,7 +343,7 @@ final class IndexWebOperations
         if ($action==='start'||$action==='stop') {
             if (count($body)!==3 || !in_array($body['service']??null,['worker','history'],true))
                 return [422,['error'=>'invalid_service_selection']];
-            if (!$s['supervisorOk'])
+            if (!self::serviceControlReady($s,$body['service']))
                 return [503,['error'=>'index_supervisor_not_provisioned']];
         } elseif ($action==='backfill') {
             if (count($body)!==3 || !is_int($body['step']??null)
@@ -303,7 +359,8 @@ final class IndexWebOperations
         // Do not hold the PHP session lock across a bounded Rust command.
         session_write_close();
         try {
-            $checked=$action==='stop' ? ['ok'=>true] : self::runCheck($s,$date);
+            $checked=($action==='start' && $body['service']==='worker')
+                ? self::runWorkerCheck($s) : self::runCheck($s,$date);
             if (!$checked['ok']) return [409,[
                 'schema'=>self::SCHEMA,'error'=>$checked['code'],
                 'live_index_prices_verified'=>false
