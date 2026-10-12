@@ -524,11 +524,11 @@ try {
   // Same personal chart must refresh genuine Upstox-shaped today's OHLC
   // through a private admin endpoint (never through an OAuth/grant/plan).
   await page.unroute('**/qsyn/api/v1/admin/upstox/personal-index/history');
-  const nowParts=new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Kolkata',
-    year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date());
-  const datePart=key=>nowParts.find(p=>p.type===key)?.value;
-  const today=datePart('year')+'-'+datePart('month')+'-'+datePart('day');
-  const currentMinute=Math.floor(Date.now()/60000)*60;
+  // Pin ONLY browser time to an ordinary trading session, so CI remains
+  // deterministic regardless of the runner's clock, weekends or holidays.
+  await page.clock.setFixedTime(new Date('2026-10-12T05:00:00Z'));
+  const today='2026-10-12';
+  const currentMinute=Math.floor(Date.parse('2026-10-12T05:00:00Z')/60000)*60;
   let rustTicketCalls=0;
   await page.route('**/qsyn/api/v1/admin/upstox/personal-index/ticket',async route=>{
     rustTicketCalls++;
@@ -548,6 +548,15 @@ try {
   await page.getByText(/Rust WebSocket connected|RUST_UPSTOX_WEBSOCKET_UNAVAILABLE|Rust WebSocket disconnected/)
     .first().waitFor({timeout:15000});
   if(rustTicketCalls<1)throw Error('Rust WS ticket was never requested');
+  // At 19:43 IST the real chart must not burn Upstox tickets or reconnect
+  // repeatedly for a closed regular NSE/BSE trading session.
+  const beforeCloseCalls=rustTicketCalls;
+  await page.clock.setFixedTime(new Date('2026-10-12T14:13:00Z'));
+  await page.getByRole('button',{name:'Today',exact:true}).click();
+  await page.getByRole('button',{name:'Open SENSEX historical chart'}).click();
+  await page.getByText(/Outside regular 09:15–15:30 IST session/).waitFor({timeout:14000});
+  if(rustTicketCalls!==beforeCloseCalls)
+    throw Error('Market-closed chart requested unnecessary Rust WSS tickets');
   await page.unroute('**/qsyn/api/v1/admin/upstox/personal-index/ticket');
   await page.unroute('**/qsyn/api/v1/admin/upstox/personal-index/history');
   await page.unroute('**/qsyn/api/v1/admin/upstox/index-history-proof');
