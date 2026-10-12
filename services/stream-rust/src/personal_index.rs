@@ -39,12 +39,13 @@ pub fn key(symbol: &str) -> io::Result<&'static str> {
         "MIDCPNIFTY" => Ok("NSE_INDEX|Nifty Mid Select"),
         "INDIAVIX" => Ok("NSE_INDEX|India VIX"),
         "SENSEX" => Ok("BSE_INDEX|SENSEX"),
+        "BANKEX" => Ok("BSE_INDEX|BANKEX"),
         _ => Err(denied()),
     }
 }
 
-pub const INDEX_SYMBOLS: [&str; 6] = [
-    "NIFTY", "BANKNIFTY", "FINNIFTY", "MIDCPNIFTY", "SENSEX", "INDIAVIX",
+pub const INDEX_SYMBOLS: [&str; 7] = [
+    "NIFTY", "BANKNIFTY", "FINNIFTY", "MIDCPNIFTY", "SENSEX", "BANKEX", "INDIAVIX",
 ];
 pub fn symbol_for_key(instrument: &str) -> Option<&'static str> {
     INDEX_SYMBOLS.iter().copied().find(|&symbol| {
@@ -458,6 +459,8 @@ mod tests {
     fn personal_keys_are_exact_and_denied_unknown() {
         assert_eq!(key("NIFTY").unwrap(), "NSE_INDEX|Nifty 50");
         assert_eq!(key("SENSEX").unwrap(), "BSE_INDEX|SENSEX");
+        assert_eq!(key("BANKEX").unwrap(), "BSE_INDEX|BANKEX");
+        assert_eq!(symbol_for_key("BSE_INDEX|BANKEX"), Some("BANKEX"));
         assert!(key("NSE_FO|fake").is_err());
     }
     #[test]
