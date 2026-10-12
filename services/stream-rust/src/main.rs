@@ -16,8 +16,6 @@ mod upstox_history_entry;
 mod upstox_index_history_entry;
 #[path = "bin/qsyn-upstox-index-worker.rs"]
 mod upstox_index_worker_entry;
-#[path = "bin/qsyn-personal-index.rs"]
-mod personal_index_entry;
 #[path = "bin/qsyn-upstox-worker.rs"]
 mod upstox_worker_entry;
 
@@ -180,7 +178,6 @@ fn dispatch_operator_mode(args: &[String]) -> bool {
         Some("qsyn-private-chart") => private_chart_entry::main(),
         Some("qsyn-upstox-worker") => upstox_worker_entry::main(),
         Some("qsyn-upstox-index-worker") => upstox_index_worker_entry::main(),
-        Some("qsyn-personal-index") => personal_index_entry::main(),
         Some("qsyn-upstox-history") => upstox_history_entry::main(),
         Some("qsyn-upstox-index-history") => upstox_index_history_entry::main(),
         Some("qsyn-private-index-history") => private_index_history_entry::main(),
