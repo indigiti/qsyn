@@ -17,10 +17,12 @@ def main():
     runtime=root/"private"
     sessions=root/"sessions"
     runtime.mkdir(mode=0o700);sessions.mkdir(mode=0o700)
+    plan=root/"operator-index-plan.json"
     hashed=subprocess.check_output(["php","-r",
       "echo password_hash($argv[1],PASSWORD_DEFAULT);",PASSWORD],text=True).strip()
     env={**os.environ,"QSYN_ALLOW_HTTP_TEST":"1","QSYN_CONTROL_ENABLED":"1",
-      "QSYN_ADMIN_PASSWORD_HASH":hashed,"QSYN_RUNTIME_DIR":str(runtime)}
+      "QSYN_ADMIN_PASSWORD_HASH":hashed,"QSYN_RUNTIME_DIR":str(runtime),
+      "QSYN_UPSTOX_INDEX_WORKER_PLAN_FILE":str(plan)}
     port=open_port()
     origin=f"http://127.0.0.1:{port}"
     p=php_server(env,sessions,port)
@@ -48,6 +50,36 @@ def main():
       assert data["admin"]["cookie_path"]=="/qsyn/"
       keys=[x["component"] for x in data["components"]]
       assert "upstox_profile" in keys and "index_worker_binary" in keys
+      assert "upstox_analytics_token_file" in keys and "index_worker_plan" in keys
+      assert "index_worker_runtime" in keys and "index_chart_websocket" in keys
+      stage=data["index_activation"]
+      assert stage["schema"]=="QSYN-INDEX-ACTIVATION-PREFLIGHT/1"
+      assert stage["operator_plan_advertised"] is True
+      assert stage["operator_plan_private_file_present"] is False
+      assert stage["next_action_code"]=="OPERATOR_PROVISION_INDEX_WORKER_PLAN"
+      assert stage["live_index_prices_verified_now"] is False
+      assert stage["trading_enabled"] is False
+      private=runtime/"upstox-private"
+      private.mkdir(mode=0o700)
+      analytics=private/"upstox-analytics-session.json"
+      analytics.write_text('fixture-secret-should-not-appear-in-diagnostics')
+      analytics.chmod(0o600)
+      plan.write_text('{"schema":"not-validated"}')
+      plan.chmod(0o600)
+      code,ready,_=request(admin,origin,API)
+      assert code==200
+      assert ready["index_activation"]["private_analytics_token_file_present"] is True
+      assert ready["index_activation"]["operator_plan_private_file_present"] is True
+      assert ready["index_activation"]["next_action_code"]=="OPERATOR_RUN_INDEX_WORKER_CHECK"
+      assert ready["index_activation"]["bod_mapping_verified_now"] is False
+      assert ready["index_activation"]["live_index_prices_verified_now"] is False
+      assert "fixture-secret" not in str(ready)
+      assert str(plan) not in str(ready)
+      plan.chmod(0o644)
+      code,unsafe,_=request(admin,origin,API)
+      assert code==200
+      assert unsafe["index_activation"]["operator_plan_private_file_present"] is False
+      assert unsafe["index_activation"]["next_action_code"]=="OPERATOR_PROVISION_INDEX_WORKER_PLAN"
       serialized=str(data).lower()
       for banned in [PASSWORD.lower(),"authorization:","bearer ","client_secret",
         "access_token","qsyn_admin_session=","/tmp/qsyn-audit-"]:
