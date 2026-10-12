@@ -3,7 +3,7 @@ import {terminalRoutes,terminalAliases,terminalHref,
   terminalViewForLocation,legacyTerminalTarget,defaultTerminalView
 } from '../src/terminal-routes.js';
 
-assert.equal(defaultTerminalView,'trading');
+assert.equal(defaultTerminalView,'markets');
 assert.equal(terminalRoutes.length,11);
 assert.equal(new Set(terminalRoutes.map(x=>x.href)).size,terminalRoutes.length);
 for(const route of terminalRoutes) {
@@ -12,10 +12,10 @@ for(const route of terminalRoutes) {
   assert.equal(terminalViewForLocation(route.href+'/'),route.view);
 }
 assert.equal(terminalHref('secret-internal'),null);
-assert.equal(terminalViewForLocation('/qsyn/terminal'),'trading');
+assert.equal(terminalViewForLocation('/qsyn/terminal'),'markets');
 assert.equal(terminalViewForLocation('/qsyn/terminal','?view=strategy'),'strategy');
 assert.equal(terminalViewForLocation('/qsyn/terminal/','?view=operations'),'operations');
-assert.equal(terminalViewForLocation('/qsyn/terminal','?view=../evil'),'trading');
+assert.equal(terminalViewForLocation('/qsyn/terminal','?view=../evil'),'markets');
 assert.equal(terminalViewForLocation('/qsyn/terminal/unknown'),null);
 assert.equal(terminalViewForLocation('/qsyn/terminal/markets/more'),null);
 assert.equal(terminalViewForLocation('/qsyn/api/v1/admin/rust/action'),null);
