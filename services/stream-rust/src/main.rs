@@ -16,6 +16,8 @@ mod upstox_history_entry;
 mod upstox_index_history_entry;
 #[path = "bin/qsyn-upstox-index-worker.rs"]
 mod upstox_index_worker_entry;
+#[path = "bin/qsyn-personal-index.rs"]
+mod personal_index_entry;
 #[path = "bin/qsyn-upstox-worker.rs"]
 mod upstox_worker_entry;
 
@@ -58,6 +60,78 @@ async fn health() -> Json<Value> {
         "uptime_seconds": STARTED_AT.get_or_init(Instant::now).elapsed().as_secs()
     }))
 }
+
+/// Only the existing loopback Rust service handles the WSS upgrade.
+ /// A short-lived signed ticket is sent in the FIRST frame, not the URL.
+ async fn personal_index_ws(ws: WebSocketUpgrade) -> Response {
+     ws.on_upgrade(personal_index_session)
+ }
+ async fn personal_index_session(mut socket: WebSocket) {
+     let runtime=match std::env::var("QSYN_RUNTIME_DIR") {
+         Ok(p)=>p,Err(_)=>{let _=socket.close().await;return;}
+     };
+     let token=match qsyn_stream::personal_index::read_token(std::path::Path::new(&runtime)){
+         Ok(t)=>t,Err(_)=>{let _=socket.close().await;return;}
+     };
+     let first=tokio::time::timeout(Duration::from_secs(5),socket.recv()).await;
+     let Some(Ok(Message::Text(raw)))=first.ok().flatten() else {
+         let _=socket.close().await;return;
+     };
+     if raw.len()>512 {let _=socket.close().await;return;}
+     let request:serde_json::Value=match serde_json::from_str(&raw){
+         Ok(v)=>v,Err(_)=>{let _=socket.close().await;return;}
+     };
+     let ticket=match request.as_object().filter(|o|o.len()==1)
+         .and_then(|o|o.get("ticket")).and_then(|v|v.as_str()) {
+         Some(x)=>x,None=>{let _=socket.close().await;return;}
+     };
+     let now=std::time::SystemTime::now()
+         .duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs();
+     let symbol=match qsyn_stream::personal_index::verify_ticket(ticket,&token,now){
+         Ok(x)=>x,Err(_)=>{let _=socket.close().await;return;}
+     };
+     let (sender,mut receiver)=tokio::sync::mpsc::channel::<serde_json::Value>(64);
+     let worker=tokio::spawn(async move {
+         qsyn_stream::personal_index::live(&symbol,&token,move |tick,bar|{
+             let tx=sender.clone();
+             async move {
+                 tx.send(serde_json::json!({
+                     "schema":"QSYN-RUST-PERSONAL-INDEX-TICK/1",
+                     "source":"upstox_v3_websocket","symbol":tick.symbol,
+                     "time_ms":tick.time_ms,"price":tick.price,"bar":bar,
+                     "trading_enabled":false
+                 })).await.map_err(|_|std::io::Error::other("browser_disconnected"))
+             }
+         }).await
+     });
+     tokio::pin!(worker);
+     loop{
+         tokio::select!{
+             packet=receiver.recv()=>{
+                 match packet{
+                     Some(payload)=>{
+                         if socket.send(Message::Text(payload.to_string().into())).await.is_err(){
+                             break;
+                         }
+                     },
+                     None=>break,
+                 }
+             },
+             packet=socket.recv()=>{
+                 match packet{
+                     Some(Ok(Message::Ping(p)))=>{
+                         if socket.send(Message::Pong(p)).await.is_err(){break;}
+                     },
+                     Some(Ok(Message::Close(_)))|None|Some(Err(_))=>break,
+                     _=>{},
+                 }
+             },
+             _= &mut worker=>break,
+         }
+     }
+     worker.abort();
+     let _=socket.close().await;
+ }
 
 async fn demo_ws(ws: WebSocketUpgrade) -> Response {
     if !process_control::demo_ws_enabled() {
@@ -106,6 +180,7 @@ fn dispatch_operator_mode(args: &[String]) -> bool {
         Some("qsyn-private-chart") => private_chart_entry::main(),
         Some("qsyn-upstox-worker") => upstox_worker_entry::main(),
         Some("qsyn-upstox-index-worker") => upstox_index_worker_entry::main(),
+        Some("qsyn-personal-index") => personal_index_entry::main(),
         Some("qsyn-upstox-history") => upstox_history_entry::main(),
         Some("qsyn-upstox-index-history") => upstox_index_history_entry::main(),
         Some("qsyn-private-index-history") => private_index_history_entry::main(),
@@ -157,6 +232,7 @@ async fn run_service() -> Result<(), Box<dyn std::error::Error>> {
     let app = Router::new()
         .route("/health", get(health))
         .route("/ws/demo", get(demo_ws))
+        .route("/ws/personal-index", get(personal_index_ws))
         .merge(crypto_public::router());
     println!("QSYN Rust foundation listening on {bind}");
     axum::serve(listener, app).await?;
