@@ -381,7 +381,13 @@ try {
   await page.getByRole('heading',{name:'Data providers & connections'}).waitFor();
   if(new URL(page.url()).pathname!=='/qsyn/terminal/brokers')
     throw new Error('Broker view not routed in React');
-  await page.getByRole('button',{name:'Refresh broker status'}).waitFor({timeout:12000});
+  await page.getByRole('button',{name:'Refresh Upstox status'}).waitFor({timeout:12000});
+  if(await page.getByRole('heading',{name:'Configure a private broker/provider'}).count()!==0
+    || await page.locator('.qt-broker-grid').count()!==0
+    || await page.getByRole('heading',{name:'Configure first OpenAlgo connection'}).count()!==0)
+    throw new Error('Unverified OpenAlgo broker selection/setup unexpectedly visible');
+  if(await page.getByRole('heading',{name:'Native Upstox → QSYN Rust V3'}).count()!==1)
+    throw new Error('Native Upstox configuration was lost');
   const lookupButton=page.getByRole('button',{name:'Discover index instrument keys'});
   await lookupButton.waitFor({state:'visible',timeout:12000});
   if(!await lookupButton.isEnabled())
@@ -416,6 +422,9 @@ try {
   if(String(brokerResponse.headers()['cache-control']||'').includes('no-transform'))
     throw new Error('Brokers unexpectedly disabled Cloudflare JavaScript Detections');
   await page.getByRole('heading',{name:'Data providers & connections'}).waitFor();
+  if(await page.locator('.qt-broker-card,.qt-broker-grid').count()!==0 ||
+    await page.getByRole('heading',{name:'Configure first OpenAlgo connection'}).count()!==0)
+    throw new Error('Unconfigured OpenAlgo controls reappeared on reload');
   await page.getByRole('button',{name:'Discover index instrument keys'}).waitFor({state:'visible'});
   if(browserErrors.length)
     throw new Error('Brokers deep-link crashed: '+JSON.stringify(browserErrors));
