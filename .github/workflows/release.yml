@@ -95,6 +95,9 @@ jobs:
           php -l apps/web-php/src/NativeUpstoxAnalyticsApi.php
           php apps/web-php/tests/NativeUpstoxAnalyticsApiTest.php
           python3 apps/web-php/tests/NativeUpstoxAnalyticsHttpSmoke.py
+          php -l apps/web-php/src/NativeUpstoxIndexCandles.php
+          php apps/web-php/tests/NativeUpstoxIndexCandlesTest.php
+          python3 apps/web-php/tests/NativeUpstoxIndexCandlesHttpSmoke.py
           php -l apps/web-php/src/NativeUpstoxProfileVerifier.php
           php apps/web-php/tests/NativeUpstoxProfileVerifierTest.php
           php -l apps/web-php/src/NativeUpstoxIndexDiscovery.php
@@ -169,6 +172,7 @@ jobs:
           npm install --no-audit --no-fund
           npm run build
           node tests/india-index-contract.mjs
+          node tests/admin-index-history-feed.test.mjs
           node tests/chart-cancellation-contract.mjs
           node tests/terminal-routes-contract.mjs
           node tests/market-provider-contract.mjs
@@ -244,6 +248,7 @@ jobs:
           cp apps/web-php/src/UpstoxOperatorOAuth.php staging/private/app/src/UpstoxOperatorOAuth.php
           cp apps/web-php/src/NativeUpstoxWebApi.php staging/private/app/src/NativeUpstoxWebApi.php
           cp apps/web-php/src/NativeUpstoxAnalyticsApi.php staging/private/app/src/NativeUpstoxAnalyticsApi.php
+          cp apps/web-php/src/NativeUpstoxIndexCandles.php staging/private/app/src/NativeUpstoxIndexCandles.php
           cp apps/web-php/src/NativeUpstoxProfileVerifier.php staging/private/app/src/NativeUpstoxProfileVerifier.php
           cp apps/web-php/src/NativeUpstoxIndexDiscovery.php staging/private/app/src/NativeUpstoxIndexDiscovery.php
           cp apps/web-php/src/NativeAdminDiagnostics.php staging/private/app/src/NativeAdminDiagnostics.php
@@ -364,6 +369,8 @@ jobs:
           test -s staging/private/app/src/UpstoxOperatorOAuth.php
           test -s staging/private/app/src/NativeUpstoxWebApi.php
           test -s staging/private/app/src/NativeUpstoxAnalyticsApi.php
+          test -s staging/private/app/src/NativeUpstoxIndexCandles.php
+          php -l staging/private/app/src/NativeUpstoxIndexCandles.php
           php -l staging/private/app/src/NativeUpstoxAnalyticsApi.php
           test -s staging/private/app/src/NativeUpstoxProfileVerifier.php
           test -s staging/private/app/src/NativeUpstoxIndexDiscovery.php
@@ -530,6 +537,8 @@ jobs:
           test -s verified-release/private/app/src/UpstoxOperatorOAuth.php
           test -s verified-release/private/app/src/NativeUpstoxWebApi.php
           test -s verified-release/private/app/src/NativeUpstoxAnalyticsApi.php
+          test -s verified-release/private/app/src/NativeUpstoxIndexCandles.php
+          php -l verified-release/private/app/src/NativeUpstoxIndexCandles.php
           php -l verified-release/private/app/src/NativeUpstoxAnalyticsApi.php
           test -s verified-release/private/app/src/NativeUpstoxProfileVerifier.php
           test -s verified-release/private/app/src/NativeUpstoxIndexDiscovery.php

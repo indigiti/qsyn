@@ -258,6 +258,29 @@ if (preg_match('#^/qsyn/api/v1/admin/upstox/analytics/(status|import|clear|verif
     respond($payload, $status);
 }
 
+// Private, same-origin administrator PERSONAL index OHLC reader. This is
+// independent of the public /india/bars route, licensed worker and OMS.
+if ($route === '/qsyn/api/v1/admin/upstox/index-candles') {
+    $src=dirname(__DIR__).'/src';
+    if (!is_file($src.'/NativeUpstoxIndexCandles.php')) {
+        $src=dirname(__DIR__,2).'/private_html/qsyn/app/src';
+    }
+    foreach (['RustAdmin','NativeUpstoxAnalyticsApi','NativeUpstoxIndexCandles'] as $unit) {
+        if (!is_file($src.'/'.$unit.'.php')) {
+            respond(['code'=>'INDEX_READONLY_MODULE_UNAVAILABLE'],503);
+        }
+        require_once $src.'/'.$unit.'.php';
+    }
+    header('Cache-Control: private, no-store');
+    header('Pragma: no-cache');
+    header('X-Robots-Tag: noindex, nofollow');
+    header('Referrer-Policy: no-referrer');
+    header('Vary: Cookie');
+    [$status,$payload]=\QSYN\MarketData\NativeUpstoxIndexCandles::dispatch($_SERVER,$_GET);
+    if ($status===405) header('Allow: GET');
+    respond($payload,$status);
+}
+
 // Native Upstox operator OAuth. No OpenAlgo Python or API key is involved.
 // The callback accepts a one-use 256-bit state instead of an admin cookie:
 // external Upstox redirects will not carry our SameSite=Strict admin session.
