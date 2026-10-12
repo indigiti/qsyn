@@ -73,7 +73,7 @@ class PrivateIndexHistoryFeed {
   subscribeBars(req,onBar){
     if(this.closed||req.symbol!==this.symbol||req.exchange!=='UPSTOX_PERSONAL'||
        req.interval!=='1m'||this.day!==todayIst())return ()=>{};
-    let stopped=false,busy=false,watermark=0,lastClose=null;
+    let stopped=false,busy=false,watermark=0,lastSignature=null;
     const controller=new AbortController();
     const poll=async()=>{
       if(stopped||this.closed||busy)return;
@@ -101,9 +101,10 @@ class PrivateIndexHistoryFeed {
              bar.low>Math.min(bar.open,bar.close))
             throw Error('UPSTOX_QUOTE_CANDLE_INVALID');
           last=bar.time;
-          if(bar.time>watermark||(bar.time===watermark&&bar.close!==lastClose)){
+          const signature=JSON.stringify(bar);
+          if(bar.time>watermark||(bar.time===watermark&&signature!==lastSignature)){
             if(!stopped&&!this.closed){
-              onBar(bar);watermark=bar.time;lastClose=bar.close;
+              onBar(bar);watermark=bar.time;lastSignature=signature;
               this.onLive('Upstox 1m OHLC updated · '+
                 new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Kolkata',
                   hour:'2-digit',minute:'2-digit',hourCycle:'h23'})
