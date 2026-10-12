@@ -42,6 +42,15 @@ pub fn key(symbol: &str) -> io::Result<&'static str> {
         _ => Err(denied()),
     }
 }
+
+pub const INDEX_SYMBOLS: [&str; 6] = [
+    "NIFTY", "BANKNIFTY", "FINNIFTY", "MIDCPNIFTY", "SENSEX", "INDIAVIX",
+];
+pub fn symbol_for_key(instrument: &str) -> Option<&'static str> {
+    INDEX_SYMBOLS.iter().copied().find(|&symbol| {
+        key(symbol).ok() == Some(instrument)
+    })
+}
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Analytics {
@@ -288,22 +297,91 @@ impl MinuteBuilder {
         self.current.clone()
     }
 }
-/// Provider WebSocket authorized with ONLY the same persisted Analytics Token.
-/// One upstream connection per authenticated personal viewer, no background
-/// daemon and no HTTP/REST polling. Exit when the browser disconnects.
-pub async fn live<F, Fut>(symbol: &str, token: &str, mut emit: F) -> io::Result<()>
-where
-    F: FnMut(Tick, Bar) -> Fut,
-    Fut: std::future::Future<Output = io::Result<()>>,
-{
-    let key = key(symbol)?;
+/// OHLC builder for actual provider-generated seconds. It does not fill gaps.
+#[derive(Default)]
+pub struct SecondBuilder {
+    pub current: Option<Bar>,
+    pub last_event_ms: u64,
+}
+impl SecondBuilder {
+    pub fn on_tick(&mut self, t: &Tick) -> Option<Bar> {
+        if t.time_ms < self.last_event_ms || !t.price.is_finite() || t.price <= 0.0 {
+            return None;
+        }
+        self.last_event_ms = t.time_ms;
+        let second = t.time_ms / 1_000;
+        match self.current.as_mut() {
+            Some(c) if c.time == second => {
+                c.high = c.high.max(t.price);
+                c.low = c.low.min(t.price);
+                c.close = t.price;
+            }
+            Some(c) if c.time > second => return None,
+            _ => self.current = Some(Bar {
+                time: second, open: t.price, high: t.price,
+                low: t.price, close: t.price, volume: 0,
+            }),
+        }
+        self.current.clone()
+    }
+}
+
+/// Combined live tick and OHLCs, distributed through one shared provider socket.
+#[derive(Debug, Clone, Serialize)]
+pub struct IndexLiveEvent {
+    pub tick: Tick,
+    pub bar: Bar,
+    pub second_bar: Bar,
+}
+
+static SHARED: OnceLock<Mutex<Option<SharedIndexFeed>>> = OnceLock::new();
+struct SharedIndexFeed {
+    sender: tokio::sync::broadcast::Sender<IndexLiveEvent>,
+    task: tokio::task::JoinHandle<()>,
+}
+
+/// A viewer never creates its own upstream socket. The first viewer starts
+/// one six-index feed; subsequent viewers receive only their requested alias.
+/// Provider connection closes after all subscribers disconnect.
+pub fn subscribe_shared(token: String) -> tokio::sync::broadcast::Receiver<IndexLiveEvent> {
+    let state = SHARED.get_or_init(|| Mutex::new(None));
+    let mut guard = state.lock().expect("shared index hub mutex");
+    if let Some(feed) = guard.as_ref() {
+        if !feed.task.is_finished() {
+            return feed.sender.subscribe();
+        }
+    }
+    let (sender, receiver) = tokio::sync::broadcast::channel(1024);
+    let broadcast = sender.clone();
+    let task = tokio::spawn(async move {
+        run_shared_index_feed(token, broadcast).await;
+    });
+    *guard = Some(SharedIndexFeed {sender, task});
+    receiver
+}
+
+async fn run_shared_index_feed(
+    token: String,
+    sender: tokio::sync::broadcast::Sender<IndexLiveEvent>,
+) {
+    let mut retry = 2u64;
+    while sender.receiver_count() > 0 {
+        let _ = shared_session(&token, &sender).await;
+        if sender.receiver_count() == 0 {
+            break;
+        }
+        tokio::time::sleep(Duration::from_secs(retry)).await;
+        retry = (retry * 2).min(30);
+    }
+}
+
+async fn shared_session(
+    token: &str,
+    sender: &tokio::sync::broadcast::Sender<IndexLiveEvent>,
+) -> io::Result<()> {
     let response = http_client()?
-        .get(AUTH_URL)
-        .bearer_auth(token)
-        .header("Accept", "application/json")
-        .send()
-        .await
-        .map_err(|_| denied())?;
+        .get(AUTH_URL).bearer_auth(token).header("Accept", "application/json")
+        .send().await.map_err(|_| denied())?;
     if response.status() != reqwest::StatusCode::OK {
         return Err(denied());
     }
@@ -312,60 +390,60 @@ where
         return Err(denied());
     }
     let redirect = payload["data"]["authorized_redirect_uri"]
-        .as_str()
-        .ok_or_else(denied)?;
+        .as_str().ok_or_else(denied)?;
     validate_one_use_redirect(redirect)?;
     let (mut upstream, _) = timeout(Duration::from_secs(5), connect_async(redirect))
-        .await
-        .map_err(|_| denied())?
-        .map_err(|_| denied())?;
-    let nonce = format!("{:x}", now_ms()?);
-    let subscribe = json!({"guid":nonce,"method":"sub",
-        "data":{"mode":"ltpc","instrumentKeys":[key]}})
-    .to_string();
-    upstream
-        .send(Message::Binary(subscribe.into_bytes().into()))
-        .await
-        .map_err(|_| denied())?;
-    let mut builder = MinuteBuilder::default();
-    let session = Instant::now();
+        .await.map_err(|_| denied())?.map_err(|_| denied())?;
+    let keys = INDEX_SYMBOLS.iter().map(|symbol| key(symbol).unwrap()).collect::<Vec<_>>();
+    let subscribe = json!({"guid":format!("{:x}", now_ms()?),"method":"sub",
+        "data":{"mode":"ltpc","instrumentKeys":keys}}).to_string();
+    upstream.send(Message::Binary(subscribe.into_bytes().into()))
+        .await.map_err(|_| denied())?;
+    let mut minute: HashMap<&'static str, MinuteBuilder> = HashMap::new();
+    let mut second: HashMap<&'static str, SecondBuilder> = HashMap::new();
+    let started = Instant::now();
+    let mut idle_since: Option<Instant> = None;
     loop {
-        if session.elapsed() > Duration::from_secs(120) {
-            break;
+        if started.elapsed() >= Duration::from_secs(110) {
+            break; // periodic redirect renewal; no overlapping provider sockets
         }
-        let incoming = timeout(Duration::from_secs(15), upstream.next())
-            .await
-            .map_err(|_| denied())?;
+        if sender.receiver_count() == 0 {
+            let since = idle_since.get_or_insert_with(Instant::now);
+            if since.elapsed() >= Duration::from_secs(3) { break; }
+        } else {
+            idle_since = None;
+        }
+        let incoming = timeout(Duration::from_secs(2), upstream.next()).await;
         match incoming {
-            Some(Ok(Message::Binary(frame))) => {
-                if frame.len() > MAX_FRAME {
-                    return Err(denied());
-                }
-                for (id, ms, price, snapshot) in
-                    crate::upstox_v3::decode_personal_index_frame(&frame, key, now_ms()?)?
-                {
-                    if id != key || snapshot {
-                        continue;
-                    }
+            Err(_) => continue, // idle check also works without market packets
+            Ok(Some(Ok(Message::Binary(frame)))) => {
+                if frame.len() > MAX_FRAME { return Err(denied()); }
+                for update in crate::upstox_v3::decode_personal_index_updates(&frame, now_ms()?)? {
+                    if update.snapshot { continue; }
+                    let Some(symbol) = symbol_for_key(&update.key) else { continue; };
                     let tick = Tick {
-                        symbol: symbol.to_string(),
-                        time_ms: ms,
-                        price,
+                        symbol: symbol.to_owned(),
+                        time_ms: update.time_ms,
+                        price: update.price,
                     };
-                    if let Some(bar) = builder.on_tick(&tick) {
-                        emit(tick, bar).await?;
+                    let Some(second_bar) = second.entry(symbol).or_default().on_tick(&tick)
+                        else { continue; };
+                    // Multiple provider updates may legitimately share currentTs.
+                    // A same-ms price change changes the second OHLC, but the
+                    // original minute path preserves its stricter monotonic rule.
+                    let minute_builder = minute.entry(symbol).or_default();
+                    let bar = minute_builder.on_tick(&tick)
+                        .or_else(|| minute_builder.current.clone());
+                    if let Some(bar) = bar {
+                        let _ = sender.send(IndexLiveEvent {tick, bar, second_bar});
                     }
                 }
             }
-            Some(Ok(Message::Ping(data))) => {
-                upstream
-                    .send(Message::Pong(data))
-                    .await
-                    .map_err(|_| denied())?;
+            Ok(Some(Ok(Message::Ping(data)))) => {
+                upstream.send(Message::Pong(data)).await.map_err(|_| denied())?;
             }
-            Some(Ok(Message::Close(_))) | None => break,
-            Some(Err(_)) => return Err(denied()),
-            Some(Ok(Message::Text(_))) => return Err(denied()),
+            Ok(Some(Ok(Message::Close(_)))) | Ok(None) => break,
+            Ok(Some(Err(_))) | Ok(Some(Ok(Message::Text(_)))) => return Err(denied()),
             _ => {}
         }
     }
@@ -400,6 +478,23 @@ mod tests {
         let next = b.on_tick(&t2).unwrap();
         assert_eq!(next.high, 25105.0);
         assert_eq!(next.open, 25100.0);
+    }
+    #[test]
+    fn sparse_second_bars_preserve_gaps_and_same_second_prices() {
+        let mut b = SecondBuilder::default();
+        let mut tick = Tick {symbol:"NIFTY".into(),time_ms:1_790_000_000_050,price:25100.0};
+        let a = b.on_tick(&tick).unwrap();
+        tick.time_ms += 100;
+        tick.price = 25105.0;
+        let updated = b.on_tick(&tick).unwrap();
+        assert_eq!(updated.time,a.time);
+        assert_eq!(updated.open,25100.0);
+        assert_eq!(updated.high,25105.0);
+        tick.time_ms += 3_000;
+        let after_gap=b.on_tick(&tick).unwrap();
+        assert_eq!(after_gap.time,a.time+3);
+        assert!(b.on_tick(&Tick{time_ms:tick.time_ms-2_000,..tick}).is_none());
+        assert_eq!(symbol_for_key("NSE_INDEX|Nifty Bank"),Some("BANKNIFTY"));
     }
     #[test]
     fn personal_ws_ticket_is_account_secret_bound_single_use_and_short_lived() {
