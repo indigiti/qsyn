@@ -315,28 +315,19 @@ try {
   // Homepage index selection survives the password-protected Terminal
   // transition with public alias ONLY (no bearer/account/private key).
   await page.evaluate(()=>sessionStorage.setItem('qsyn-public-index-intent-v1','NSE_INDEX:index:NIFTY'));
-  await page.route('**/qsyn/api/v1/admin/upstox/private-chart-access',async route=>{
-    await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({
-      schema:'QSYN-PRIVATE-OPERATOR-CHART-ACCESS/1',profile:'operator-admin',
-      authenticated:true,account_id:'fixture-account',csrf:'a'.repeat(64),
-      trading_enabled:false,
-    })});
-  });
   await page.goto(origin+'/qsyn/terminal/markets',{waitUntil:'domcontentloaded'});
   await page.getByRole('heading',{name:'Market explorer'}).waitFor();
   if(await page.getByRole('button',{name:'Indices',exact:true}).getAttribute('aria-pressed')!=='true')
     throw new Error('Homepage NIFTY selection did not open India indices');
   if(await page.getByRole('combobox',{name:'Market instrument'}).inputValue()!=='NSE_INDEX:index:NIFTY')
     throw new Error('Selected NIFTY was lost across administrator navigation');
-  await page.getByText('Licensed continuous index feed').click();
-  await page.getByRole('textbox',{name:'Private index instrument key'}).waitFor();
-  if(await page.getByRole('textbox',{name:'Private index instrument key'}).inputValue()!=='NSE_INDEX|Nifty 50')
-    throw new Error('Private NIFTY candidate key not prefilled for explicit grant validation');
+  await page.getByRole('heading',{name:'NIFTY · Upstox personal chart'}).waitFor();
+  if(await page.getByRole('button',{name:'Open NIFTY historical chart'}).isEnabled())
+    throw new Error('Index chart opened without private Analytics Token');
   const reused=await page.evaluate(()=>sessionStorage.getItem('qsyn-public-index-intent-v1'));
   if(reused!==null)throw new Error('Index handoff intent was not consumed');
   if(await page.locator('.terminal-private-chart-grid').count()!==0)
-    throw new Error('Private index stream started without explicit approval');
-  await page.unroute('**/qsyn/api/v1/admin/upstox/private-chart-access');
+    throw new Error('Legacy private grant stream unexpectedly mounted');
   // Unified shell: no iframe, redirect or new page for markets, strategies,
   // broker readiness, diagnostics, operations or saved workspaces.
   await page.goto(origin+'/qsyn/terminal?view=diagnostics',{waitUntil:'domcontentloaded'});
