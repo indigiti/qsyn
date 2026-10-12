@@ -2,17 +2,21 @@ import React,{useEffect,useMemo,useState} from 'react';
 import {Activity,ArrowRight,CheckCircle2,LockKeyhole,RefreshCw,ShieldCheck} from 'lucide-react';
 import {MARKET_FAMILIES,MARKET_PROVIDERS,DEFAULT_MARKET,catalogFor,
   marketFamily,providerFor,isValidCryptoHealth,providerEvidence} from './market-model.js';
+import {consumeIndexIntent,indexIntentFor} from './private-index-intent.js';
 import './market-explorer.css';
 
 const healthRequest = source=>'/qsyn/api/v1/crypto/health?'+new URLSearchParams({
   exchange:source.exchange,market:source.market,symbol:source.symbol,interval:'1m',limit:'5'
 });
 export function MarketExplorer({theme,openView,CryptoChart,PrivateCharts}){
-  const [market,setMarket]=useState(DEFAULT_MARKET);
+  // Same-tab handoff through the administrator sign-in preserves only the
+  // public index alias. No private account, ticket, token or quote is stored.
+  const [arrival]=useState(()=>consumeIndexIntent());
+  const [market,setMarket]=useState(arrival?'indices':DEFAULT_MARKET);
   const family=marketFamily(market);
-  const [venue,setVenue]=useState('BINANCE');
+  const [venue,setVenue]=useState(arrival?.exchange||'BINANCE');
   const [optionProvider,setOptionProvider]=useState('simulation');
-  const [instrument,setInstrument]=useState('');
+  const [instrument,setInstrument]=useState(arrival?.id||'');
   const [cryptoCheck,setCryptoCheck]=useState(null);
   const [tokenStatus,setTokenStatus]=useState(null);
   const [audit,setAudit]=useState(null);
@@ -25,6 +29,11 @@ export function MarketExplorer({theme,openView,CryptoChart,PrivateCharts}){
   const currentInstrument=venueInstruments.find(x=>x.id===instrument)||venueInstruments[0]||null;
   const provider=market==='crypto'?currentVenue.toLowerCase():
     market==='options'?optionProvider:'upstox';
+  const openPrivateIndex=(index)=>{
+    const found=indexIntentFor(index?.exchange,index?.symbol);
+    if(!found)return;
+    setMarket('indices');setVenue(found.exchange);setInstrument(found.id);
+  };
   const evidence=providerEvidence({
     market,provider,health:cryptoCheck,tokenStatus,
     operatorPreflight:audit
@@ -139,7 +148,7 @@ export function MarketExplorer({theme,openView,CryptoChart,PrivateCharts}){
         Native chart search, indicators, watchlists and saved layouts remain available.</p>
       {currentInstrument&&<CryptoChart key={currentInstrument.id} theme={theme}
         embedded initialExchange={currentInstrument.exchange+':'+currentInstrument.market}
-        initialSymbol={currentInstrument.symbol}/>}
+        initialSymbol={currentInstrument.symbol} onPrivateIndexRequest={openPrivateIndex}/>}
     </>}
     {market==='indices'&&<>
       <section className="terminal-surface">
@@ -152,7 +161,7 @@ export function MarketExplorer({theme,openView,CryptoChart,PrivateCharts}){
           {' '}{audit?.next_action_code||'NO_CURRENT_OPERATOR_PREFLIGHT'}.
           {' '}A saved Analytics Token is not evidence of a licensed live feed.</p>
       </section>
-      <PrivateCharts embedded onlyIndex/>
+      <PrivateCharts embedded onlyIndex selectedIndex={currentInstrument}/>
     </>}
     {market==='stocks'&&<section className="terminal-surface">
       <div className="terminal-card-head"><h2>NSE / BSE equities</h2><LockKeyhole size={16}/></div>

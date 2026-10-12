@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { INDIA_INDEX_MARKETS,findIndiaIndex,searchIndiaIndexes } from '../src/india-index-catalog.js';
 import { QsynMarketsFeed,validIndexBarTime } from '../src/qsyn-markets-feed.js';
+import {indexIntentFor,saveIndexIntent,consumeIndexIntent,privateIndexTarget} from '../src/private-index-intent.js';
 
 const epoch=value=>Math.floor(Date.parse(value)/1000);
 assert(validIndexBarTime(epoch('2026-10-09T09:15:00+05:30'),'1h'),'NSE 09:15 hourly bucket');
@@ -24,6 +25,36 @@ assert(all.some(x=>x.exchange==='NSE_INDEX:index' && x.symbol==='NIFTY'));
 assert(all.some(x=>x.exchange==='BSE_INDEX:index' && x.symbol==='SENSEX'));
 assert.equal((await feed.searchSymbols({query:'bank nifty'}))[0].symbol,'BANKNIFTY');
 
+// A public index alias may cross an admin-login redirect. Private account,
+// signing ticket, provider key and quotes must NEVER be written to storage.
+const data=new Map(),storage={
+  setItem(k,v){data.set(k,v);},getItem(k){return data.get(k)||null;},
+  removeItem(k){data.delete(k);}
+};
+const handoff=indexIntentFor('NSE_INDEX','NIFTY');
+assert.equal(handoff.id,'NSE_INDEX:index:NIFTY');
+assert.equal(privateIndexTarget(handoff),'/qsyn/terminal/markets');
+assert(saveIndexIntent(handoff,storage));
+assert.equal(consumeIndexIntent(storage).id,handoff.id);
+assert.equal(consumeIndexIntent(storage),null,'one-use handoff must be cleared');
+assert.equal(saveIndexIntent({exchange:'NSE_INDEX',symbol:'../../foreign'},storage),false);
+assert.equal(privateIndexTarget({exchange:'BSE_INDEX',symbol:'NIFTY'}),null);
+assert(saveIndexIntent(indexIntentFor('BSE_INDEX','SENSEX'),storage));
+assert.equal(consumeIndexIntent(storage).symbol,'SENSEX');
+const blockedEvents=[];
+const blockedFeed=new QsynMarketsFeed(()=>{},{
+  onBlockedIndex:entry=>blockedEvents.push(entry)
+});
+assert.deepEqual(await blockedFeed.getBars({
+  exchange:'NSE_INDEX:index',symbol:'NIFTY',interval:'1m',
+}),[],'public NIFTY must remain strictly blocked');
+assert.equal(blockedEvents[0].symbol,'NIFTY');
+assert.equal(blockedEvents[0].exchange,'NSE_INDEX');
+assert.deepEqual(await blockedFeed.getBars({
+  exchange:'NSE_INDEX:index',symbol:'NIFTY',interval:'1m',
+}),[]);
+assert.equal(blockedEvents.length,1,'unchanged blocked index should not duplicate events');
+blockedFeed.destroy();
 const originalFetch=globalThis.fetch;
 let cancellationCount=0;
 try {
