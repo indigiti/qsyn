@@ -229,7 +229,7 @@ if (preg_match('#^/qsyn/api/v1/admin/index-prepare/(status|prepare)$#', $route, 
     header('Cache-Control: private, no-store');
     header('Pragma: no-cache');
     header('X-Robots-Tag: noindex, nofollow');
-    [$code,$payload]=\\QSYN\\Index\\IndexPrivateProvisioning::dispatch($preparation[1],$_SERVER);
+    [$code,$payload]=\QSYN\Index\IndexPrivateProvisioning::dispatch($preparation[1],$_SERVER);
     if ($code===405) header('Allow: '.($preparation[1]==='status'?'GET':'POST'));
     $requestId=bin2hex(random_bytes(8));
     header('X-QSYN-Request-ID: '.$requestId);
