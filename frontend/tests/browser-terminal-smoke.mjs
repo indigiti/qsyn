@@ -403,6 +403,7 @@ try {
     throw new Error('Unprovisioned index web operations unexpectedly executable');
   if(browserErrors.length)
     throw new Error('Configured broker produced a JavaScript exception: '+JSON.stringify(browserErrors));
+  await page.getByRole('button',{name:/Upstox access/}).first().click();
   await lookupButton.click();
   await page.getByRole('heading',{name:'Upstox NSE/BSE index lookup'}).waitFor();
   if(indexDiscoverCalls!==1)
@@ -434,6 +435,7 @@ try {
   if(await page.locator('.qt-broker-card,.qt-broker-grid').count()!==0 ||
     await page.getByRole('heading',{name:'Configure first OpenAlgo connection'}).count()!==0)
     throw new Error('Unconfigured OpenAlgo controls reappeared on reload');
+  await page.getByRole('button',{name:/Upstox access/}).first().click();
   await page.getByRole('button',{name:'Discover index instrument keys'}).waitFor({state:'visible'});
   if(browserErrors.length)
     throw new Error('Brokers deep-link crashed: '+JSON.stringify(browserErrors));
