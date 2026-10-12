@@ -210,7 +210,7 @@ if ($route === '/qsyn/api/v1/admin/diagnostics/report') {
 // Administrator-only read-only Upstox Analytics Token intake (opt-in).
 // This does not modify the OAuth file, attest account identity, authorize
 // exchange redistribution or enable worker/trading. No secrets in responses.
-if (preg_match('#^/qsyn/api/v1/admin/upstox/analytics/(status|import|clear)$#', $route, $analytics)) {
+if (preg_match('#^/qsyn/api/v1/admin/upstox/analytics/(status|import|clear|verify)$#', $route, $analytics)) {
     $src = dirname(__DIR__) . '/src';
     if (!is_file($src . '/NativeUpstoxAnalyticsApi.php')) {
         $src = dirname(__DIR__, 2) . '/private_html/qsyn/app/src';

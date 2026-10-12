@@ -55,6 +55,15 @@ def run():
                 browser_origin="http://another.example")[0]==403
             assert request(admin,origin,BASE+"import","POST",
                 {"token":"bad","confirmed":True},report["csrf"])[0]==422
+            assert request(admin,origin,BASE+"verify","POST",
+                {"confirmed":True})[0]==403
+            assert request(admin,origin,BASE+"verify","POST",
+                {"confirmed":True},report["csrf"],
+                browser_origin="http://malicious.example")[0]==403
+            assert request(admin,origin,BASE+"verify","POST",
+                {"confirmed":True},report["csrf"])[0]==409
+            assert request(anon,origin,BASE+"verify","POST",
+                {"confirmed":True},report["csrf"])[0]==401
             assert request(admin,origin,BASE+"clear","POST",
                 {"confirmed":True},report["csrf"])[0]==200
             assert not (private/"upstox-analytics-session.json").exists()
