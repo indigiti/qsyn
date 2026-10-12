@@ -4,6 +4,22 @@ After deployment, open **Terminal → Data Providers & Connections → Indian in
 
 Available controls: Refresh readiness, Validate six-index plan, Import approved historical candles (chosen previous IST trading date), and Start/Stop approved index worker or private history reader. Results are bounded, redacted machine codes. The UI never accepts a shell command, remote URL, executable path, account ID, Upstox credential or arbitrary Supervisor program.
 
+## Live-worker plan validation from QSYN Web
+
+The existing **Validate** step now has a dedicated **Validate live worker
+plan** control. `POST /qsyn/api/v1/admin/index-ops/check-worker` accepts only
+`{"confirmed":true}`, with administrator session, same-origin and CSRF
+checks. It executes the fixed `qsyn-upstox-index-worker check` Rust mode in
+a bounded process; it does **not** require a historical date, archive or
+importer program, does not start the feed and exposes no raw CLI output.
+
+The old `check` action is retained as **Validate history importer** and
+still checks the independently approved history/archive prerequisites. An
+unapproved web-created draft plan is explicitly ineligible for worker
+validation/start rather than being counted as a ready worker plan. Neither
+button verifies exchange ticks; the Rust check must revalidate real rights,
+current official BOD, account/session and expiry on every invocation.
+
 ## Live worker and history importer are independently controlled
 
 The live index worker is a separate **mode of the same consolidated Rust ELF**,
@@ -17,7 +33,7 @@ history preflight or history Supervisor program. **Stop worker** remains
 available when the worker's plan expires or its history component disappears,
 as long as the existing restricted host Supervisor authorization remains.
 
-Historical **Validate approved index plan**, **Backfill**, and **Start reader**
+Historical **Validate history importer**, **Backfill**, and **Start reader**
 still require the independent history importer/archive and their corresponding
 checks. Status exposes per-mode readiness, never a fabricated live tick.
 Operator configuration and actual market-data permissions are still independent
@@ -41,7 +57,7 @@ The audited Supervisor processes must themselves have the existing enabling vari
 
 ## Safety and operational truth
 
-The API route `/qsyn/api/v1/admin/index-ops/{status,check,backfill,start,stop}` is within the administrator same-origin session; write methods require CSRF and `confirmed=true`. Requests can choose **only** a bounded completed trading date (IST, within 30 days) and **worker/history** for start/stop. All paths/program names come from owner-provisioned server configuration. Commands run through `proc_open` argv (no shell) with timeouts, bounded output, a 0600 lock, and suppressed raw stderr. Browser reports never contain Upstox secrets, private paths or stdout.
+The API route `/qsyn/api/v1/admin/index-ops/{status,check-worker,check,backfill,start,stop}` is within the administrator same-origin session; write methods require CSRF and `confirmed=true`. Requests can choose **only** a bounded completed trading date (IST, within 30 days) and **worker/history** for start/stop. All paths/program names come from owner-provisioned server configuration. Commands run through `proc_open` argv (no shell) with timeouts, bounded output, a 0600 lock, and suppressed raw stderr. Browser reports never contain Upstox secrets, private paths or stdout.
 
 The `backfill` button calls the existing **single-index Rust importer** once per approved instrument. The server selects the index key by ordinal from its private, Rust-validated plan; the browser cannot select a key, path or account. Each request is time-bounded (no long PHP job or new worker), and the browser advances through every approved index while displaying progress and candle counts. Browser disconnection or an error halts the sequence; previous account-scoped immutable archives remain and authorized operations may be retried. Completion of imports is **not** evidence of live streaming or public data rights. No simulated candles or redistribution are enabled.
 
