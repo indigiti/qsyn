@@ -211,6 +211,32 @@ if ($route === '/qsyn/api/v1/studio/market' || $route === '/qsyn/api/v1/studio/b
     }
 }
 
+// Prepare private index drafts from the existing Upstox private runtime.
+// No rights, BOD approval, executable path or broker token can be submitted.
+if (preg_match('#^/qsyn/api/v1/admin/index-prepare/(status|prepare)$#', $route, $preparation)) {
+    $src = dirname(__DIR__) . '/src';
+    if (!is_file($src . '/IndexPrivateProvisioning.php')) {
+        $src = dirname(__DIR__, 2) . '/private_html/qsyn/app/src';
+    }
+    foreach (['RustAdmin','NativeUpstoxProfileVerifier','UpstoxOperatorOAuth',
+        'NativeUpstoxAnalyticsApi','NativeUpstoxIndexDiscovery',
+        'IndexPrivateProvisioning'] as $unit) {
+        if (!is_file($src . '/' . $unit . '.php')) {
+            respond(['error'=>'index_preparation_module_unavailable'],503);
+        }
+        require_once $src . '/' . $unit . '.php';
+    }
+    header('Cache-Control: private, no-store');
+    header('Pragma: no-cache');
+    header('X-Robots-Tag: noindex, nofollow');
+    [$code,$payload]=\\QSYN\\Index\\IndexPrivateProvisioning::dispatch($preparation[1],$_SERVER);
+    if ($code===405) header('Allow: '.($preparation[1]==='status'?'GET':'POST'));
+    $requestId=bin2hex(random_bytes(8));
+    header('X-QSYN-Request-ID: '.$requestId);
+    $payload['request_id']=$requestId;
+    respond($payload,$code);
+}
+
 // Dedicated administrator-only read-only index operator workflow.
 // All executable paths, private plan/archives and supervisor program names
 // must be provisioned on Cloudways; never accepted from request parameters.
