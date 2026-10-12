@@ -20,9 +20,11 @@ export function validIndexBarTime(time,interval) {
  * No quote-to-OHLC approximation and no fallback to fictional candles.
  */
 export class QsynMarketsFeed extends QsynCryptoFeed {
-  constructor(onState=()=>{}, {indexAccessApproved=false}={}) {
+  constructor(onState=()=>{}, {indexAccessApproved=false,onBlockedIndex=()=>{}}={}) {
     super(onState);
     this.unavailableIndexSymbols=new Set();
+    this.onBlockedIndex=onBlockedIndex;
+    this.lastBlockedIndex=null;
     // Public chart pages must never probe the explicitly locked index bars
     // endpoint. A future PRIVATE grant may opt in only after server-side
     // account-scoped display rights; this flag alone never grants access.
@@ -30,10 +32,20 @@ export class QsynMarketsFeed extends QsynCryptoFeed {
   }
   async getBars(req) {
     const instrument=findIndiaIndex(req.exchange,req.symbol);
-    if(!instrument)return super.getBars(req);
+    if(!instrument){
+      if(this.lastBlockedIndex!==null){
+        this.lastBlockedIndex=null;
+        this.onBlockedIndex(null);
+      }
+      return super.getBars(req);
+    }
     if(this.closed||!INTERVALS.has(req.interval))return [];
     if(!this.indexAccessApproved){
-      this.onState('India index · licensed Upstox chart authorization required');
+      if(this.lastBlockedIndex!==instrument.id){
+        this.lastBlockedIndex=instrument.id;
+        this.onBlockedIndex({exchange:instrument.exchange,symbol:instrument.symbol,name:instrument.name});
+      }
+      this.onState('India index · '+instrument.name+' · licensed Upstox chart authorization required');
       return [];
     }
     const key=instrument.id+':'+req.interval;
