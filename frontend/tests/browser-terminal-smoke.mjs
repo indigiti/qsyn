@@ -379,6 +379,12 @@ try {
   });
   await page.getByRole('button',{name:'Data Providers & Connections',exact:true}).first().click();
   await page.getByRole('heading',{name:'Data providers & connections'}).waitFor();
+  // Core hides obsolete workspaces from primary nav but never breaks deep links.
+  const primary=page.locator('nav[aria-label="Terminal"]');
+  if(await primary.getByRole('button',{name:'Strategy Studio'}).count()
+     || await primary.getByRole('button',{name:'Rust Runtime'}).count()
+     || await primary.getByRole('button',{name:'Route management'}).count())
+    throw new Error('Non-core navigation still advertises unfinished workspaces');
   await page.getByRole('button',{name:/Upstox access/}).first().click();
   if(new URL(page.url()).pathname!=='/qsyn/terminal/brokers')
     throw new Error('Broker view not routed in React');
@@ -441,12 +447,12 @@ try {
     throw new Error('Brokers deep-link crashed: '+JSON.stringify(browserErrors));
   await page.unroute('**/qsyn/api/v1/admin/upstox/status');
   await page.unroute('**/qsyn/api/v1/admin/upstox/discover');
-  await page.getByRole('button',{name:'Rust Runtime',exact:true}).first().click();
+  await page.getByRole('button',{name:'Terminal operations',exact:true}).first().click();
   await page.getByRole('heading',{name:'Service administration'}).waitFor();
   if(await page.getByRole('button',{name:'Restart',exact:true}).count() &&
      await page.getByRole('button',{name:'Restart',exact:true}).isEnabled())
     throw new Error('Public visitor gained Rust restart privileges');
-  await page.getByRole('button',{name:'Strategy Studio',exact:true}).first().click();
+  await page.goto(origin+'/qsyn/terminal/strategy',{waitUntil:'domcontentloaded'});
   await page.getByRole('heading',{name:'Strategy Studio'}).waitFor();
   await page.getByRole('button',{name:'Render strategy'}).waitFor({state:'visible'});
   await page.getByRole('button',{name:'Render strategy'}).click();
@@ -454,9 +460,9 @@ try {
     null,{timeout:14000});
   if(await page.getByText('Fictional reference points').count()===0)
     throw new Error('Strategy payoff not integrated into React');
-  await page.getByRole('button',{name:'Workspaces & Templates',exact:true}).first().click();
+  await page.goto(origin+'/qsyn/terminal/workspaces',{waitUntil:'domcontentloaded'});
   await page.getByRole('heading',{name:'Chart workspaces'}).waitFor();
-  await page.getByRole('button',{name:'Route management',exact:true}).first().click();
+  await page.goto(origin+'/qsyn/terminal/routes',{waitUntil:'domcontentloaded'});
   await page.getByRole('heading',{name:'Route management'}).waitFor();
   if(new URL(page.url()).pathname!=='/qsyn/terminal/routes'||
      await page.locator('.qt-table tbody tr').count()<11)
