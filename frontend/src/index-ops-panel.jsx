@@ -82,7 +82,9 @@ export function IndexWebOperationsPanel(){
         setReport({action,code:'INDEX_HISTORY_BATCH_COMPLETED',
           approved,processed:step,candles});
       }else{
-        const j=await submit({confirmed:true,date,...(service?{service}:{})});
+        const j=await submit(action==='check-worker'
+          ? {confirmed:true}
+          : {confirmed:true,date,...(service?{service}:{})});
         setReport({action,code:j.result_code,approved:j.approved_instrument_count,
           processed:j.processed_instrument_count,service:j.service});
       }
@@ -107,7 +109,10 @@ export function IndexWebOperationsPanel(){
       <div><small>Private worker plan</small><strong>{status.private_plan_unapproved_draft?'Draft · awaiting independent approval':status.private_plan_ready?'Present · not validated':'Not provisioned'}</strong></div>
       <div><small>Index history storage</small><strong>{status.archive_ready?'Private directory ready':'Unavailable'}</strong></div>
       <div><small>Web operator</small><strong>{!status.executor_ready?'Host PHP executor unavailable':status.web_operations_enabled?'Imports and service actions approved':status.preflight_enabled?'Read-only checks available':'Private setup required'}</strong></div>
-      <div><small>Live data</small><strong>Not verified</strong></div>
+      <div><small>Live worker check</small><strong>{
+        status.private_plan_unapproved_draft?'Unapproved plan · not runnable'
+        : status.worker_preflight_enabled?'Rust validation available'
+        :'Worker check unavailable'}</strong></div>
     </div>:<p role="status">Operations unavailable or administrator login required.</p>}
     <div className="qt-form qt-index-web-form">
       <label>Historical trading date (IST)
@@ -119,8 +124,11 @@ export function IndexWebOperationsPanel(){
           onClick={()=>void reload()} disabled={busy}>
           <RefreshCw size={16}/> Refresh readiness</button>
         <button className="terminal-action terminal-secondary-action" type="button"
+          disabled={busy||!workerAvailable} onClick={()=>void execute('check-worker')}>
+          Validate live worker plan</button>
+        <button className="terminal-action terminal-secondary-action" type="button"
           disabled={busy||!available} onClick={()=>void execute('check')}>
-          Validate approved index plan</button>
+          Validate history importer</button>
         <button className="terminal-action" type="button"
           disabled={busy||!available||!status?.web_operations_enabled||!status?.backfill_enabled}
           onClick={()=>void execute('backfill')}>
