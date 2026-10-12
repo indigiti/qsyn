@@ -482,11 +482,11 @@ try {
   await page.getByRole('button',{name:'Indices',exact:true}).click();
   await page.getByRole('combobox',{name:'Exchange venue'}).selectOption('BSE_INDEX');
   await page.getByRole('combobox',{name:'Market instrument'}).selectOption('BSE_INDEX:index:SENSEX');
-  if(await page.getByText('Licensed index chart').count()!==1)
+  if(await page.getByText('Upstox personal index charts').count()!==1)
     throw Error('Index chart readiness was not integrated into Markets');
   await page.getByRole('heading',{name:'SENSEX · Upstox personal chart'}).waitFor();
   if(await page.getByRole('button',{name:'Open SENSEX historical chart'}).isEnabled())
-    throw Error('Private index chart opened without account and explicit viewing scope');
+    throw Error('Private chart opened without the stored Analytics Token');
   // Offline-only browser fixture: prove OpenAlgo renders a complete Upstox-
   // shaped 09:15–15:29 IST day instead of silently dropping the first 75 bars.
   const fullDayDate='2026-10-09';
