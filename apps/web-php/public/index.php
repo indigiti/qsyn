@@ -32,7 +32,7 @@ if ($route === '/qsyn/api/v1/markets/catalog') {
     }
     try {
         $data = json_decode((string)file_get_contents($manifest), true, 16, JSON_THROW_ON_ERROR);
-    } catch (\\Throwable) {
+    } catch (\Throwable) {
         respond(['error' => 'market_registry_unavailable'], 503);
     }
     if (!is_array($data)
