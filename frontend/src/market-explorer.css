@@ -1,0 +1,23 @@
+/* QSYN market-first terminal; scoped to admin terminal, never /qsyn/ homepage. */
+.terminal-shell .qt-market-explorer{gap:14px}
+.terminal-shell .qt-market-families{display:flex;flex-wrap:wrap;gap:8px}
+.terminal-shell .qt-market-family{background:var(--q-hover);border:1px solid var(--q-line);
+  border-radius:20px;padding:9px 18px;color:var(--q-fg);font:inherit;font-size:13px;
+  font-weight:650;cursor:pointer}
+.terminal-shell .qt-market-family.selected{background:var(--q-fg);color:var(--q-bg);border-color:var(--q-fg)}
+.terminal-shell .qt-market-source-selects{display:flex;flex-wrap:wrap;gap:12px;align-items:end}
+.terminal-shell .qt-market-source-selects label{display:flex;flex-direction:column;gap:5px;min-width:175px;max-width:310px;flex:1;
+  font-size:11px;color:var(--q-muted);font-weight:650}
+.terminal-shell .qt-market-source-selects select{width:100%;border:1px solid var(--q-line);border-radius:7px;
+  background:var(--q-bg);color:var(--q-fg);padding:9px;font-size:13px}
+.terminal-shell .qt-market-source-panel{display:flex;flex-direction:column;gap:10px}
+.terminal-shell .qt-market-status-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));
+  border-top:1px solid var(--q-line);margin-top:3px;padding-top:12px;gap:15px}
+.terminal-shell .qt-market-status-grid div{display:flex;flex-direction:column;gap:5px;min-width:0}
+.terminal-shell .qt-market-status-grid small{font-size:11px;color:var(--q-muted)}
+.terminal-shell .qt-market-status-grid strong{font-size:12px;line-height:1.35;overflow-wrap:anywhere}
+.terminal-shell .qt-market-chart-hint{color:var(--q-muted);font-size:12px;margin:2px 0}
+.terminal-shell .qt-market-explorer .terminal-page{padding:0}
+@media(max-width:750px){.terminal-shell .qt-market-status-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .terminal-shell .qt-market-families{display:grid;grid-template-columns:repeat(4,minmax(0,1fr))}
+ .terminal-shell .qt-market-family{padding:9px 4px;font-size:11px}}
