@@ -81,6 +81,9 @@ jobs:
           php apps/web-php/tests/NativeUpstoxProfileVerifierTest.php
           php -l apps/web-php/src/IndexHistoricalProof.php
           php apps/web-php/tests/IndexHistoricalProofTest.php
+          php -l apps/web-php/src/PersonalIndexGateway.php
+          php -l apps/web-php/tests/PersonalIndexGatewayTest.php
+          php apps/web-php/tests/PersonalIndexGatewayTest.php
           python3 apps/web-php/tests/IndexHistoricalProofHttpSmoke.py
           php -l apps/web-php/src/NativeUpstoxIndexDiscovery.php
           php apps/web-php/tests/NativeUpstoxIndexDiscoveryTest.php

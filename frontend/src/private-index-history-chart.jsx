@@ -46,6 +46,10 @@ class PrivateIndexHistoryFeed {
           throw Error('PRIVATE_INDEX_CANDLE_INVALID');
         previous=bar.time;
       }
+      if(!this.closed&&!ctl.signal.aborted&&json.bars.length===0){
+        this.onStatus('UPSTOX_NO_CANDLES_FOR_SELECTED_DATE');
+        return [];
+      }
       if(!this.closed&&!ctl.signal.aborted){
         const clock=new Intl.DateTimeFormat('en-GB',{
           timeZone:'Asia/Kolkata',hour:'2-digit',minute:'2-digit',hourCycle:'h23'
@@ -182,7 +186,7 @@ export function PrivateIndexHistoryChart({symbol}){
         !data.token_present||typeof data.csrf!=='string')
         throw Error('PRIVATE_ACCOUNT_NOT_READY');
       if(!c.signal.aborted){setAuth(data.csrf);setDate(data.suggested_day_ist);
-        setStatus('Ready for personal historical-data view. Live feed not enabled.');}
+        setStatus('Upstox token available · Rust historical-data check on chart open.');}
     }).catch(()=>{if(!c.signal.aborted)setStatus('Private Upstox account access unavailable.');});
     return()=>c.abort();
   },[symbol]);
