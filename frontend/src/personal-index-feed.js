@@ -8,7 +8,9 @@ export class PrivateIndexHistoryFeed {
   }
   async getBars(req){
     if(this.closed||req.symbol!==this.symbol||
-      req.exchange!=='UPSTOX_PERSONAL'||req.interval!=='1m')return [];
+      req.exchange!=='UPSTOX_PERSONAL')return [];
+    if(req.interval==='1s')return []; // Upstox has no historical 1s endpoint
+    if(req.interval!=='1m')return [];
     const ctl=new AbortController();
     const abort=()=>ctl.abort();
     req.signal?.addEventListener('abort',abort,{once:true});
@@ -67,7 +69,7 @@ export class PrivateIndexHistoryFeed {
   // in the private runtime and is never put in WS URLs or browser JS.
   subscribeBars(req,onBar){
     if(this.closed||req.symbol!==this.symbol||req.exchange!=='UPSTOX_PERSONAL'||
-       req.interval!=='1m'||this.day!==todayIst())return ()=>{};
+       !['1m','1s'].includes(req.interval)||this.day!==todayIst())return ()=>{};
     const controller=new AbortController();
     let stopped=false,socket=null,lastTimestamp=0,retryDelay=2000,reconnectTimer=null;
     this.controllers.add(controller);
@@ -118,16 +120,17 @@ export class PrivateIndexHistoryFeed {
           if(stopped||this.closed)return;
           let data;
           try{data=JSON.parse(event.data);}catch{return;}
-          const bar=data?.bar;
+          const bar=req.interval==='1s'?data?.bar_1s:data?.bar;
           if(data?.schema!=='QSYN-RUST-PERSONAL-INDEX-TICK/1'||
              data?.source!=='upstox_v3_websocket'||data?.symbol!==this.symbol||
              data?.trading_enabled!==false||!Number.isSafeInteger(data.time_ms)||
-             data.time_ms<=lastTimestamp||!Number.isFinite(data.price)||data.price<=0||
-             !Number.isSafeInteger(bar?.time)||bar.time!==Math.floor(data.time_ms/60000)*60||
+             data.time_ms<lastTimestamp||!Number.isFinite(data.price)||data.price<=0||
+             !Number.isSafeInteger(bar?.time)||bar.time!==Math.floor(data.time_ms/(req.interval==='1s'?1000:60000))*(req.interval==='1s'?1:60)||
              !['open','high','low','close'].every(k=>Number.isFinite(bar[k]))||
              bar.open<=0||bar.high<Math.max(bar.open,bar.close)||
              bar.low>Math.min(bar.open,bar.close)||bar.low<=0)
             return;
+          if(req.interval==='1m'&&data.time_ms===lastTimestamp)return;
           lastTimestamp=data.time_ms;
           retryDelay=2000;
           onBar(bar);

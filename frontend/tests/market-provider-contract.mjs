@@ -9,7 +9,7 @@ assert.equal(DEFAULT_MARKET,'crypto');
 assert.deepEqual(MARKET_FAMILIES.map(x=>x.id),['crypto','indices','stocks','options']);
 assert.equal(new Set(MARKET_PROVIDERS.map(x=>x.id)).size,MARKET_PROVIDERS.length);
 assert.equal(MARKET_PROVIDERS.filter(p=>p.adapter==='public_crypto').length,7);
-assert.equal(catalogFor('indices').length,6);
+assert.equal(catalogFor('indices').length,7);
 assert(catalogFor('crypto').length>12);
 for(const m of MARKET_FAMILIES)for(const id of m.providers){
   assert(providerFor(id).asset_classes.includes(m.id));

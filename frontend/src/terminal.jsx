@@ -174,7 +174,7 @@ function HomepageChart({ theme, embedded = false,
     const grid=createChartGrid(host.current,{
       feed,symbol:firstSymbol,
       exchange:firstExchange,
-      interval:'1m',intervals:['1m','5m','15m','1h','1d'],
+      interval:'1m',intervals:['1s','1m','5m','15m','1h','1d'],
       theme,branding:false,panels:true,toolbar:true,bottombar:true,
       preset:'1x1',workspaces:nativeWorkspaces||undefined,
       lookbackBars:INITIAL_BACKFILL_BARS,

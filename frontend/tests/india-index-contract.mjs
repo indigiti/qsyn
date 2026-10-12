@@ -9,10 +9,12 @@ assert(validIndexBarTime(epoch('2026-10-09T00:00:00+05:30'),'1d'),'IST midnight 
 assert(!validIndexBarTime(epoch('2026-10-09T00:00:00Z'),'1d'),'UTC daily cannot replace IST daily');
 assert(validIndexBarTime(epoch('2026-10-09T09:15:00+05:30'),'15m'),'IST intraday 15m alignment');
 assert(!validIndexBarTime(epoch('2026-10-09T09:16:00+05:30'),'15m'),'reject misaligned minute');
-assert.equal(INDIA_INDEX_MARKETS.length,6);
-assert.equal(new Set(INDIA_INDEX_MARKETS.map(x=>x.id)).size,6);
+assert.equal(INDIA_INDEX_MARKETS.length,7);
+assert.equal(new Set(INDIA_INDEX_MARKETS.map(x=>x.id)).size,7);
 assert.equal(findIndiaIndex('NSE_INDEX:index','NIFTY')?.name,'NIFTY 50');
 assert.equal(findIndiaIndex('BSE_INDEX:index','SENSEX')?.name,'SENSEX');
+assert.equal(findIndiaIndex('BSE_INDEX:index','BANKEX')?.name,'S&P BSE BANKEX');
+assert.equal(searchIndiaIndexes('bankex')[0].symbol,'BANKEX');
 assert.equal(findIndiaIndex('NSE_INDEX:index','SENSEX'),null);
 assert.equal(searchIndiaIndexes('nifty').length,4);
 assert.equal(searchIndiaIndexes('sEnSeX')[0].symbol,'SENSEX');
@@ -23,6 +25,7 @@ const all=await feed.searchSymbols({query:''});
 assert(all.some(x=>x.exchange==='BINANCE:spot' && x.symbol==='BTCUSDT'));
 assert(all.some(x=>x.exchange==='NSE_INDEX:index' && x.symbol==='NIFTY'));
 assert(all.some(x=>x.exchange==='BSE_INDEX:index' && x.symbol==='SENSEX'));
+assert(all.some(x=>x.exchange==='BSE_INDEX:index' && x.symbol==='BANKEX'));
 assert.equal((await feed.searchSymbols({query:'bank nifty'}))[0].symbol,'BANKNIFTY');
 
 // A public index alias may cross an admin-login redirect. Private account,
@@ -129,6 +132,11 @@ try {
   const sensex=await authed.getBars({exchange:'BSE_INDEX:index',symbol:'SENSEX',interval:'1m'});
   assert.equal(sensex.length,375);
   assert(scoped.includes('NIFTY')&&scoped.includes('SENSEX'));
+  const bankex=await authed.getBars({exchange:'BSE_INDEX:index',symbol:'BANKEX',interval:'1m'});
+  assert.equal(bankex.length,375);
+  assert(scoped.includes('BANKEX'));
+  assert.deepEqual(await authed.getBars({exchange:'BSE_INDEX:index',symbol:'BANKEX',interval:'1s'}),[],
+    'Upstox has no historical 1s BANKEX candles; live stream must supply updates');
   assert.equal(proofCalls,1,'one cached admin proof per browser feed instance');
   authed.destroy();
 } finally {

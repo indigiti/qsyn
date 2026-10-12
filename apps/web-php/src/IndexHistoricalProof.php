@@ -27,6 +27,7 @@ final class IndexHistoricalProof
         'MIDCPNIFTY' => 'NSE_INDEX|Nifty Mid Select',
         'INDIAVIX' => 'NSE_INDEX|India VIX',
         'SENSEX' => 'BSE_INDEX|SENSEX',
+        'BANKEX' => 'BSE_INDEX|BANKEX',
     ];
 
     private static function secureFile(string $path, int $max): bool
@@ -235,7 +236,7 @@ final class IndexHistoricalProof
             return [200,[
                 'schema'=>'QSYN-PRIVATE-UPSTOX-HISTORY-CHART/1',
                 'source'=>'upstox_private_analytics_history',
-                'exchange'=>$body['symbol']==='SENSEX'?'BSE_INDEX':'NSE_INDEX',
+                'exchange'=>in_array($body['symbol'], ['SENSEX','BANKEX'], true)?'BSE_INDEX':'NSE_INDEX',
                 'symbol'=>$body['symbol'],'interval'=>'1m','day_ist'=>$day,
                 'bars'=>$bars,'account_scoped'=>true,
                 'personal_private_view_only'=>true,

@@ -11,6 +11,7 @@ export const INDIA_INDEX_MARKETS = Object.freeze([
   { exchange:'NSE_INDEX', market:'index', symbol:'FINNIFTY', name:'FINNIFTY', label:'FINNIFTY · NSE' },
   { exchange:'NSE_INDEX', market:'index', symbol:'MIDCPNIFTY', name:'MIDCPNIFTY', label:'MIDCPNIFTY · NSE' },
   { exchange:'BSE_INDEX', market:'index', symbol:'SENSEX', name:'SENSEX', label:'SENSEX · BSE' },
+  { exchange:'BSE_INDEX', market:'index', symbol:'BANKEX', name:'S&P BSE BANKEX', label:'S&P BSE BANKEX · BSE' },
   { exchange:'NSE_INDEX', market:'index', symbol:'INDIAVIX', name:'INDIA VIX', label:'INDIA VIX · NSE' },
 ].map(item=>Object.freeze({
   ...item,

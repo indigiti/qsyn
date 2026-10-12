@@ -8,7 +8,7 @@ use QSYN\Admin\RustAdmin;
 /** Existing admin gate -> existing qsyn-stream ELF. No OAuth or worker plan. */
 final class PersonalIndexGateway
 {
-    private const SYMBOLS=['NIFTY','BANKNIFTY','FINNIFTY','MIDCPNIFTY','INDIAVIX','SENSEX'];
+    private const SYMBOLS=['NIFTY','BANKNIFTY','FINNIFTY','MIDCPNIFTY','INDIAVIX','SENSEX','BANKEX'];
     private static function deny(string $code,int $status=503):array
     {
         return [$status,['error'=>$code,'trading_enabled'=>false]];

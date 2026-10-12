@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 /**
  * Pure mocked Upstox provider regression: no network, broker credentials or
- * trading. Validates six bounded server-built INDEX searches and safe results.
+ * trading. Validates seven bounded server-built INDEX searches and safe results.
  */
 require dirname(__DIR__).'/src/NativeUpstoxProfileVerifier.php';
 require dirname(__DIR__).'/src/NativeUpstoxAnalyticsApi.php';
@@ -33,6 +33,7 @@ $rows=[
     'Nifty Mid Select'=>['NSE_INDEX','NSE','MIDCPNIFTY','Nifty Mid Select','NSE_INDEX|Nifty Mid Select'],
     'India VIX'=>['NSE_INDEX','NSE','INDIA VIX','India VIX','NSE_INDEX|India VIX'],
     'SENSEX'=>['BSE_INDEX','BSE','SENSEX','SENSEX','BSE_INDEX|SENSEX'],
+    'BANKEX'=>['BSE_INDEX','BSE','BANKEX','BANKEX','BSE_INDEX|BANKEX'],
 ];
 $calls=[];
 $mock=static function(string $url,string $bearer) use ($token,$rows,&$calls):array {
@@ -79,8 +80,8 @@ try {
         || $r['exchange_display_entitlement_verified']!==false
         || $r['index_feed_activated']!==false
         || $r['trading_enabled']!==false
-        || count($r['instruments'])!==6
-        || count($calls)!==7) {
+        || count($r['instruments'])!==7
+        || count($calls)!==8) {
         throw new RuntimeException('unexpected_discovery_state:'.json_encode($r));
     }
     $json=json_encode($r,JSON_THROW_ON_ERROR);
@@ -162,8 +163,8 @@ try {
         || $r['current_bod_attested']!==false
         || $r['exchange_display_entitlement_verified']!==false
         || $r['index_feed_activated']!==false
-        || count($r['instruments'])!==6
-        || count($calls)!==6 || $analyticsCalls!==1) {
+        || count($r['instruments'])!==7
+        || count($calls)!==7 || $analyticsCalls!==1) {
         throw new RuntimeException('analytics_discovery_not_safe:'.json_encode($r));
     }
     $serialized=json_encode($r,JSON_THROW_ON_ERROR);
@@ -192,7 +193,7 @@ try {
     }
     chmod($analyticsFile,0600);
     unlink($analyticsFile);
-    echo "PASS Upstox authenticated fixed-host index search, OAuth and Analytics six strict matches, reject ambiguity/pagination/token leak and unlicensed feed\n";
+    echo "PASS Upstox authenticated fixed-host index search, OAuth and Analytics seven strict matches, reject ambiguity/pagination/token leak and unlicensed feed\n";
 } finally {
     if (is_file($file)) unlink($file);
     rmdir($private);

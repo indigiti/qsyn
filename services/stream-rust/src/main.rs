@@ -119,49 +119,44 @@ async fn personal_index_session(mut socket: WebSocket) {
             return;
         }
     };
-    let (sender, mut receiver) = tokio::sync::mpsc::channel::<serde_json::Value>(64);
-    let worker = tokio::spawn(async move {
-        qsyn_stream::personal_index::live(&symbol, &token, move |tick, bar| {
-            let tx = sender.clone();
-            async move {
-                tx.send(serde_json::json!({
-                    "schema":"QSYN-RUST-PERSONAL-INDEX-TICK/1",
-                    "source":"upstox_v3_websocket","symbol":tick.symbol,
-                    "time_ms":tick.time_ms,"price":tick.price,"bar":bar,
-                    "trading_enabled":false
-                }))
-                .await
-                .map_err(|_| std::io::Error::other("browser_disconnected"))
-            }
-        })
-        .await
-    });
-    tokio::pin!(worker);
+    let mut receiver = qsyn_stream::personal_index::subscribe_shared(token);
     loop {
         tokio::select! {
-            packet=receiver.recv()=>{
-                match packet{
-                    Some(payload)=>{
-                        if socket.send(Message::Text(payload.to_string().into())).await.is_err(){
+            event=receiver.recv()=>{
+                match event {
+                    Ok(event) if event.tick.symbol == symbol => {
+                        let payload = serde_json::json!({
+                            "schema":"QSYN-RUST-PERSONAL-INDEX-TICK/1",
+                            "source":"upstox_v3_websocket",
+                            "symbol":event.tick.symbol,
+                            "time_ms":event.tick.time_ms,
+                            "price":event.tick.price,
+                            "bar":event.bar,
+                            "bar_1s":event.second_bar,
+                            "trading_enabled":false
+                        });
+                        if socket.send(Message::Text(payload.to_string().into())).await.is_err() {
                             break;
                         }
                     },
-                    None=>break,
+                    Ok(_) => {},
+                    Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {
+                        // Rejoin after bounded backpressure; never send stale replay.
+                    },
+                    Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
                 }
             },
             packet=socket.recv()=>{
-                match packet{
-                    Some(Ok(Message::Ping(p)))=>{
-                        if socket.send(Message::Pong(p)).await.is_err(){break;}
+                match packet {
+                    Some(Ok(Message::Ping(p))) => {
+                        if socket.send(Message::Pong(p)).await.is_err() { break; }
                     },
-                    Some(Ok(Message::Close(_)))|None|Some(Err(_))=>break,
-                    _=>{},
+                    Some(Ok(Message::Close(_))) | None | Some(Err(_)) => break,
+                    _ => {},
                 }
-            },
-            _= &mut worker=>break,
+            }
         }
     }
-    worker.abort();
     let _ = socket.close().await;
 }
 
