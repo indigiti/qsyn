@@ -501,7 +501,7 @@ function NativeUpstoxPanel({refreshTick=0}){
           <td><code>{item.instrument_key||'Unresolved'}</code></td>
         </tr>)}</tbody>
       </table></div>
-      <p className="terminal-footnote">Read-only provider search. Keys are candidates
+      <p className="terminal-footnote">Read-only provider search. Analytics credentials authorize lookup, but do not verify the provider account identity. Keys are candidates
         for independent operator/BOD verification only. Current-BOD attestation,
         exchange display/retention rights, licensed Rust index streaming, public
         redistribution and trading all remain disabled or unverified.</p>
