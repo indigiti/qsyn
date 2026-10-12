@@ -404,21 +404,25 @@ mod tests {
     #[test]
     fn personal_ws_ticket_is_account_secret_bound_single_use_and_short_lived() {
         use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
-        let token="test-read-only-analytics-token-not-a-live-credential-12345";
-        let now=1_790_000_000u64;
-        let payload=serde_json::json!({
+        let token = "test-read-only-analytics-token-not-a-live-credential-12345";
+        let now = 1_790_000_000u64;
+        let payload = serde_json::json!({
             "symbol":"NIFTY","exp":now+30,"nonce":"0123456789abcdef0123456789abcdef"
-        }).to_string();
-        let encoded=URL_SAFE_NO_PAD.encode(payload);
-        let mut mac=Hmac::<Sha256>::new_from_slice(token.as_bytes()).unwrap();
+        })
+        .to_string();
+        let encoded = URL_SAFE_NO_PAD.encode(payload);
+        let mut mac = Hmac::<Sha256>::new_from_slice(token.as_bytes()).unwrap();
         mac.update(encoded.as_bytes());
-        let signed=mac.finalize().into_bytes();
-        let sig=signed.iter().map(|b|format!("{b:02x}")).collect::<String>();
-        let ticket=format!("{encoded}.{sig}");
-        assert!(verify_ticket(&ticket,"wrong-broker-token",now).is_err());
-        assert_eq!(verify_ticket(&ticket,token,now).unwrap(),"NIFTY");
-        assert!(verify_ticket(&ticket,token,now).is_err());
-        assert!(verify_ticket(&ticket,token,now+31).is_err());
+        let signed = mac.finalize().into_bytes();
+        let sig = signed
+            .iter()
+            .map(|b| format!("{b:02x}"))
+            .collect::<String>();
+        let ticket = format!("{encoded}.{sig}");
+        assert!(verify_ticket(&ticket, "wrong-broker-token", now).is_err());
+        assert_eq!(verify_ticket(&ticket, token, now).unwrap(), "NIFTY");
+        assert!(verify_ticket(&ticket, token, now).is_err());
+        assert!(verify_ticket(&ticket, token, now + 31).is_err());
     }
     #[test]
     fn history_scope_must_be_bounded() {
