@@ -170,14 +170,11 @@ jobs:
           cp apps/web-php/src/TerminalAdminGate.php staging/private/app/src/TerminalAdminGate.php
           cp apps/web-php/public/admin-rust.php staging/public/admin-rust.php
           cp apps/web-php/public/.htaccess staging/public/.htaccess
-          cp frontend/dist/chart.js staging/public/assets/chart.js
           cp frontend/dist/terminal.js staging/public/assets/terminal.js
           cp frontend/dist/terminal.css staging/public/assets/terminal.css
           cp apps/web-php/public/terminal.php staging/public/terminal.php
           cp apps/web-php/public/terminal-login.php staging/public/terminal-login.php
           cp apps/web-php/public/assets/terminal-gate.css staging/public/assets/terminal-gate.css
-          cp frontend/dist/studio.js staging/public/assets/studio.js
-          cp apps/web-php/public/assets/studio.css staging/public/assets/studio.css
           cp apps/web-php/public/studio.php staging/public/studio.php
           cp apps/web-php/src/IndiaIndexCatalog.php staging/private/app/src/IndiaIndexCatalog.php
           cp apps/web-php/src/UpstoxIndexV3.php staging/private/app/src/UpstoxIndexV3.php
@@ -270,15 +267,15 @@ jobs:
           php -l staging/public/index.php
           test -s staging/public/index.php
           test -s staging/public/.htaccess
-          test -s staging/public/assets/chart.js
+          test ! -e staging/public/assets/chart.js
           test -s staging/public/assets/terminal.js
           test -s staging/public/assets/terminal.css
           test -s staging/public/terminal.php
           test -s staging/public/terminal-login.php
           php -l staging/public/terminal-login.php
           test -s staging/public/assets/terminal-gate.css
-          test -s staging/public/assets/studio.js
-          test -s staging/public/assets/studio.css
+          test ! -e staging/public/assets/studio.js
+          test ! -e staging/public/assets/studio.css
           test -s staging/public/studio.php
           test -s staging/private/app/src/SimulatedOptionsStudio.php
           test -s staging/private/app/src/StudioAnalytics.php
@@ -370,6 +367,42 @@ jobs:
           test -s staging/private/app/ops/qsyn-private-feed.supervisor.conf.example
           test -s staging/RELEASE.json
           test -s staging/private/build/release.json
+      - name: Audit DigiOps payload size
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          from zipfile import ZipFile, ZIP_DEFLATED
+
+          root = Path("staging")
+          files = sorted(p for p in root.rglob("*") if p.is_file())
+          report = []
+          with ZipFile("/tmp/qsyn-payload-size-audit.zip", "w", ZIP_DEFLATED, compresslevel=9) as archive:
+              for file in files:
+                  archive.write(file, file.relative_to(root))
+          with ZipFile("/tmp/qsyn-payload-size-audit.zip") as archive:
+              report = [(i.filename, i.file_size, i.compress_size)
+                        for i in archive.infolist() if not i.is_dir()]
+          total_raw = sum(item[1] for item in report)
+          total_zip = os.path.getsize("/tmp/qsyn-payload-size-audit.zip")
+          print(f"QSYN DigiOps release: {len(report)} files, {total_raw / 1048576:.2f} MiB raw, {total_zip / 1048576:.2f} MiB compressed")
+          for name, raw, compressed in sorted(report, key=lambda x: x[2], reverse=True)[:15]:
+              print(f"{compressed / 1048576:.2f} MiB compressed / {raw / 1048576:.2f} MiB raw: {name}")
+          summary = os.environ.get("GITHUB_STEP_SUMMARY")
+          if summary:
+              with open(summary, "a", encoding="utf8") as handle:
+                  handle.write(f"### QSYN DigiOps payload size\\n\\n"
+                               f"- Files: {len(report)}\\n"
+                               f"- Uncompressed: {total_raw / 1048576:.2f} MiB\\n"
+                               f"- Estimated ZIP (level 9): {total_zip / 1048576:.2f} MiB\\n\\n")
+          # Historical baseline: artifact 11726108092, 14,869,791 bytes
+          # at upload-artifact default compression level.
+          # Keep a size budget with room for legitimate code growth.
+          if total_zip > 14_500_000:
+              raise SystemExit(f"release_size_budget_exceeded: {total_zip} > 14500000")
+          PY
       - name: Publish DigiOps artifact
         uses: actions/upload-artifact@v4
         with:
@@ -378,6 +411,7 @@ jobs:
           if-no-files-found: error
           include-hidden-files: true
           retention-days: 30
+          compression-level: 9
 
   verify-artifact:
     name: Verify downloaded DigiOps entrypoint
@@ -394,15 +428,15 @@ jobs:
           set -euo pipefail
           test -s verified-release/public/index.php
           test -s verified-release/public/.htaccess
-          test -s verified-release/public/assets/chart.js
+          test ! -e verified-release/public/assets/chart.js
           test -s verified-release/public/assets/terminal.js
           test -s verified-release/public/assets/terminal.css
           test -s verified-release/public/terminal.php
           test -s verified-release/public/terminal-login.php
           php -l verified-release/public/terminal-login.php
           test -s verified-release/public/assets/terminal-gate.css
-          test -s verified-release/public/assets/studio.js
-          test -s verified-release/public/assets/studio.css
+          test ! -e verified-release/public/assets/studio.js
+          test ! -e verified-release/public/assets/studio.css
           test -s verified-release/public/studio.php
           test -s verified-release/private/app/src/SimulatedOptionsStudio.php
           test -s verified-release/private/app/src/StudioAnalytics.php
