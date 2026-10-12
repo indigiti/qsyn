@@ -74,4 +74,43 @@ try {
     Proof::summarize('NSE_FO',$day,$mock);
     throw new RuntimeException('unknown_symbol_accepted');
 } catch (InvalidArgumentException) {}
+
+// The personal route must forward Upstox's real 1m start timestamp, never
+// manufacture a bar from local request time or an LTP value.
+$minute=intdiv(time(),60)*60;
+$ts=$minute*1000;
+$key='NSE_INDEX|Nifty 50';
+$ohlc=[
+  'status'=>'success','data'=>[
+    'NSE_INDEX:Nifty 50'=>[
+      'instrument_token'=>$key,'last_price'=>25015.0,
+      'live_ohlc'=>[
+        'open'=>25000.0,'high'=>25020.0,'low'=>24998.0,
+        'close'=>25015.0,'volume'=>0,'ts'=>$ts,
+      ],
+    ]
+  ]
+];
+$normalized=Proof::normalizePersonalOhlc('NIFTY',$ohlc,$ts+8000);
+if (count($normalized)!==1||$normalized[0]['time']!==$minute
+    ||$normalized[0]['close']!==25015.0)
+    throw new RuntimeException('personal_ohlc_exchange_timestamp_not_forwarded');
+if (Proof::normalizePersonalOhlc('NIFTY',$ohlc,$ts+220000)!==[])
+    throw new RuntimeException('stale_market_candle_treated_live');
+try {
+    $forged=$ohlc;
+    $forged['data']['NSE_INDEX:Nifty 50']['instrument_token']='NSE_FO|fake';
+    Proof::normalizePersonalOhlc('NIFTY',$forged,$ts+8000);
+    throw new RuntimeException('wrong_instrument_accepted');
+} catch (RuntimeException $e) {
+    if($e->getMessage()==='wrong_instrument_accepted')throw $e;
+}
+try {
+    $forged=$ohlc;
+    $forged['data']['NSE_INDEX:Nifty 50']['live_ohlc']['high']=24900;
+    Proof::normalizePersonalOhlc('NIFTY',$forged,$ts+8000);
+    throw new RuntimeException('invalid_ohlc_accepted');
+} catch (RuntimeException $e) {
+    if($e->getMessage()==='invalid_ohlc_accepted')throw $e;
+}
 echo "PASS core history proof: genuine Upstox candle contract, 401/empty/invalid and zero OHLC disclosure\n";
