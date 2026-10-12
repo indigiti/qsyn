@@ -546,13 +546,22 @@ function PrivateMarketPanel({ account, instrument, label, authMode = 'private_te
       : 'Exchange last-trade timestamps. No historical candles until licensed backfill is verified.'}</p>
   </section>;
 }
-function PrivateMarketWorkspace({embedded=false,onlyIndex=false}) {
+function PrivateMarketWorkspace({embedded=false,onlyIndex=false,selectedIndex=null}) {
   const [access, setAccess] = useState('checking');
   const [account, setAccount] = useState('');
   const [ce, setCe] = useState('');
   const [pe, setPe] = useState('');
   const [indexKey, setIndexKey] = useState('');
   const [selected, setSelected] = useState(null);
+  useEffect(()=>{
+    if(!onlyIndex)return;
+    // Official Upstox documentation lists this NIFTY instrument key. It is
+    // a candidate, not today's verified BOD mapping or market-data license.
+    const candidate=selectedIndex?.exchange==='NSE_INDEX' &&
+      selectedIndex?.symbol==='NIFTY' ? 'NSE_INDEX|Nifty 50' : '';
+    setIndexKey(candidate);
+    setSelected(null);
+  },[onlyIndex,selectedIndex?.id]);
   useEffect(() => {
     const controller = new AbortController();
     (async () => {
@@ -607,11 +616,17 @@ function PrivateMarketWorkspace({embedded=false,onlyIndex=false}) {
           <label>PE instrument key<input aria-label="Private PE key" placeholder="NSE_FO|12346" value={pe} maxLength={32} onChange={e=>setPe(e.target.value)}/></label>
           <button className="terminal-action" type="button" disabled={!supported}
             onClick={() => setSelected({account:account.trim(), ce:ce.trim(), pe:pe.trim()})}>Connect authorized charts</button></>}
-          <label>Approved NSE/BSE index instrument key<input aria-label="Private index instrument key" placeholder="NSE_INDEX|Nifty 50" value={indexKey} maxLength={128} onChange={e=>setIndexKey(e.target.value)}/></label>
+          <label>{selectedIndex?.name ? selectedIndex.name+' · ' : ''}Approved NSE/BSE index instrument key<input aria-label="Private index instrument key" placeholder="NSE_INDEX|Nifty 50" value={indexKey} maxLength={128} onChange={e=>setIndexKey(e.target.value)}/></label>
           <button className="terminal-action" type="button" disabled={!supportedIndex}
             onClick={() => setSelected({account:account.trim(),index:indexKey.trim()})}>Connect authorized index</button>
           <button className="terminal-action terminal-secondary-action" type="button" onClick={() => setSelected(null)}>Disconnect</button>
         </div>
+        {onlyIndex && selectedIndex && <p role="status" className="terminal-footnote">
+          Selected: {selectedIndex.name} ({selectedIndex.exchange}).
+          {' '}The instrument key is only a candidate until matched against the
+          current Upstox instrument master and approved private rights.
+          Connecting will not activate an unapproved worker or expose public candles.
+        </p>}
         <p className="terminal-footnote">No broker secret or Upstox OAuth token is entered in the browser. Chart grants expire after 30 seconds and require current server-side rights.</p>
       </>}
     </section>
