@@ -19,6 +19,31 @@ if (in_array($route, ['/health', '/qsyn/health', '/api/v1/health', '/qsyn/api/v1
     respond(['status' => 'ok', 'app' => 'qsyn-web', 'phase' => 0, 'market_feed' => 'demo-only', 'app_store' => 'file']);
 }
 
+// Shared, credential-free market/provider metadata. The browser imports this
+// same artifact at build time. Provider names never imply a live entitlement.
+if ($route === '/qsyn/api/v1/markets/catalog') {
+    if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'GET') {
+        header('Allow: GET');
+        respond(['error' => 'method_not_allowed'], 405);
+    }
+    $manifest = __DIR__ . '/market-provider-registry.json';
+    if (!is_file($manifest) || is_link($manifest) || filesize($manifest) > 16384) {
+        respond(['error' => 'market_registry_unavailable'], 503);
+    }
+    try {
+        $data = json_decode((string)file_get_contents($manifest), true, 16, JSON_THROW_ON_ERROR);
+    } catch (\\Throwable) {
+        respond(['error' => 'market_registry_unavailable'], 503);
+    }
+    if (!is_array($data)
+        || ($data['schema'] ?? null) !== 'QSYN-MARKET-PROVIDER-REGISTRY/1'
+        || count($data['markets'] ?? []) !== 4
+        || !is_array($data['providers'] ?? null)) {
+        respond(['error' => 'market_registry_invalid'], 503);
+    }
+    respond($data);
+}
+
 if ($route === '/qsyn/api/v1/diagnostics/rust-stream' || $route === '/api/v1/diagnostics/rust-stream') {
     // Simulated quotes ONLY. Never expose broker market data through this public endpoint.
     if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'GET') {
