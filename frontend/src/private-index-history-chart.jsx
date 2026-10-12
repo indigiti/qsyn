@@ -3,9 +3,9 @@ import {createWidget} from 'openalgo-charts/widget';
 
 
 /**
- * Personal chart: read-only Upstox historical candles plus actual 1m exchange
- * OHLC quotes from the same Analytics Token. No OAuth, plan, token in browser,
- * fabricated candles, new Rust process or public market-data route.
+ * Single Rust transport: 1m Upstox V3 history and tick-by-tick V3 WSS.
+ * Same existing 1-year Analytics Token, never exposed to the browser.
+ * No OAuth, approval plan, REST poll, synthetic provider or new Rust ELF.
  */
 class PrivateIndexHistoryFeed {
   constructor({symbol,day,csrf,onStatus,onLive=()=>{}}){
@@ -21,24 +21,21 @@ class PrivateIndexHistoryFeed {
     req.signal?.addEventListener('abort',abort,{once:true});
     this.controllers.add(ctl);
     try{
-      const response=await fetch('/qsyn/api/v1/admin/upstox/private-index-chart',{
+      const response=await fetch('/qsyn/api/v1/admin/upstox/personal-index/history',{
         method:'POST',credentials:'same-origin',cache:'no-store',
         signal:ctl.signal,headers:{
           'Content-Type':'application/json','Accept':'application/json',
           'X-CSRF-Token':this.csrf
-        },body:JSON.stringify({confirmed:true,private_view_acknowledged:true,
-          symbol:this.symbol,day:this.day})
+        },body:JSON.stringify({symbol:this.symbol,day:this.day})
       });
       const json=await response.json();
       if(!response.ok)throw Error(json.error||'PRIVATE_INDEX_HISTORY_UNAVAILABLE');
-      if(json.schema!=='QSYN-PRIVATE-UPSTOX-HISTORY-CHART/1'||
-        json.source!=='upstox_private_analytics_history'||
-        json.account_scoped!==true||json.personal_private_view_only!==true||
+      if(json.schema!=='QSYN-UPSTOX-RUST-INDEX-HISTORY/1'||
+        json.source!=='upstox_v3_rust_history'||
         json.public_redistribution_allowed!==false||
-        json.trading_enabled!==false||json.live_stream_verified!==false||
+        json.trading_enabled!==false||
         json.symbol!==this.symbol||json.day_ist!==this.day||json.interval!=='1m'||
-        json.exchange!==(this.symbol==='SENSEX'?'BSE_INDEX':'NSE_INDEX')||
-        !Array.isArray(json.bars)||json.bars.length<1||json.bars.length>400)
+        !Array.isArray(json.bars)||json.bars.length>400)
         throw Error('PRIVATE_INDEX_HISTORY_INVALID');
       let previous=0;
       for(const bar of json.bars){
@@ -68,65 +65,81 @@ class PrivateIndexHistoryFeed {
       this.controllers.delete(ctl);req.signal?.removeEventListener('abort',abort);
     }
   }
-  // Upstox-sourced candle refresh only. The server obtains the 1m candle
-  // from Upstox V3 OHLC (not from the browser clock or a synthetic LTP bar).
+  // One authenticated browser socket -> existing Rust service -> Upstox V3.
+  // Tickets are issued by QSYN admin PHP; the one-year Analytics Token stays
+  // in the private runtime and is never put in WS URLs or browser JS.
   subscribeBars(req,onBar){
     if(this.closed||req.symbol!==this.symbol||req.exchange!=='UPSTOX_PERSONAL'||
        req.interval!=='1m'||this.day!==todayIst())return ()=>{};
-    let stopped=false,busy=false,watermark=0,lastSignature=null;
     const controller=new AbortController();
-    const poll=async()=>{
-      if(stopped||this.closed||busy)return;
-      busy=true;
+    let stopped=false,socket=null,lastTimestamp=0;
+    this.controllers.add(controller);
+    const connect=async()=>{
       try{
-        const response=await fetch('/qsyn/api/v1/admin/upstox/personal-index-ohlc',{
+        const response=await fetch('/qsyn/api/v1/admin/upstox/personal-index/ticket',{
           method:'POST',credentials:'same-origin',cache:'no-store',
-          signal:controller.signal,headers:{'Content-Type':'application/json',
-            'Accept':'application/json','X-CSRF-Token':this.csrf},
+          signal:controller.signal,
+          headers:{'Content-Type':'application/json','Accept':'application/json',
+            'X-CSRF-Token':this.csrf},
           body:JSON.stringify({symbol:this.symbol})
         });
-        const data=await response.json();
-        if(!response.ok)throw Error(data.error||'UPSTOX_QUOTE_UNAVAILABLE');
-        if(data.schema!=='QSYN-UPSTOX-PERSONAL-OHLC/1'||data.symbol!==this.symbol||
-           data.interval!=='1m'||data.personal_view_only!==true||
-           data.trading_enabled!==false||data.public_redistribution_allowed!==false||
-           !Array.isArray(data.bars)||data.bars.length>2)
-          throw Error('UPSTOX_QUOTE_INVALID');
-        let last=0;
-        for(const bar of data.bars){
-          if(!Number.isSafeInteger(bar?.time)||bar.time%60!==0||bar.time<=last||
-             !['open','high','low','close','volume'].every(k=>Number.isFinite(bar[k]))||
-             bar.open<=0||bar.low<=0||bar.close<=0||bar.volume<0||
-             bar.high<Math.max(bar.open,bar.close)||
-             bar.low>Math.min(bar.open,bar.close))
-            throw Error('UPSTOX_QUOTE_CANDLE_INVALID');
-          last=bar.time;
-          const signature=JSON.stringify(bar);
-          if(bar.time>watermark||(bar.time===watermark&&signature!==lastSignature)){
-            if(!stopped&&!this.closed){
-              onBar(bar);watermark=bar.time;lastSignature=signature;
-              this.onLive('Upstox 1m OHLC updated · '+
-                new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Kolkata',
-                  hour:'2-digit',minute:'2-digit',hourCycle:'h23'})
-                  .format(new Date(bar.time*1000))+' IST');
-            }
-          }
-        }
-        if(data.bars.length===0&&!stopped)
-          this.onLive('No fresh Upstox candle · market closed or quote delayed');
+        const auth=await response.json();
+        if(!response.ok)throw Error(auth.error||'RUST_PERSONAL_TICKET_UNAVAILABLE');
+        if(auth.schema!=='QSYN-PERSONAL-INDEX-RUST-TICKET/1'||
+           auth.symbol!==this.symbol||auth.trading_enabled!==false||
+           auth.websocket_path!=='/qsyn/ws/personal-index'||
+           typeof auth.ticket!=='string'||auth.ticket.length>512)
+          throw Error('RUST_PERSONAL_TICKET_INVALID');
+        if(stopped||controller.signal.aborted)return;
+        const url=new URL(auth.websocket_path,window.location.origin);
+        url.protocol=window.location.protocol==='https:'?'wss:':'ws:';
+        socket=new WebSocket(url.href);
+        socket.onopen=()=>{
+          if(!stopped)socket.send(JSON.stringify({ticket:auth.ticket}));
+          this.onLive('Rust WebSocket connected · awaiting Upstox V3 exchange ticks');
+        };
+        socket.onmessage=event=>{
+          if(stopped||this.closed)return;
+          let data;
+          try{data=JSON.parse(event.data);}catch{return;}
+          const bar=data?.bar;
+          if(data?.schema!=='QSYN-RUST-PERSONAL-INDEX-TICK/1'||
+             data?.source!=='upstox_v3_websocket'||data?.symbol!==this.symbol||
+             data?.trading_enabled!==false||!Number.isSafeInteger(data.time_ms)||
+             data.time_ms<=lastTimestamp||!Number.isFinite(data.price)||data.price<=0||
+             !Number.isSafeInteger(bar?.time)||bar.time!==Math.floor(data.time_ms/60000)*60||
+             !['open','high','low','close'].every(k=>Number.isFinite(bar[k]))||
+             bar.open<=0||bar.high<Math.max(bar.open,bar.close)||
+             bar.low>Math.min(bar.open,bar.close)||bar.low<=0)
+            return;
+          lastTimestamp=data.time_ms;
+          onBar(bar);
+          this.onLive('Rust Upstox V3 tick · '+
+            new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Kolkata',
+              hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'})
+              .format(new Date(data.time_ms))+' IST');
+        };
+        socket.onerror=()=>{
+          if(!stopped)this.onLive('RUST_UPSTOX_WEBSOCKET_UNAVAILABLE');
+        };
+        socket.onclose=()=>{
+          if(!stopped)this.onLive('Rust WebSocket disconnected · no live feed');
+        };
       }catch(e){
-        if(!controller.signal.aborted&&!stopped&&!this.closed)
-          this.onLive(/^[A-Z0-9_]{3,90}$/i.test(e.message||'')
-            ?e.message:'UPSTOX_QUOTE_UNAVAILABLE');
-      }finally{busy=false;}
+        if(!stopped&&!controller.signal.aborted){
+          this.onLive(/^[a-z0-9_]{3,90}$/i.test(e.message||'')
+            ?e.message:'RUST_PERSONAL_DATA_UNAVAILABLE');
+        }
+      }
     };
-    void poll();
-    const timer=setInterval(()=>void poll(),12000);
-    const stop=()=>{stopped=true;clearInterval(timer);controller.abort();};
+    void connect();
+    const stop=()=>{
+      stopped=true;controller.abort();
+      try{socket?.close(1000,'chart_closed');}catch{}
+      this.controllers.delete(controller);
+    };
     req.signal?.addEventListener('abort',stop,{once:true});
-    this.controllers.add(controller);
-    return ()=>{req.signal?.removeEventListener('abort',stop);
-      stop();this.controllers.delete(controller);};
+    return ()=>{req.signal?.removeEventListener('abort',stop);stop();};
   }
   destroy(){
     this.closed=true;
@@ -141,7 +154,7 @@ export function PrivateIndexHistoryChart({symbol}){
   const [date,setDate]=useState('');
   const [opened,setOpened]=useState(false);
   const [status,setStatus]=useState('Checking private account access…');
-  const [liveStatus,setLiveStatus]=useState('Live OHLC refresh available on today’s chart.');
+  const [liveStatus,setLiveStatus]=useState('Rust V3 streaming connects on Today’s chart.');
   useEffect(()=>{
     const c=new AbortController();
     setOpened(false);setAuth(null);
@@ -164,7 +177,7 @@ export function PrivateIndexHistoryChart({symbol}){
     const feed=new PrivateIndexHistoryFeed({symbol,day:date,csrf:auth,
       onStatus:setStatus,onLive:setLiveStatus});
     setLiveStatus(date===todayIst()
-      ? 'Checking Upstox current-day 1m OHLC · 12-second refresh'
+      ? 'Connecting Rust Upstox V3 tick-by-tick WebSocket'
       : 'Past-date historical chart · choose Today for current quotes');
     try{
       widget=createWidget(chartRef.current,{
@@ -199,11 +212,10 @@ export function PrivateIndexHistoryChart({symbol}){
       ref={chartRef} aria-label={symbol+' private historical candlestick chart'}/>}
     <p role="status" className="terminal-footnote">{status}</p>
     <p role="status" className="terminal-footnote">{liveStatus}</p>
-    <p className="terminal-footnote">Personal Analytics Token only. Current-day
-      candles update from Upstox V3 1-minute OHLC every 12 seconds; no OAuth,
-      operator plan, separately approved private grant or Rust worker required.
-      Market-closed data is never labeled live. This does not publish market
-      data or permit trading.</p>
+    <p className="terminal-footnote">One private Analytics Token · Rust Upstox V3
+      tick-by-tick WebSocket · Rust historical 1-minute candles. No OAuth,
+      operator plan, PHP quote polling or separate Rust executable.
+      Market-closed periods are not labeled as live; trading stays disabled.</p>
   </section>;
 }
 
