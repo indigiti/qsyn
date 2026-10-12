@@ -133,8 +133,10 @@ impl IndexWorkerSettings {
         let session: OAuthSession =
             serde_json::from_slice(&private_bytes(&self.private_oauth_session_file, 16384)?)
                 .map_err(|_| denied())?;
-        if session.schema != "QSYN-UPSTOX-AUTH-SESSION/1"
-            || session.broker != "upstox"
+        if !matches!(
+            session.schema.as_str(),
+            "QSYN-UPSTOX-AUTH-SESSION/1" | "QSYN-UPSTOX-ANALYTICS-SESSION/1"
+        ) || session.broker != "upstox"
             || session.user_id != self.upstox_user_id
             || session.created_at.is_empty()
             || session.order_routing_enabled
@@ -293,6 +295,32 @@ pub async fn run(settings: &IndexWorkerSettings) -> io::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn operator_only_analytics_session_schema_preserves_read_only_guards() {
+        let analytics = serde_json::json!({
+            "schema":"QSYN-UPSTOX-ANALYTICS-SESSION/1",
+            "broker":"upstox",
+            "user_id":"TEST-ACCOUNT",
+            "access_token":"test-only-not-a-live-token-00000000000",
+            "created_at":"2026-10-12T00:00:00Z",
+            "order_routing_enabled":false,
+            "display_entitlement_verified":false,
+            "retention_entitlement_verified":false
+        });
+        let parsed: OAuthSession = serde_json::from_value(analytics.clone()).unwrap();
+        assert_eq!(parsed.schema, "QSYN-UPSTOX-ANALYTICS-SESSION/1");
+        assert!(!parsed.order_routing_enabled);
+        assert!(!parsed.display_entitlement_verified);
+        assert!(!parsed.retention_entitlement_verified);
+        let mut forbidden = analytics.clone();
+        forbidden["order_routing_enabled"] = serde_json::json!(true);
+        let p: OAuthSession = serde_json::from_value(forbidden).unwrap();
+        assert!(p.order_routing_enabled);
+        let mut extra = analytics;
+        extra["unknown_security_flag"] = serde_json::json!(true);
+        assert!(serde_json::from_value::<OAuthSession>(extra).is_err());
+    }
+
     #[test]
     fn bod_mapping_must_be_current_private_exact_and_operator_checked() {
         use std::os::unix::fs::PermissionsExt;

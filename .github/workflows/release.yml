@@ -83,6 +83,9 @@ jobs:
           php apps/web-php/tests/UpstoxIndexV3Test.php
           php -l apps/web-php/src/NativeUpstoxWebApi.php
           python3 apps/web-php/tests/NativeUpstoxWebHttpSmoke.py
+          php -l apps/web-php/src/NativeUpstoxAnalyticsApi.php
+          php apps/web-php/tests/NativeUpstoxAnalyticsApiTest.php
+          python3 apps/web-php/tests/NativeUpstoxAnalyticsHttpSmoke.py
           php -l apps/web-php/src/NativeUpstoxProfileVerifier.php
           php apps/web-php/tests/NativeUpstoxProfileVerifierTest.php
           php -l apps/web-php/src/NativeUpstoxIndexDiscovery.php
@@ -221,6 +224,7 @@ jobs:
           cp apps/web-php/src/OperatorIndexChartGrantApi.php staging/private/app/src/OperatorIndexChartGrantApi.php
           cp apps/web-php/src/UpstoxOperatorOAuth.php staging/private/app/src/UpstoxOperatorOAuth.php
           cp apps/web-php/src/NativeUpstoxWebApi.php staging/private/app/src/NativeUpstoxWebApi.php
+          cp apps/web-php/src/NativeUpstoxAnalyticsApi.php staging/private/app/src/NativeUpstoxAnalyticsApi.php
           cp apps/web-php/src/NativeUpstoxProfileVerifier.php staging/private/app/src/NativeUpstoxProfileVerifier.php
           cp apps/web-php/src/NativeUpstoxIndexDiscovery.php staging/private/app/src/NativeUpstoxIndexDiscovery.php
           cp apps/web-php/src/NativeAdminDiagnostics.php staging/private/app/src/NativeAdminDiagnostics.php
@@ -339,6 +343,8 @@ jobs:
           php -l staging/private/app/src/OperatorIndexChartGrantApi.php
           test -s staging/private/app/src/UpstoxOperatorOAuth.php
           test -s staging/private/app/src/NativeUpstoxWebApi.php
+          test -s staging/private/app/src/NativeUpstoxAnalyticsApi.php
+          php -l staging/private/app/src/NativeUpstoxAnalyticsApi.php
           test -s staging/private/app/src/NativeUpstoxProfileVerifier.php
           test -s staging/private/app/src/NativeUpstoxIndexDiscovery.php
           php -l staging/private/app/src/NativeUpstoxIndexDiscovery.php
@@ -455,6 +461,8 @@ jobs:
           php -l verified-release/private/app/src/OperatorIndexChartGrantApi.php
           test -s verified-release/private/app/src/UpstoxOperatorOAuth.php
           test -s verified-release/private/app/src/NativeUpstoxWebApi.php
+          test -s verified-release/private/app/src/NativeUpstoxAnalyticsApi.php
+          php -l verified-release/private/app/src/NativeUpstoxAnalyticsApi.php
           test -s verified-release/private/app/src/NativeUpstoxProfileVerifier.php
           test -s verified-release/private/app/src/NativeUpstoxIndexDiscovery.php
           php -l verified-release/private/app/src/NativeUpstoxIndexDiscovery.php
