@@ -189,7 +189,7 @@ final class NativeUpstoxAnalyticsApi
         if (!self::privateFile($path, 16384)) return null;
         try {
             $record = json_decode((string)file_get_contents($path), true, 10, JSON_THROW_ON_ERROR);
-        } catch (\\Throwable) {
+        } catch (\Throwable) {
             return null;
         }
         if (!is_array($record) || array_is_list($record)
@@ -204,11 +204,11 @@ final class NativeUpstoxAnalyticsApi
             || !is_string($record['access_token'] ?? null)) return null;
         $token = $record['access_token'];
         if (strlen($token) < 20 || strlen($token) > 8192
-            || preg_match('/\\A[\\x21-\\x7e]+\\z/D', $token) !== 1
-            || str_contains($token, '\\\\') || str_contains($token, '"')) return null;
+            || preg_match('/\A[\x21-\x7e]+\z/D', $token) !== 1
+            || str_contains($token, '\\') || str_contains($token, '"')) return null;
         try {
             return $authorize($token) === true;
-        } catch (\\Throwable) {
+        } catch (\Throwable) {
             return false;
         }
     }
