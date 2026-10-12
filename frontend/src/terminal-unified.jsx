@@ -3,8 +3,6 @@ import {Activity,AlertTriangle,CheckCircle2,ClipboardCopy,LockKeyhole,RefreshCw,
 import {CRYPTO_MARKETS} from './crypto-catalog.js';
 import {INDIA_INDEX_MARKETS} from './india-index-catalog.js';
 import {ProviderStatusPanel} from './provider-console.jsx';
-import {IndexWebOperationsPanel} from './index-ops-panel.jsx';
-import {IndexProvisionPanel} from './index-provision-panel.jsx';
 import {IndexHistoryProofPanel} from './index-history-proof-panel.jsx';
 import './terminal-unified.css';
 
