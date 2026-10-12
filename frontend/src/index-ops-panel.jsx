@@ -101,7 +101,7 @@ export function IndexWebOperationsPanel(){
       QSYN, without console commands. The server must first have an approved
       private plan, instrument permissions and bounded execution rights.</p>
     {status?<div className="qt-market-status-grid">
-      <div><small>Private worker plan</small><strong>{status.private_plan_ready?'Present · not validated':'Not provisioned'}</strong></div>
+      <div><small>Private worker plan</small><strong>{status.private_plan_unapproved_draft?'Draft · awaiting independent approval':status.private_plan_ready?'Present · not validated':'Not provisioned'}</strong></div>
       <div><small>Index history storage</small><strong>{status.archive_ready?'Private directory ready':'Unavailable'}</strong></div>
       <div><small>Web operator</small><strong>{!status.executor_ready?'Host PHP executor unavailable':status.web_operations_enabled?'Imports and service actions approved':status.preflight_enabled?'Read-only checks available':'Private setup required'}</strong></div>
       <div><small>Live data</small><strong>Not verified</strong></div>
