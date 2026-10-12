@@ -163,7 +163,7 @@ try {
         || $r['current_bod_attested']!==false
         || $r['exchange_display_entitlement_verified']!==false
         || $r['index_feed_activated']!==false
-        || count($r['instruments'])!==6
+        || count($r['instruments'])!==7
         || count($calls)!==7 || $analyticsCalls!==1) {
         throw new RuntimeException('analytics_discovery_not_safe:'.json_encode($r));
     }
