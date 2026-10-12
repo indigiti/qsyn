@@ -211,6 +211,32 @@ if ($route === '/qsyn/api/v1/studio/market' || $route === '/qsyn/api/v1/studio/b
     }
 }
 
+// Dedicated administrator-only read-only index operator workflow.
+// All executable paths, private plan/archives and supervisor program names
+// must be provisioned on Cloudways; never accepted from request parameters.
+if (preg_match('#^/qsyn/api/v1/admin/index-ops/(status|check|backfill|start|stop)$#', $route, $indexOps)) {
+    $src = dirname(__DIR__) . '/src';
+    if (!is_file($src . '/IndexWebOperations.php')) {
+        $src = dirname(__DIR__, 2) . '/private_html/qsyn/app/src';
+    }
+    foreach (['RustAdmin','IndexWebOperations'] as $module) {
+        if (!is_file($src . '/' . $module . '.php')) {
+            respond(['error'=>'index_operations_module_unavailable'],503);
+        }
+        require_once $src . '/' . $module . '.php';
+    }
+    header('Cache-Control: private, no-store');
+    header('Pragma: no-cache');
+    header('Referrer-Policy: no-referrer');
+    header('X-Robots-Tag: noindex, nofollow');
+    [$code,$payload]=\QSYN\Index\IndexWebOperations::dispatch($indexOps[1],$_SERVER);
+    if ($code===405) header('Allow: '.($indexOps[1]==='status'?'GET':'POST'));
+    $requestId=bin2hex(random_bytes(8));
+    header('X-QSYN-Request-ID: '.$requestId);
+    $payload['request_id']=$requestId;
+    respond($payload,$code);
+}
+
 // Password-protected, redacted diagnostic snapshot. No token, user identity,
 // account number, cookie value, provider payload or private path is serialized.
 if ($route === '/qsyn/api/v1/admin/diagnostics/report') {
