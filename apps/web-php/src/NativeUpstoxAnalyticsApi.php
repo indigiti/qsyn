@@ -179,6 +179,40 @@ final class NativeUpstoxAnalyticsApi
         return true;
     }
 
+    /**
+     * Verify the existing private Analytics Token without receiving a secret
+     * from the browser. Never return the token or the one-use WSS redirect.
+     */
+    public static function verifyStored(string $root, string $expectedUser, callable $authorize): ?bool
+    {
+        $path = $root . '/' . self::FILE;
+        if (!self::privateFile($path, 16384)) return null;
+        try {
+            $record = json_decode((string)file_get_contents($path), true, 10, JSON_THROW_ON_ERROR);
+        } catch (\\Throwable) {
+            return null;
+        }
+        if (!is_array($record) || array_is_list($record)
+            || count($record) !== 8
+            || ($record['schema'] ?? null) !== self::SCHEMA
+            || ($record['broker'] ?? null) !== 'upstox'
+            || ($record['user_id'] ?? null) !== $expectedUser
+            || !is_string($record['created_at'] ?? null)
+            || ($record['order_routing_enabled'] ?? null) !== false
+            || ($record['display_entitlement_verified'] ?? null) !== false
+            || ($record['retention_entitlement_verified'] ?? null) !== false
+            || !is_string($record['access_token'] ?? null)) return null;
+        $token = $record['access_token'];
+        if (strlen($token) < 20 || strlen($token) > 8192
+            || preg_match('/\\A[\\x21-\\x7e]+\\z/D', $token) !== 1
+            || str_contains($token, '\\\\') || str_contains($token, '"')) return null;
+        try {
+            return $authorize($token) === true;
+        } catch (\\Throwable) {
+            return false;
+        }
+    }
+
     private static function clear(string $root): void
     {
         self::withLock($root, static function() use ($root): void {
@@ -192,7 +226,7 @@ final class NativeUpstoxAnalyticsApi
     /** @return array{0:int,1:array<string,mixed>} */
     public static function dispatch(string $action, array $server, ?callable $authorize = null): array
     {
-        if (!in_array($action, ['status', 'import', 'clear'], true)) {
+        if (!in_array($action, ['status', 'import', 'clear', 'verify'], true)) {
             return [404, ['error'=>'not_found']];
         }
         $method = $action === 'status' ? 'GET' : 'POST';
@@ -245,6 +279,25 @@ final class NativeUpstoxAnalyticsApi
             || ($body['confirmed'] ?? false) !== true
             || count($body) !== ($action === 'import' ? 2 : 1)) {
             return [422, ['error'=>'invalid_analytics_request']];
+        }
+        if ($action === 'verify') {
+            $ok = self::verifyStored($root, $user,
+                $authorize ?? [self::class, 'marketAuthorize']);
+            if ($ok === null) {
+                return [409, ['error'=>'analytics_private_token_not_ready']];
+            }
+            return [200, [
+                'schema'=>self::STATUS,
+                'token_stored'=>true,
+                'provider_feed_authorized_now'=>$ok,
+                'diagnostic_code'=>$ok
+                    ? 'UPSTOX_ANALYTICS_MARKET_AUTHORIZED_NOW'
+                    : 'UPSTOX_ANALYTICS_MARKET_AUTH_UNAVAILABLE',
+                'provider_account_identity_verified'=>false,
+                'index_feed_activated'=>false,
+                'trading_enabled'=>false,
+                'checked_at_utc'=>gmdate('c'),
+            ]];
         }
         if ($action === 'clear') {
             try { self::clear($root); }
