@@ -524,6 +524,47 @@ try {
     throw Error('Expected one private history call per selected date');
   if(await page.locator('.qt-private-history-host canvas').count()===0)
     throw Error('Complete private index history did not mount an OpenAlgo canvas');
+  // Same personal chart must refresh genuine Upstox-shaped today's OHLC
+  // through a private admin endpoint (never through an OAuth/grant/plan).
+  await page.unroute('**/qsyn/api/v1/admin/upstox/private-index-chart');
+  const nowParts=new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Kolkata',
+    year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date());
+  const datePart=key=>nowParts.find(p=>p.type===key)?.value;
+  const today=datePart('year')+'-'+datePart('month')+'-'+datePart('day');
+  const currentMinute=Math.floor(Date.now()/60000)*60;
+  let personalQuoteCalls=0;
+  await page.route('**/qsyn/api/v1/admin/upstox/private-index-chart',async route=>{
+    const body=route.request().postDataJSON();
+    if(body.symbol!=='SENSEX'||body.day!==today)
+      throw Error('Today chart requested wrong Upstox data scope');
+    await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({
+      schema:'QSYN-PRIVATE-UPSTOX-HISTORY-CHART/1',
+      source:'upstox_private_analytics_history',exchange:'BSE_INDEX',
+      symbol:'SENSEX',interval:'1m',day_ist:today,
+      bars:[{time:currentMinute,open:25000,high:25010,low:24990,close:25005,volume:0}],
+      account_scoped:true,personal_private_view_only:true,
+      public_redistribution_allowed:false,live_stream_verified:false,trading_enabled:false
+    })});
+  });
+  await page.route('**/qsyn/api/v1/admin/upstox/personal-index-ohlc',async route=>{
+    personalQuoteCalls++;
+    if(route.request().method()!=='POST'||
+       route.request().headers()['x-csrf-token']!=='a'.repeat(64)||
+       route.request().postDataJSON()?.symbol!=='SENSEX')
+      throw Error('Personal OHLC quote lost account-scoped CSRF protection');
+    await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({
+      schema:'QSYN-UPSTOX-PERSONAL-OHLC/1',symbol:'SENSEX',interval:'1m',
+      source:'upstox_analytics_token_market_quote_v3',
+      code:'FRESH_EXCHANGE_OHLC',
+      bars:[{time:currentMinute,open:25000,high:25015,low:24990,close:25012,volume:0}],
+      personal_view_only:true,trading_enabled:false,public_redistribution_allowed:false
+    })});
+  });
+  await page.getByRole('button',{name:'Today',exact:true}).click();
+  await page.getByRole('button',{name:'Open SENSEX historical chart'}).click();
+  await page.getByText(/Upstox 1m OHLC updated/).waitFor({timeout:15000});
+  if(personalQuoteCalls<1)throw Error('Token-only chart never requested current OHLC');
+  await page.unroute('**/qsyn/api/v1/admin/upstox/personal-index-ohlc');
   await page.unroute('**/qsyn/api/v1/admin/upstox/private-index-chart');
   await page.unroute('**/qsyn/api/v1/admin/upstox/index-history-proof');
   await page.getByRole('button',{name:'Stocks',exact:true}).click();
