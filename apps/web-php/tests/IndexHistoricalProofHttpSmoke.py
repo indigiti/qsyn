@@ -87,7 +87,7 @@ def main():
       assert request(admin,origin,chart,'POST',{**owner,
         'private_view_acknowledged':False},status['csrf'])[0]==422
       assert request(admin,origin,chart,'POST',{**owner,
-        'symbol':'BANKNIFTY'},status['csrf'])[0]==422
+        'symbol':'UNSUPPORTED'},status['csrf'])[0]==422
       code,result,_=request(admin,origin,chart,'POST',owner,status['csrf'])
       assert code==409 and result['error']=='upstox_analytics_token_not_ready',(code,result)
       assert not list(runtime.rglob('*index*'))
