@@ -156,13 +156,13 @@ final class IndexHistoricalProof
             if ($actual!==$day) throw new \RuntimeException('different_day');
         }
         $count=count($bars);
-        return $base+[
+        return array_merge($base,[
             'code'=>$count?'UPSTOX_HISTORY_CANDLES_VERIFIED':'UPSTOX_HISTORY_NO_CANDLES',
             'provider_http_status'=>200,'candle_count'=>$count,
             'first_candle_utc'=>$count?gmdate('c',$bars[0]['time']):null,
             'last_candle_utc'=>$count?gmdate('c',$bars[$count-1]['time']):null,
             'history_verified'=>$count>0,
-        ];
+        ]);
     }
 
     /** @return array{0:int,1:array<string,mixed>} */
