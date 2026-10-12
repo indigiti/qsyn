@@ -328,6 +328,7 @@ try {
     throw new Error('Homepage NIFTY selection did not open India indices');
   if(await page.getByRole('combobox',{name:'Market instrument'}).inputValue()!=='NSE_INDEX:index:NIFTY')
     throw new Error('Selected NIFTY was lost across administrator navigation');
+  await page.getByText('Licensed continuous index feed').click();
   await page.getByRole('textbox',{name:'Private index instrument key'}).waitFor();
   if(await page.getByRole('textbox',{name:'Private index instrument key'}).inputValue()!=='NSE_INDEX|Nifty 50')
     throw new Error('Private NIFTY candidate key not prefilled for explicit grant validation');
