@@ -25,6 +25,8 @@ final class NativeUpstoxIndexDiscovery
             'aliases'=>['INDIAVIX']],
         'SENSEX' => ['exchange'=>'BSE','segment'=>'BSE_INDEX','query'=>'SENSEX',
             'aliases'=>['SENSEX']],
+        'BANKEX' => ['exchange'=>'BSE','segment'=>'BSE_INDEX','query'=>'BANKEX',
+            'aliases'=>['BANKEX','S&PBSEBANKEX']],
     ];
 
     /** @param ?callable(string,string):array $transport */
