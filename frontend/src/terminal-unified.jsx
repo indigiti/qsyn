@@ -643,7 +643,7 @@ export function BrokersWorkspace({openView}){
         </button>)}
       </div>
       {!catalog&&<p>Broker catalog is temporarily unavailable.</p>}
-      <p role="status" className="qt-message">{selected==='upstox'?'Native Upstox uses direct OAuth and Rust. Check current OAuth below; live licensed index subscriptions are not activated.':message}</p>
+      <p role="status" className="qt-message">{selected==='upstox'?'Native Upstox supports OAuth or a read-only Analytics Token. Check index activation diagnostics; a valid token alone does not start licensed index feeds.':message}</p>
       <button className="terminal-action terminal-secondary-action" disabled={busy}
         onClick={()=>selected==='upstox' ? setNativeRefreshTick(v=>v+1) : void refresh(new AbortController().signal)}>
         <RefreshCw size={16}/> Refresh broker status
@@ -657,8 +657,12 @@ export function BrokersWorkspace({openView}){
       <NativeUpstoxPanel refreshTick={nativeRefreshTick}/>
       <p className="terminal-footnote">Native Rust index subscriptions and licensed candle backfill
         are not activated until current instrument keys and exchange data entitlement are verified.</p>
-      <button type="button" className="terminal-action terminal-secondary-action"
-        onClick={()=>openView('private-live')}>View Rust chart readiness</button>
+      <div className="qt-actions">
+        <button type="button" className="terminal-action terminal-secondary-action"
+          onClick={()=>openView('diagnostics')}>Index activation diagnostic</button>
+        <button type="button" className="terminal-action terminal-secondary-action"
+          onClick={()=>openView('private-live')}>View Rust chart readiness</button>
+      </div>
     </section>}
     {selected!=='upstox'&&<section className="terminal-surface">
       <div className="terminal-card-head"><h2>{BROKER_LABELS[selected]||selected} · optional OpenAlgo integration</h2>
