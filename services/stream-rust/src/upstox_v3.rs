@@ -409,7 +409,7 @@ pub fn decode_personal_index_frame(
         {
             continue;
         }
-        out.push((key, ts, ltpc.ltp, frame.frame_type == 1));
+        // Official Upstox V3 MarketDataFeed.proto Type enum:\n        // initial_feed = 0, live_feed = 1, market_info = 2.\n        // Frame 1 MUST enter the live candle builder; only 0 is a snapshot.\n        out.push((key, ts, ltpc.ltp, frame.frame_type == 0));
     }
     Ok(out)
 }
@@ -783,6 +783,78 @@ mod tests {
     use serde_json::Value;
     use std::fs;
     use std::os::unix::fs::PermissionsExt;
+
+    #[test]
+    fn personal_v3_proto_frame_types_distinguish_initial_snapshot_from_live_ticks() {
+        // Wire-format fixture uses the same Protobuf messages as the official
+        // Upstox V3 feed: initial_feed=0, live_feed=1, market_info=2.
+        // This guards against discarding every genuine type-1 live update.
+        let key = "NSE_INDEX|Nifty 50";
+        let received = 1_790_000_000_500_u64;
+        let make = |frame_type: i32, instrument: &str, time: i64| {
+            FeedResponse {
+                frame_type,
+                current_ts: (received - 100) as i64,
+                market_info: None,
+                feeds: HashMap::from([(
+                    instrument.to_owned(),
+                    Feed {
+                        variant: Some(feed::Variant::Ltpc(Ltpc {
+                            ltp: 25_100.25,
+                            ltt: time,
+                            ltq: 0,
+                            cp: 25_001.0,
+                        })),
+                        request_mode: 0,
+                    },
+                )]),
+            }
+            .encode_to_vec()
+        };
+        let initial = decode_personal_index_frame(
+            &make(0, key, (received - 300) as i64), key, received
+        ).unwrap();
+        assert_eq!(initial.len(), 1);
+        assert!(initial[0].3, "type 0 is an initial snapshot, not a tick");
+
+        let live = decode_personal_index_frame(
+            &make(1, key, (received - 200) as i64), key, received
+        ).unwrap();
+        assert_eq!(live.len(), 1);
+        assert_eq!(live[0].0, key);
+        assert!((live[0].2 - 25_100.25).abs() < f64::EPSILON);
+        assert!(!live[0].3, "type 1 MUST be a live exchange tick");
+
+        let mut builder = crate::personal_index::MinuteBuilder::default();
+        for (instrument, time_ms, price, snapshot) in initial.into_iter().chain(live) {
+            assert_eq!(instrument, key);
+            if !snapshot {
+                let tick = crate::personal_index::Tick {
+                    symbol: "NIFTY".to_owned(),
+                    time_ms,
+                    price,
+                };
+                let bar = builder.on_tick(&tick).expect("live tick produces candle");
+                assert_eq!(bar.close, 25_100.25);
+                assert_eq!(bar.time, time_ms / 60_000 * 60);
+            }
+        }
+        assert!(builder.current.is_some(), "real live update must reach Rust OHLC");
+        assert!(decode_personal_index_frame(
+            &make(1, "BSE_INDEX|SENSEX", (received - 200) as i64),
+            key, received
+        ).is_err());
+        assert!(decode_personal_index_frame(
+            &make(1, key, (received - 10_000) as i64), key, received
+        ).unwrap().is_empty());
+        let info=FeedResponse {
+            frame_type: 2,
+            current_ts: received as i64,
+            market_info: Some(MarketInfo{segment_status:HashMap::new()}),
+            feeds: HashMap::new()
+        }.encode_to_vec();
+        assert!(decode_personal_index_frame(&info,key,received).unwrap().is_empty());
+    }
 
     fn plan() -> UpstoxV3Plan {
         UpstoxV3Plan {
