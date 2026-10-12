@@ -30,6 +30,7 @@ use axum::{
     routing::get,
     Json, Router,
 };
+use futures_util::SinkExt;
 use serde_json::{json, Value};
 use std::sync::{
     atomic::{AtomicU64, Ordering},
