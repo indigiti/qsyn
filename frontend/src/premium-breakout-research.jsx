@@ -69,9 +69,9 @@ export function PremiumBreakoutResearch(){
           style={numberInputStyle}/></label>)}
     </div>
     <div className="qt-actions">
-      <label><input type="checkbox" checked={rules.useVolume}
+      <label className="qt-checkbox"><input type="checkbox" checked={rules.useVolume}
         onChange={e=>update('useVolume',e.target.checked)}/> Require option volume expansion</label>
-      <label><input type="checkbox" checked={rules.useOi}
+      <label className="qt-checkbox"><input type="checkbox" checked={rules.useOi}
         onChange={e=>update('useOi',e.target.checked)}/> Require rising option OI (experimental)</label>
     </div>
     <p className="terminal-footnote">Auto mode: requires exactly 375 contiguous previous-session candles from 09:15–15:29 IST. Previous-low mode tests the hypothesis of an eight-point band around the prior low; previous-range mode uses high + buffer and low − buffer. Levels are not known before that complete session ends. Shorting an option has substantial margin and gap risk.</p>
