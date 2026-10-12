@@ -15,7 +15,7 @@ use QSYN\Admin\RustAdmin;
 final class IndexWebOperations
 {
     private const SCHEMA = 'QSYN-INDEX-WEB-OPERATIONS/1';
-    private const ACTIONS = ['status', 'check', 'backfill', 'start', 'stop'];
+    private const ACTIONS = ['status', 'check', 'check-worker', 'backfill', 'start', 'stop'];
     private const HISTORY_SCHEMA = 'QSYN-UPSTOX-PRIVATE-INDEX-IMPORT/1';
 
     private static function privatePath(string $path, bool $directory, int $max = 65536): bool
@@ -85,7 +85,9 @@ final class IndexWebOperations
         $workerSupervisorOk = $supervisorBase && self::supervisorProgram('worker') !== null;
         $historySupervisorOk = $supervisorBase && self::supervisorProgram('history') !== null;
         // Full historical preflight still requires both binaries and archive.
-        $workerPreflightOk = $readOnly && $runnerOk && $planOk && $workerBinaryOk;
+        // An unapproved browser-prepared draft is not worker-ready. Only
+        // the bounded Rust check establishes actual signed plan readiness.
+        $workerPreflightOk = $readOnly && $runnerOk && $planOk && !$draft && $workerBinaryOk;
         $historyPreflightOk = $workerPreflightOk && $historyBinaryOk && $archiveOk;
         return compact('plan','archive','worker','history','planOk','draft','archiveOk',
             'binaryOk','workerBinaryOk','historyBinaryOk','enabled','supervisor','ctl',
@@ -330,6 +332,35 @@ final class IndexWebOperations
                 'service'=>$body['service'],
                 'live_index_prices_verified'=>false,'trading_enabled'=>false
             ]];
+        }
+        // Live-worker validation is independent from the optional historical
+        // importer, archive and selected date. Same-origin admin + CSRF and a
+        // fixed Rust executable are still mandatory. A successful check does
+        // not connect WSS or prove a single real market tick.
+        if ($action==='check-worker') {
+            if (count($body)!==1)
+                return [422,['error'=>'invalid_operation_parameters']];
+            if (!self::servicePreflightReady($s,'worker'))
+                return [503,['error'=>'index_worker_preflight_unavailable']];
+            $lock=self::lock($s['plan']);
+            if (!$lock)
+                return [409,['error'=>'index_operation_already_running_or_unavailable']];
+            session_write_close();
+            try {
+                $checked=self::runWorkerCheck($s);
+                if (!$checked['ok']) return [409,[
+                    'schema'=>self::SCHEMA,'error'=>$checked['code'],
+                    'feed_activated'=>false,'live_index_prices_verified'=>false,
+                    'trading_enabled'=>false
+                ]];
+                return [200,[
+                    'schema'=>self::SCHEMA,'result_code'=>$checked['code'],
+                    'feed_activated'=>false,'live_index_prices_verified'=>false,
+                    'trading_enabled'=>false
+                ]];
+            } finally {
+                flock($lock,LOCK_UN);fclose($lock);
+            }
         }
         $selectedKind=($action==='start') ? ($body['service']??null) : 'history';
         $requiredPreflight=($action==='start' && $selectedKind==='worker')
