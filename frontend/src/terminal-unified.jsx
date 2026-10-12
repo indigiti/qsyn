@@ -218,6 +218,7 @@ function NativeUpstoxPanel({refreshTick=0}){
   const [notice,setNotice]=useState('Checking native Upstox authorization readiness…');
   const [form,setForm]=useState({client_id:'',client_secret:'',expected_user_id:'',confirmed:false});
   const [analytics,setAnalytics]=useState(null);
+  const [analyticsError,setAnalyticsError]=useState(null);
   const [analyticsVerification,setAnalyticsVerification]=useState(null);
   const [analyticsToken,setAnalyticsToken]=useState('');
   const [analyticsConfirmed,setAnalyticsConfirmed]=useState(false);
@@ -240,9 +241,21 @@ function NativeUpstoxPanel({refreshTick=0}){
         headers:{Accept:'application/json'},
       });
       const data=await response.json();
-      setAnalytics(response.ok && data.schema==='QSYN-UPSTOX-ANALYTICS-STATUS/1'
-        ? data : null);
-    }catch{setAnalytics(null);}
+      const loaded=response.ok && data.schema==='QSYN-UPSTOX-ANALYTICS-STATUS/1'
+        ? data : null;
+      setAnalytics(loaded);
+      setAnalyticsError(loaded?null:
+        data?.error==='analytics_account_binding_unavailable'
+          ? 'UPSTOX_ANALYTICS_BIND_EXPECTED_USER_REQUIRED'
+          : data?.error==='analytics_token_import_disabled'
+          ? 'ANALYTICS_EXPLICITLY_DISABLED'
+          : response.status===401
+          ? 'QSYN_ADMIN_LOGIN_REQUIRED'
+          : 'ANALYTICS_SETUP_UNAVAILABLE');
+    }catch{
+      setAnalytics(null);
+      setAnalyticsError('ANALYTICS_STATUS_NETWORK_ERROR');
+    }
   },[]);
   useEffect(()=>{void load();void loadAnalytics();},[load,loadAnalytics,refreshTick]);
 
@@ -402,8 +415,10 @@ function NativeUpstoxPanel({refreshTick=0}){
       <p>Alternative to daily OAuth/app-secret setup. Generate a 1-year read-only
         token in Upstox Developer Apps → Analytics. QSYN verifies its market-data
         feed authorization and stores it in a separate private 0600 file.
-        Your server operator must first bind the expected Upstox account and
-        enable read-only token import; no trading or live feed is activated by importing.</p>
+        QSYN uses your existing private Upstox account binding, with an
+        administrator login and CSRF verification; no additional environment
+        flag is required unless your operator explicitly disables import.
+        Importing does not activate a trading connection or licensed live feed.</p>
       {analytics ? <>
         <p role="status">{analytics.token_stored
           ? 'Analytics Token is stored privately; exchange account identity and continuous market data remain unverified.'
@@ -437,9 +452,14 @@ function NativeUpstoxPanel({refreshTick=0}){
               onClick={()=>void analyticsAction('clear')}>Remove local token</button>
           </div>
         </form>
-      </>:<p role="status">Analytics Token import unavailable or operator-disabled.
-        Your server needs QSYN_UPSTOX_ANALYTICS_IMPORT_ENABLED=1 and an expected
-        Upstox User ID bound in private configuration. Do not share tokens in chat.</p>}
+      </>:<p role="status">Analytics Token setup not ready ·
+        {' '}{analyticsError||'ANALYTICS_SETUP_UNAVAILABLE'}.
+        {analyticsError==='UPSTOX_ANALYTICS_BIND_EXPECTED_USER_REQUIRED'
+          ? ' Configure an expected Upstox User ID through the existing private Upstox app setup or server account binding.'
+          : analyticsError==='ANALYTICS_EXPLICITLY_DISABLED'
+          ? ' The server operator explicitly disabled Analytics Token import.'
+          : ' Check administrator access and the private runtime.'}
+        {' '}Do not share tokens in chat.</p>}
     </section>
     {status&&!status.configured&&<form className="qt-form qt-openalgo-setup"
       onSubmit={e=>{e.preventDefault();void action('setup',form);}} autoComplete="off">
