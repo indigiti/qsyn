@@ -148,6 +148,9 @@ export function MarketExplorer({theme,openView,CryptoChart,PrivateCharts}){
           current exchange instrument keys, not the alias shown in the selector.
           Enter the approved key only after instrument and display rights are verified.
           Historical data and private WSS must be independently activated.</p>
+        <p role="status" className="terminal-footnote">Private index activation:
+          {' '}{audit?.next_action_code||'NO_CURRENT_OPERATOR_PREFLIGHT'}.
+          {' '}A saved Analytics Token is not evidence of a licensed live feed.</p>
       </section>
       <PrivateCharts embedded onlyIndex/>
     </>}
