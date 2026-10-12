@@ -404,7 +404,8 @@ try {
     throw new Error('Unbound private preparation incorrectly allowed');
   await page.getByRole('button',{name:/Validate/}).first().click();
   await page.getByRole('heading',{name:'Indian indices · web operations'}).waitFor();
-  if(await page.getByRole('button',{name:'Validate approved index plan'}).isEnabled() ||
+  if(await page.getByRole('button',{name:'Validate live worker plan'}).isEnabled() ||
+     await page.getByRole('button',{name:'Validate history importer'}).isEnabled() ||
      await page.getByRole('button',{name:'Import approved historical candles'}).isEnabled() ||
      await page.getByRole('button',{name:'Start worker'}).isEnabled())
     throw new Error('Unprovisioned index web operations unexpectedly executable');
