@@ -50,6 +50,48 @@ pub struct Candle {
     pub observations: u32,
 }
 
+/// OHLC geometry is the same for exchange bars and synthetic observations.
+/// This deliberately does NOT validate volume, timestamps, account rights,
+/// trading permissions or price provenance; the adapters must do that.
+pub fn valid_ohlc(open: f64, high: f64, low: f64, close: f64) -> bool {
+    [open, high, low, close]
+        .iter()
+        .all(|value| value.is_finite() && *value > 0.0)
+        && high >= open.max(close)
+        && low <= open.min(close)
+        && low <= high
+}
+
+impl Candle {
+    /// Start one observation-based synthetic candle, not an exchange-volume bar.
+    pub fn from_observation(open_time_ms: u64, price: f64) -> Option<Self> {
+        if !price.is_finite() || price <= 0.0 {
+            return None;
+        }
+        Some(Self {
+            open_time_ms,
+            open: price,
+            high: price,
+            low: price,
+            close: price,
+            observations: 1,
+        })
+    }
+
+    /// Append an already time- and scope-validated observation to this bucket.
+    /// Does not infer trade volume or create missing intermediate candles.
+    pub fn observe(&mut self, price: f64) -> bool {
+        if !price.is_finite() || price <= 0.0 {
+            return false;
+        }
+        self.high = self.high.max(price);
+        self.low = self.low.min(price);
+        self.close = price;
+        self.observations = self.observations.saturating_add(1);
+        true
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct ScopedBasket {
     scope: Scope,
@@ -140,22 +182,14 @@ impl ScopedBasket {
         }
         let open_time_ms = newest / 60_000 * 60_000;
         let candle = match &self.current {
-            Some(c) if c.open_time_ms == open_time_ms => Candle {
-                open_time_ms,
-                open: c.open,
-                high: c.high.max(weighted),
-                low: c.low.min(weighted),
-                close: weighted,
-                observations: c.observations.saturating_add(1),
-            },
-            _ => Candle {
-                open_time_ms,
-                open: weighted,
-                high: weighted,
-                low: weighted,
-                close: weighted,
-                observations: 1,
-            },
+            Some(existing) if existing.open_time_ms == open_time_ms => {
+                let mut next = existing.clone();
+                if !next.observe(weighted) {
+                    return None;
+                }
+                next
+            }
+            _ => Candle::from_observation(open_time_ms, weighted)?,
         };
         self.current = Some(candle.clone());
         Some(candle)
@@ -281,6 +315,34 @@ mod tests {
             price,
             mode: DataMode::Simulated,
         }
+    }
+    #[test]
+    fn candle_geometry_shared_between_exchange_and_synthetic_sources() {
+        assert!(valid_ohlc(100.0, 105.0, 99.0, 102.0));
+        assert!(!valid_ohlc(100.0, 99.0, 98.0, 101.0));
+        assert!(!valid_ohlc(100.0, 103.0, 102.0, 101.0));
+        assert!(!valid_ohlc(100.0, f64::NAN, 99.0, 101.0));
+        assert!(!valid_ohlc(100.0, 102.0, 0.0, 101.0));
+
+        let mut current = Candle::from_observation(60_000, 100.0).unwrap();
+        assert!(current.observe(125.0));
+        assert!(current.observe(90.0));
+        assert!(current.observe(111.0));
+        assert!(valid_ohlc(
+            current.open,
+            current.high,
+            current.low,
+            current.close
+        ));
+        assert_eq!((current.open, current.high, current.low, current.close), (100.0, 125.0, 90.0, 111.0));
+        assert_eq!(current.observations, 4);
+        assert!(!current.observe(f64::INFINITY));
+        assert_eq!(current.close, 111.0);
+        assert!(Candle::from_observation(60_000, f64::NAN).is_none());
+
+        current.observations = u32::MAX;
+        assert!(current.observe(112.0));
+        assert_eq!(current.observations, u32::MAX);
     }
     #[test]
     fn rejects_foreign_scopes_replay_mode_staleness_and_duplicates() {
