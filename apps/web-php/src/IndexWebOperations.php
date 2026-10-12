@@ -16,7 +16,7 @@ final class IndexWebOperations
 {
     private const SCHEMA = 'QSYN-INDEX-WEB-OPERATIONS/1';
     private const ACTIONS = ['status', 'check', 'backfill', 'start', 'stop'];
-    private const HISTORY_SCHEMA = 'QSYN-UPSTOX-PRIVATE-INDEX-BATCH-IMPORT/1';
+    private const HISTORY_SCHEMA = 'QSYN-UPSTOX-PRIVATE-INDEX-IMPORT/1';
 
     private static function privatePath(string $path, bool $directory, int $max = 65536): bool
     {
@@ -157,10 +157,10 @@ final class IndexWebOperations
 
     private static function runCheck(array $settings, string $day): array
     {
-        $w=self::invoke([$settings['worker'],'check',$settings['plan']],5);
+        $w=self::invoke([$settings['worker'],'check',$settings['plan']],4);
         if (!$w['ok']) return ['ok'=>false,'code'=>'INDEX_WORKER_PREFLIGHT_REJECTED'];
         $h=self::invoke([$settings['history'],'check-all',
-            $settings['plan'],$settings['archive'],$day],7);
+            $settings['plan'],$settings['archive'],$day],5);
         if (!$h['ok']) return ['ok'=>false,'code'=>'INDEX_HISTORY_PREFLIGHT_REJECTED'];
         $report=json_decode(trim($h['output']),true);
         if (!is_array($report)
@@ -247,6 +247,10 @@ final class IndexWebOperations
                 return [422,['error'=>'invalid_service_selection']];
             if (!$s['supervisorOk'])
                 return [503,['error'=>'index_supervisor_not_provisioned']];
+        } elseif ($action==='backfill') {
+            if (count($body)!==3 || !is_int($body['step']??null)
+                || $body['step']<0 || $body['step']>7)
+                return [422,['error'=>'invalid_index_step']];
         } elseif (count($body)!==2) {
             return [422,['error'=>'invalid_operation_parameters']];
         }
@@ -270,19 +274,41 @@ final class IndexWebOperations
                 ]];
             }
             if ($action==='backfill') {
-                $run=self::invoke([$s['history'],'backfill-all',
-                    $s['plan'],$s['archive'],$date],22,32768);
+                $ordinal=$body['step'];
+                if ($ordinal >= $checked['approved_instrument_count'])
+                    return [422,['error'=>'index_step_not_approved']];
+                // Never accept an instrument key from HTTP. Select an
+                // ordinal from the already Rust-validated owner-only plan,
+                // then let the Rust one-index CLI revalidate rights again.
+                $record=json_decode((string)@file_get_contents($s['plan']),true,16);
+                $instruments=is_array($record) ? ($record['instruments']??null) : null;
+                if (!is_array($instruments)
+                    || count($instruments)!==$checked['approved_instrument_count']
+                    || !is_array($instruments[$ordinal]??null))
+                    return [409,['error'=>'index_private_plan_changed']];
+                $key=$instruments[$ordinal]['instrument_key']??null;
+                if (!is_string($key)
+                    || !preg_match('/\A(?:NSE_INDEX|BSE_INDEX)\|[A-Za-z0-9 ._-]{1,100}\z/D',$key))
+                    return [409,['error'=>'index_private_key_invalid']];
+                $run=self::invoke([$s['history'],'backfill',
+                    $s['plan'],$s['archive'],$key,$date],17,8192);
                 $data=$run['ok']?json_decode(trim($run['output']),true):null;
                 if (!$run['ok'] || !is_array($data)
                     || ($data['schema']??'')!==self::HISTORY_SCHEMA
-                    || ($data['status']??'')!=='completed'
-                    || !is_array($data['results']??null)
-                    || ($data['public_redistribution_allowed']??true)!==false)
+                    || ($data['instrument']??'')!==$key
+                    || ($data['source']??'')!=='upstox_v3_private_index_history'
+                    || !is_int($data['candle_count']??null)
+                    || $data['candle_count']<0 || $data['candle_count']>2000
+                    || ($data['public_redistribution_allowed']??true)!==false
+                    || ($data['execution_enabled']??true)!==false)
                     return [502,['schema'=>self::SCHEMA,
-                        'error'=>'INDEX_BATCH_BACKFILL_FAILED_OR_INCOMPLETE']];
+                        'error'=>'INDEX_HISTORY_STEP_FAILED_OR_INCOMPLETE']];
                 return [200,['schema'=>self::SCHEMA,
-                    'result_code'=>'INDEX_BATCH_BACKFILL_COMPLETED',
-                    'processed_instrument_count'=>(int)($data['processed_instrument_count']??0),
+                    'result_code'=>'INDEX_HISTORY_STEP_COMPLETED',
+                    'approved_instrument_count'=>$checked['approved_instrument_count'],
+                    'step'=>$ordinal,'next_step'=>$ordinal+1,
+                    'candle_count'=>$data['candle_count'],
+                    'archive_written'=>$data['archive_written']===true,
                     'trading_enabled'=>false,'live_index_prices_verified'=>false]];
             }
             $result=self::supervisorAction($s,$body['service'],$action);
