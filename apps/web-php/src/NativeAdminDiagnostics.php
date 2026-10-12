@@ -36,6 +36,20 @@ final class NativeAdminDiagnostics
         $privateOk = self::privateDirectory($privateDirectory);
         $app = $privateOk ? self::privateFile($privateDirectory.'/upstox-app.json') : false;
         $token = $privateOk ? self::privateFile($privateDirectory.'/upstox-session.json') : false;
+        // Read-only evidence of private file presence. These are NOT
+        // authorization/entitlement or live-stream checks and must never
+        // expose the bearer, mapped instrument list, account ID or paths.
+        $analytics = $privateOk
+            ? self::privateFile($privateDirectory.'/upstox-analytics-session.json')
+            : false;
+        $planPath = getenv('QSYN_UPSTOX_INDEX_WORKER_PLAN_FILE');
+        $planAdvertised = is_string($planPath) && $planPath !== '';
+        $planPrivate = $planAdvertised
+            && str_starts_with($planPath, '/')
+            && !str_contains($planPath, '/..')
+            && !is_link($planPath)
+            && self::privateFile($planPath)
+            && (int)@filesize($planPath) <= 8192;
         $workerBinary = dirname(__DIR__) . '/bin/qsyn-upstox-index-worker';
         $workerPackaged = is_file($workerBinary) && !is_link($workerBinary);
         $items=[
@@ -47,6 +61,22 @@ final class NativeAdminDiagnostics
             ['component'=>'upstox_token_file',
                 'status'=>$token?'present_unverified':'unavailable',
                 'code'=>$token?'UPSTOX_TOKEN_PRIVATE_PRESENT':'UPSTOX_TOKEN_NOT_READABLE'],
+            ['component'=>'upstox_analytics_token_file',
+                'status'=>$analytics?'present_unverified':'unavailable',
+                'code'=>$analytics?'UPSTOX_ANALYTICS_PRIVATE_PRESENT':'UPSTOX_ANALYTICS_PRIVATE_NOT_READABLE'],
+            ['component'=>'index_worker_plan',
+                'status'=>$planPrivate?'present_unverified':($planAdvertised?'invalid_or_unreadable':'not_configured'),
+                'code'=>$planPrivate?'INDEX_OPERATOR_PLAN_PRIVATE_PRESENT_NOT_VALIDATED':
+                    ($planAdvertised?'INDEX_OPERATOR_PLAN_NOT_PRIVATE':'INDEX_OPERATOR_PLAN_NOT_CONFIGURED')],
+            ['component'=>'index_bod_mapping_and_rights',
+                'status'=>'operator_preflight_required',
+                'code'=>'INDEX_BOD_RIGHTS_REQUIRE_RUST_PREFLIGHT'],
+            ['component'=>'index_worker_runtime',
+                'status'=>'not_checked',
+                'code'=>'INDEX_WORKER_PROCESS_NOT_VERIFIED'],
+            ['component'=>'index_chart_websocket',
+                'status'=>'not_checked',
+                'code'=>'INDEX_PRIVATE_WSS_NOT_VERIFIED'],
             ['component'=>'upstox_profile',
                 'status'=>'not_checked',
                 'code'=>'UPSTOX_PROFILE_CHECK_ON_DEMAND'],
@@ -73,10 +103,28 @@ final class NativeAdminDiagnostics
             'components'=>$items,
             'trading_enabled'=>false,
             'live_index_feed_verified'=>false,
+            'index_activation'=>[
+                'schema'=>'QSYN-INDEX-ACTIVATION-PREFLIGHT/1',
+                'provider_token_verified_by_report'=>false,
+                'private_analytics_token_file_present'=>$analytics,
+                'operator_plan_advertised'=>$planAdvertised,
+                'operator_plan_private_file_present'=>$planPrivate,
+                'bod_mapping_verified_now'=>false,
+                'display_rights_verified_now'=>false,
+                'worker_process_verified_now'=>false,
+                'private_wss_verified_now'=>false,
+                'live_index_prices_verified_now'=>false,
+                'next_action_code'=>$planPrivate
+                    ? 'OPERATOR_RUN_INDEX_WORKER_CHECK'
+                    : 'OPERATOR_PROVISION_INDEX_WORKER_PLAN',
+                'trading_enabled'=>false,
+            ],
             'notes'=>[
                 'A private token file is not a live Upstox provider session.',
                 'A packaged index worker is not evidence of a running service.',
                 'Browser diagnostics do not reveal or test exchange licenses.',
+                'A stored Analytics Token can be reverified separately in Brokers without exposing it.',
+                'Operator must run the Rust worker check against a current, approved private plan before any activation.',
             ],
         ]];
     }
