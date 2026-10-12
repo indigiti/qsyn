@@ -237,6 +237,22 @@ final class IndexWebOperations
         if (!is_array($body) || array_is_list($body)
             || ($body['confirmed']??null)!==true)
             return [422,['error'=>'explicit_confirmation_required']];
+        // A previously authorized worker must remain STOPPABLE even if its
+        // BOD/rights plan or historical archive later becomes invalid.
+        // Still require the separate host-approved index-only supervisor.
+        if ($action==='stop') {
+            if (count($body)!==3 || !in_array($body['service']??null,['worker','history'],true))
+                return [422,['error'=>'invalid_service_selection']];
+            if (!$s['enabled'] || !$s['supervisorOk'])
+                return [503,['error'=>'index_supervisor_not_provisioned']];
+            session_write_close();
+            $stopped=self::supervisorAction($s,$body['service'],'stop');
+            return [$stopped['ok']?200:502,[
+                'schema'=>self::SCHEMA,'result_code'=>$stopped['code'],
+                'service'=>$body['service'],
+                'live_index_prices_verified'=>false,'trading_enabled'=>false
+            ]];
+        }
         if (!$s['preflightOk'] || ($action!=='check' && !$s['enabled']))
             return [503,['error'=>'index_web_operator_not_provisioned']];
         $date=$body['date']??null;
@@ -303,6 +319,9 @@ final class IndexWebOperations
                     || ($data['execution_enabled']??true)!==false)
                     return [502,['schema'=>self::SCHEMA,
                         'error'=>'INDEX_HISTORY_STEP_FAILED_OR_INCOMPLETE']];
+                if ($data['candle_count']===0)
+                    return [409,['schema'=>self::SCHEMA,
+                        'error'=>'INDEX_HISTORY_NO_CANDLES']];
                 return [200,['schema'=>self::SCHEMA,
                     'result_code'=>'INDEX_HISTORY_STEP_COMPLETED',
                     'approved_instrument_count'=>$checked['approved_instrument_count'],
