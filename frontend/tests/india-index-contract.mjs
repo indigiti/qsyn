@@ -127,8 +127,25 @@ try {
   assert.equal(daily.length,1);
   assert(validIndexBarTime(daily[0].time,'1d'));
   assert.equal(daily[0].close,minute.at(-1).close);
-  assert.deepEqual(await authed.getBarsPage({...indexReq,before:minute[0].time}),
-    {bars:[],hasMore:false},'single private session must not page anonymous crypto API');
+  const historyBeforeScroll=historyCalls;
+  const older=await authed.getBarsPage({...indexReq,before:minute[0].time,countBack:300});
+  assert.equal(older.bars.length,300,'native left-scroll appends older real Rust candles');
+  assert.equal(older.bars[0].time,epoch('2026-10-08T10:30:00+05:30'));
+  assert.equal(older.bars.at(-1).time,epoch('2026-10-08T15:29:00+05:30'));
+  assert(older.bars.every(b=>b.time<minute[0].time));
+  assert.equal(older.nextBefore,older.bars[0].time);
+  assert.equal(older.hasMore,true);
+  assert.equal(historyCalls,historyBeforeScroll+1,'older page fetches one bounded Rust trading day');
+  const olderAgain=await authed.getBarsPage({...indexReq,before:minute[0].time,countBack:300});
+  assert.deepEqual(olderAgain,older,'repeated native history cursor is stable');
+  assert.equal(historyCalls,historyBeforeScroll+1,'day cache prevents duplicate provider requests');
+  const olderMinute=await authed.getBarsPage({...indexReq,before:older.nextBefore,countBack:300});
+  assert.equal(olderMinute.bars.length,300,'cursor continues beyond one market session');
+  assert(olderMinute.bars.at(-1).time<older.nextBefore);
+  assert.equal(historyCalls,historyBeforeScroll+2,'overlapping older day is served from local cache');
+  assert.deepEqual(await authed.getBarsPage({...indexReq,before:epoch('2021-12-31T00:00:00+05:30')}),
+    {bars:[],hasMore:false},'provider minimum historical date is enforced');
+  assert.equal(publicIndexRequests,0,'index pagination never touches public crypto provider');
   const sensex=await authed.getBars({exchange:'BSE_INDEX:index',symbol:'SENSEX',interval:'1m'});
   assert.equal(sensex.length,375);
   assert(scoped.includes('NIFTY')&&scoped.includes('SENSEX'));
@@ -139,6 +156,40 @@ try {
     'Upstox has no historical 1s BANKEX candles; live stream must supply updates');
   assert.equal(proofCalls,1,'one cached admin proof per browser feed instance');
   authed.destroy();
+
+  // An empty current/upcoming session must not disable today's live socket.
+  // Read previous genuine trading-day history through the independent Rust
+  // historical path while retaining the original current-day feed.
+  const fallbacks=[],liveSessions=[];
+  const fallbackFeed=new QsynMarketsFeed();
+  fallbackFeed._proof=async()=>({csrf:'a'.repeat(64),suggested_day_ist:'2026-10-09'});
+  fallbackFeed._session=(_instrument,day)=>{
+    liveSessions.push(day);
+    return {getBars:async()=>[]};
+  };
+  fallbackFeed._historicalDay=async (_instrument,day)=>{
+    fallbacks.push(day);
+    const start=epoch(day+'T09:15:00+05:30');
+    return Array.from({length:375},(_,n)=>({
+      time:start+n*60,open:25100,high:25102,low:25099,close:25101,volume:0
+    }));
+  };
+  const fallbackBars=await fallbackFeed.getBars(indexReq);
+  assert.equal(fallbackBars.length,375,'empty latest session uses actual earlier Rust candles');
+  assert.equal(liveSessions.length,1,'older-history fallback must preserve live session');
+  assert.equal(fallbacks.length,1,'first available real trading day stops lookback');
+  assert(fallbackBars.every(b=>b.time<Math.floor(Date.now()/1000)));
+  fallbackFeed.destroy();
+
+  let fallbackTriggered=false;
+  const failedFeed=new QsynMarketsFeed();
+  failedFeed._proof=async()=>({csrf:'a'.repeat(64),suggested_day_ist:'2026-10-09'});
+  failedFeed._session=()=>({getBars:async()=>{throw Error('RUST_HISTORY_REJECTED');}});
+  failedFeed._historicalDay=async()=>{fallbackTriggered=true;return [];};
+  assert.deepEqual(await failedFeed.getBars(indexReq),[],
+    'failed authenticated Upstox history cannot be replaced with another source');
+  assert.equal(fallbackTriggered,false,'provider errors must not trigger a request storm');
+  failedFeed.destroy();
 } finally {
   globalThis.fetch=originalFetch;
   feed.destroy();
