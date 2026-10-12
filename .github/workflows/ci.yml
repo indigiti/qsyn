@@ -77,6 +77,8 @@ jobs:
           php -l apps/web-php/src/NativeUpstoxAnalyticsApi.php
           php apps/web-php/tests/NativeUpstoxAnalyticsApiTest.php
           python3 apps/web-php/tests/NativeUpstoxAnalyticsHttpSmoke.py
+          php -l apps/web-php/src/NativeUpstoxIndexCandles.php
+          php apps/web-php/tests/NativeUpstoxIndexCandlesTest.php
           php -l apps/web-php/src/NativeUpstoxProfileVerifier.php
           php apps/web-php/tests/NativeUpstoxProfileVerifierTest.php
           php -l apps/web-php/src/NativeUpstoxIndexDiscovery.php
@@ -241,7 +243,7 @@ jobs:
         run: node tests/market-provider-contract.mjs
         working-directory: frontend
       - name: Verify India index native discovery and strict license gates
-        run: node tests/india-index-contract.mjs
+        run: node tests/india-index-contract.mjs && node tests/admin-index-history-feed.test.mjs
         working-directory: frontend
       - name: Confirm chart-cancellation guard never masks app errors
         run: node tests/chart-cancellation-contract.mjs
