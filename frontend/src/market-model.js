@@ -6,7 +6,6 @@
 import registry from '../../apps/web-php/public/market-provider-registry.json' with {type:'json'};
 import {CRYPTO_MARKETS} from './crypto-catalog.js';
 import {INDIA_INDEX_MARKETS} from './india-index-catalog.js';
-const MODES=new Set(['public_exchange','account_scoped']);
 const STATES=new Set(['implemented','gated','not_implemented','simulation_only']);
 const IDS=new Set();
 if(registry.schema!=='QSYN-MARKET-PROVIDER-REGISTRY/1' ||
@@ -87,8 +86,22 @@ export function providerEvidence({market,provider,health=null,tokenStatus=null,
  * No simulated series is promoted to the public crypto or private index feed.
  */
 export async function fetchSimulatedResearch(path,signal,fetcher=fetch){
-  if(typeof path!=='string'|| !/^(?:market\?underlying=[A-Za-z]+|bars\?[A-Za-z0-9%&,=:.[\]{}\"+\-]+)$/.test(path))
+  if(typeof path!=='string'||path.length>1500||!path.includes('?'))
     throw Error('Invalid strategy research request');
+  const [name,query,extra]=path.split('?');
+  if(extra!==undefined||!['market','bars'].includes(name))
+    throw Error('Invalid strategy research operation');
+  const params=new URLSearchParams(query);
+  const keys=[...params.keys()];
+  const allowed=name==='market'?['underlying']:['underlying','expiry','interval','legs'];
+  if(keys.length!==allowed.length || keys.some(k=>!allowed.includes(k)) ||
+     new Set(keys).size!==keys.length ||
+     !/^[A-Z]{3,18}$/.test(params.get('underlying')||'') ||
+     (name==='bars' && (
+       !/^(W1|W2|M1)$/.test(params.get('expiry')||'') ||
+       !/^(1m|5m|15m)$/.test(params.get('interval')||'') ||
+       (params.get('legs')||'').length>1000)))
+    throw Error('Invalid strategy research scope');
   const response=await fetcher('/qsyn/api/v1/studio/'+path,{
     credentials:'same-origin',cache:'no-store',signal,headers:{Accept:'application/json'}});
   if(!response.ok)throw Error('Simulation endpoint unavailable ('+response.status+')');
