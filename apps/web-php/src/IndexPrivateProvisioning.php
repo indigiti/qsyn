@@ -200,6 +200,9 @@ final class IndexPrivateProvisioning
         }
         if (count(array_unique(array_column($instruments,'symbol')))!==6)
             return [409,['error'=>'index_discovery_duplicate']];
+        // Reject a pre-existing link before opening the lock path.
+        if (is_link($root.'/.index-prepare.lock'))
+            return [409,['error'=>'index_preparation_lock_unsafe']];
         $mask=umask(0077);
         try { $lock=@fopen($root.'/.index-prepare.lock','c'); }
         finally { umask($mask); }
