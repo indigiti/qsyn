@@ -65,14 +65,14 @@ async fn personal_index_ws(ws: WebSocketUpgrade) -> Response {
     ws.on_upgrade(personal_index_session)
 }
 async fn personal_index_session(mut socket: WebSocket) {
-    let runtime = match std::env::var("QSYN_RUNTIME_DIR") {
+    let runtime = match qsyn_stream::personal_index::runtime_dir() {
         Ok(p) => p,
         Err(_) => {
             let _ = socket.close().await;
             return;
         }
     };
-    let token = match qsyn_stream::personal_index::read_token(std::path::Path::new(&runtime)) {
+    let token = match qsyn_stream::personal_index::read_token(&runtime) {
         Ok(t) => t,
         Err(_) => {
             let _ = socket.close().await;
