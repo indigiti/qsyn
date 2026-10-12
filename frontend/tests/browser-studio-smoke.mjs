@@ -41,7 +41,7 @@ try{
   await page.getByRole('button',{name:'Unlock terminal'}).click();
   if(new URL(page.url()).pathname==='/qsyn/terminal/login')
     throw new Error('Administrator unlock returned login instead of terminal: '+(await page.locator('body').innerText()).slice(0,420));
-  await page.getByRole('heading',{name:'Trading charts'}).waitFor();
+  await page.getByRole('heading',{name:'Market explorer'}).waitFor();
   for(const path of ['/qsyn/studio','/qsyn/studio/']){
     const res=await page.request.get(origin+path,{maxRedirects:0});
     if(res.status()!==302||res.headers().location!=='/qsyn/terminal/strategy'||
