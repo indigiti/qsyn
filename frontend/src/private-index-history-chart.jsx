@@ -1,15 +1,16 @@
 import React,{useEffect,useRef,useState} from 'react';
 import {createWidget} from 'openalgo-charts/widget';
-import {AuthorizedIndexLiveBridge,verifyPrivateIndexLiveGrant} from './private-index-live-bridge.js';
+
 
 /**
- * Historical 1m charts only. No WSS, live tick synthesis, token transport in
- * browser, persistent OHLC cache, public NSE/BSE API or simulated fallback.
+ * Single Rust transport: 1m Upstox V3 history and tick-by-tick V3 WSS.
+ * Same existing 1-year Analytics Token, never exposed to the browser.
+ * No OAuth, approval plan, REST poll, synthetic provider or new Rust ELF.
  */
 class PrivateIndexHistoryFeed {
-  constructor({symbol,day,csrf,onStatus,liveBridge=null}){
+  constructor({symbol,day,csrf,onStatus,onLive=()=>{}}){
     this.symbol=symbol;this.day=day;this.csrf=csrf;this.onStatus=onStatus;
-    this.liveBridge=liveBridge;
+    this.onLive=onLive;
     this.closed=false;this.controllers=new Set();
   }
   async getBars(req){
@@ -20,24 +21,21 @@ class PrivateIndexHistoryFeed {
     req.signal?.addEventListener('abort',abort,{once:true});
     this.controllers.add(ctl);
     try{
-      const response=await fetch('/qsyn/api/v1/admin/upstox/private-index-chart',{
+      const response=await fetch('/qsyn/api/v1/admin/upstox/personal-index/history',{
         method:'POST',credentials:'same-origin',cache:'no-store',
         signal:ctl.signal,headers:{
           'Content-Type':'application/json','Accept':'application/json',
           'X-CSRF-Token':this.csrf
-        },body:JSON.stringify({confirmed:true,private_view_acknowledged:true,
-          symbol:this.symbol,day:this.day})
+        },body:JSON.stringify({symbol:this.symbol,day:this.day})
       });
       const json=await response.json();
       if(!response.ok)throw Error(json.error||'PRIVATE_INDEX_HISTORY_UNAVAILABLE');
-      if(json.schema!=='QSYN-PRIVATE-UPSTOX-HISTORY-CHART/1'||
-        json.source!=='upstox_private_analytics_history'||
-        json.account_scoped!==true||json.personal_private_view_only!==true||
+      if(json.schema!=='QSYN-UPSTOX-RUST-INDEX-HISTORY/1'||
+        json.source!=='upstox_v3_rust_history'||
         json.public_redistribution_allowed!==false||
-        json.trading_enabled!==false||json.live_stream_verified!==false||
+        json.trading_enabled!==false||
         json.symbol!==this.symbol||json.day_ist!==this.day||json.interval!=='1m'||
-        json.exchange!==(this.symbol==='SENSEX'?'BSE_INDEX':'NSE_INDEX')||
-        !Array.isArray(json.bars)||json.bars.length<1||json.bars.length>400)
+        !Array.isArray(json.bars)||json.bars.length>400)
         throw Error('PRIVATE_INDEX_HISTORY_INVALID');
       let previous=0;
       for(const bar of json.bars){
@@ -67,17 +65,101 @@ class PrivateIndexHistoryFeed {
       this.controllers.delete(ctl);req.signal?.removeEventListener('abort',abort);
     }
   }
-  // Uses only the separately grant-validated operator-private source; a stored
-  // Analytics Token alone can never attach a streaming subscription.
+  // One authenticated browser socket -> existing Rust service -> Upstox V3.
+  // Tickets are issued by QSYN admin PHP; the one-year Analytics Token stays
+  // in the private runtime and is never put in WS URLs or browser JS.
   subscribeBars(req,onBar){
-    return !this.closed&&this.liveBridge
-      ? this.liveBridge.subscribeBars(req,onBar):()=>{};
+    if(this.closed||req.symbol!==this.symbol||req.exchange!=='UPSTOX_PERSONAL'||
+       req.interval!=='1m'||this.day!==todayIst())return ()=>{};
+    const controller=new AbortController();
+    let stopped=false,socket=null,lastTimestamp=0,retryDelay=2000,reconnectTimer=null;
+    this.controllers.add(controller);
+    const scheduleReconnect=()=>{
+      if(stopped||this.closed||controller.signal.aborted)return;
+      if(reconnectTimer!==null)clearTimeout(reconnectTimer);
+      reconnectTimer=setTimeout(()=>{
+        reconnectTimer=null;
+        void connect();
+      },retryDelay);
+      retryDelay=Math.min(retryDelay*2,30000);
+    };
+    const connect=async()=>{
+      try{
+        const response=await fetch('/qsyn/api/v1/admin/upstox/personal-index/ticket',{
+          method:'POST',credentials:'same-origin',cache:'no-store',
+          signal:controller.signal,
+          headers:{'Content-Type':'application/json','Accept':'application/json',
+            'X-CSRF-Token':this.csrf},
+          body:JSON.stringify({symbol:this.symbol})
+        });
+        const auth=await response.json();
+        if(!response.ok)throw Error(auth.error||'RUST_PERSONAL_TICKET_UNAVAILABLE');
+        if(auth.schema!=='QSYN-PERSONAL-INDEX-RUST-TICKET/1'||
+           auth.symbol!==this.symbol||auth.trading_enabled!==false||
+           auth.websocket_path!=='/qsyn/ws/personal-index'||
+           typeof auth.ticket!=='string'||auth.ticket.length>512)
+          throw Error('RUST_PERSONAL_TICKET_INVALID');
+        if(stopped||controller.signal.aborted)return;
+        const url=new URL(auth.websocket_path,window.location.origin);
+        url.protocol=window.location.protocol==='https:'?'wss:':'ws:';
+        socket=new WebSocket(url.href);
+        socket.onopen=()=>{
+          if(!stopped)socket.send(JSON.stringify({ticket:auth.ticket}));
+          this.onLive('Rust WebSocket connected · awaiting Upstox V3 exchange ticks');
+        };
+        socket.onmessage=event=>{
+          if(stopped||this.closed)return;
+          let data;
+          try{data=JSON.parse(event.data);}catch{return;}
+          const bar=data?.bar;
+          if(data?.schema!=='QSYN-RUST-PERSONAL-INDEX-TICK/1'||
+             data?.source!=='upstox_v3_websocket'||data?.symbol!==this.symbol||
+             data?.trading_enabled!==false||!Number.isSafeInteger(data.time_ms)||
+             data.time_ms<=lastTimestamp||!Number.isFinite(data.price)||data.price<=0||
+             !Number.isSafeInteger(bar?.time)||bar.time!==Math.floor(data.time_ms/60000)*60||
+             !['open','high','low','close'].every(k=>Number.isFinite(bar[k]))||
+             bar.open<=0||bar.high<Math.max(bar.open,bar.close)||
+             bar.low>Math.min(bar.open,bar.close)||bar.low<=0)
+            return;
+          lastTimestamp=data.time_ms;
+          retryDelay=2000;
+          onBar(bar);
+          this.onLive('Rust Upstox V3 tick · '+
+            new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Kolkata',
+              hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'})
+              .format(new Date(data.time_ms))+' IST');
+        };
+        socket.onerror=()=>{
+          if(!stopped)this.onLive('RUST_UPSTOX_WEBSOCKET_UNAVAILABLE');
+        };
+        socket.onclose=()=>{
+          if(!stopped){
+            this.onLive('Rust WebSocket disconnected · reconnecting');
+            scheduleReconnect();
+          }
+        };
+      }catch(e){
+        if(!stopped&&!controller.signal.aborted){
+          this.onLive(/^[a-z0-9_]{3,90}$/i.test(e.message||'')
+            ?e.message:'RUST_PERSONAL_DATA_UNAVAILABLE');
+          scheduleReconnect();
+        }
+      }
+    };
+    void connect();
+    const stop=()=>{
+      stopped=true;controller.abort();
+      if(reconnectTimer!==null)clearTimeout(reconnectTimer);
+      try{socket?.close(1000,'chart_closed');}catch{}
+      this.controllers.delete(controller);
+    };
+    req.signal?.addEventListener('abort',stop,{once:true});
+    return ()=>{req.signal?.removeEventListener('abort',stop);stop();};
   }
   destroy(){
     this.closed=true;
     for(const c of this.controllers)c.abort();
     this.controllers.clear();
-    this.liveBridge?.destroy();
   }
 }
 
@@ -85,14 +167,12 @@ export function PrivateIndexHistoryChart({symbol}){
   const chartRef=useRef(null);
   const [auth,setAuth]=useState(null);
   const [date,setDate]=useState('');
-  const [ack,setAck]=useState(false);
   const [opened,setOpened]=useState(false);
   const [status,setStatus]=useState('Checking private account access…');
-  const [liveGrant,setLiveGrant]=useState(null);
-  const [liveStatus,setLiveStatus]=useState('Live index feed not verified.');
+  const [liveStatus,setLiveStatus]=useState('Rust V3 streaming connects on Today’s chart.');
   useEffect(()=>{
     const c=new AbortController();
-    setOpened(false);setAck(false);setAuth(null);
+    setOpened(false);setAuth(null);
     void fetch('/qsyn/api/v1/admin/upstox/index-history-proof',{
       credentials:'same-origin',cache:'no-store',signal:c.signal,
       headers:{Accept:'application/json'}
@@ -107,41 +187,13 @@ export function PrivateIndexHistoryChart({symbol}){
     return()=>c.abort();
   },[symbol]);
   useEffect(()=>{
-    if(!opened||!auth)return;
-    const controller=new AbortController();
-    setLiveGrant(null);
-    setLiveStatus('Checking separately authorized private live index grant…');
-    void verifyPrivateIndexLiveGrant(symbol,{signal:controller.signal})
-      .then(grant=>{
-        if(controller.signal.aborted)return;
-        setLiveGrant(grant);
-        setLiveStatus(grant
-          ? 'Approved viewer grant available; exchange ticks not yet verified.'
-          : 'Historical only · independent live index grant unavailable.');
-      });
-    return()=>controller.abort();
-  },[opened,auth,symbol]);
-  useEffect(()=>{
     if(!opened||!auth||!chartRef.current)return;
     let widget;
-    const liveBridge=liveGrant ? new AuthorizedIndexLiveBridge({
-      symbol,account:liveGrant.account,
-      onStatus:message=>{
-        // WSS authentication alone is not exchange-tick evidence.
-        if(message.includes('chart connected'))
-          setLiveStatus('Private WSS authenticated; awaiting real exchange ticks.');
-        else setLiveStatus(message);
-      },
-      onTick:timeMs=>{
-        const time=new Intl.DateTimeFormat('en-GB',{
-          timeZone:'Asia/Kolkata',hour:'2-digit',minute:'2-digit',
-          second:'2-digit',hourCycle:'h23'
-        }).format(new Date(timeMs));
-        setLiveStatus('Live exchange tick verified · '+time+' IST');
-      },
-    }) : null;
     const feed=new PrivateIndexHistoryFeed({symbol,day:date,csrf:auth,
-      onStatus:setStatus,liveBridge});
+      onStatus:setStatus,onLive:setLiveStatus});
+    setLiveStatus(date===todayIst()
+      ? 'Connecting Rust Upstox V3 tick-by-tick WebSocket'
+      : 'Past-date historical chart · choose Today for current quotes');
     try{
       widget=createWidget(chartRef.current,{
         feed,exchange:'UPSTOX_PERSONAL',symbol,interval:'1m',intervals:['1m'],
@@ -154,22 +206,20 @@ export function PrivateIndexHistoryChart({symbol}){
       feed.destroy();
       try{widget?.destroy();}catch{}
     };
-  },[opened,auth,date,symbol,liveGrant]);
+  },[opened,auth,date,symbol]);
   function changeDate(next){setDate(next);setOpened(false);}
   return <section className="terminal-surface qt-private-history-chart">
     <div className="terminal-card-head">
-      <h3>{symbol} · Upstox historical candles</h3>
-      <span className="terminal-chip">PRIVATE · HISTORICAL</span>
+      <h3>{symbol} · Upstox personal chart</h3>
+      <span className="terminal-chip">PRIVATE · ANALYTICS TOKEN</span>
     </div>
     <div className="qt-index-proof-actions">
       <label>Completed trading date (IST)
         <input type="date" value={date} onChange={e=>changeDate(e.target.value)}/></label>
+      <button type="button" className="terminal-action terminal-secondary-action"
+        onClick={()=>changeDate(todayIst())}>Today</button>
     </div>
-    <label className="qt-prepare-confirm"><input type="checkbox" checked={ack}
-      onChange={e=>setAck(e.target.checked)}/>
-      Personal account view only. I will not publicly redistribute NSE/BSE
-      market data. This does not certify exchange entitlements.</label>
-    <button type="button" className="terminal-action" disabled={!auth||!ack||!date||opened}
+    <button type="button" className="terminal-action" disabled={!auth||!date||opened}
       onClick={()=>{setOpened(true);setStatus('Loading actual Upstox historical candles…');}}>
       Open {symbol} historical chart
     </button>
@@ -177,9 +227,16 @@ export function PrivateIndexHistoryChart({symbol}){
       ref={chartRef} aria-label={symbol+' private historical candlestick chart'}/>}
     <p role="status" className="terminal-footnote">{status}</p>
     <p role="status" className="terminal-footnote">{liveStatus}</p>
-    <p className="terminal-footnote">Account-only historical data. Live exchange
-      ticks join this chart only after a separately approved private grant and
-      authenticated Rust WSS; no public homepage publishing. Prices and broker
-      credentials are never stored in browser storage.</p>
+    <p className="terminal-footnote">One private Analytics Token · Rust Upstox V3
+      tick-by-tick WebSocket · Rust historical 1-minute candles. No OAuth,
+      operator plan, PHP quote polling or separate Rust executable.
+      Market-closed periods are not labeled as live; trading stays disabled.</p>
   </section>;
+}
+
+function todayIst(){
+  const parts=new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Kolkata',
+    year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date());
+  const get=type=>parts.find(p=>p.type===type)?.value;
+  return get('year')+'-'+get('month')+'-'+get('day');
 }

@@ -368,6 +368,52 @@ impl UpstoxV3IndexDecoder {
     }
 }
 
+/// Personal-mode V3 feed: reuse the official Protobuf wire model, without
+/// pretending a stored token is a trading account or an institutional plan.
+/// First snapshot is not labeled a live tick; only fresh update frames qualify.
+pub fn decode_personal_index_frame(
+    raw: &[u8],
+    expected_key: &str,
+    received_ms: u64,
+) -> io::Result<Vec<(String, u64, f64, bool)>> {
+    if raw.is_empty() || raw.len() > MAX_FRAME {
+        return Err(denied("personal_v3_frame_invalid"));
+    }
+    let frame = FeedResponse::decode(raw).map_err(|_| denied("personal_v3_protobuf_invalid"))?;
+    if frame.current_ts <= 0 || frame.current_ts as u64 > received_ms.saturating_add(2000) {
+        return Err(denied("personal_v3_clock_invalid"));
+    }
+    if frame.frame_type == 2 {
+        return Ok(Vec::new());
+    }
+    if frame.frame_type != 0 && frame.frame_type != 1 {
+        return Err(denied("personal_v3_type_invalid"));
+    }
+    if frame.feeds.len() > 1 {
+        return Err(denied("personal_v3_excessive_keys"));
+    }
+    let mut out = Vec::new();
+    for (key, feed) in frame.feeds {
+        if key != expected_key {
+            return Err(denied("personal_v3_wrong_key"));
+        }
+        let ltpc = feed
+            .last_trade()
+            .ok_or_else(|| denied("personal_v3_ltp_missing"))?;
+        let ts = u64::try_from(ltpc.ltt).map_err(|_| denied("personal_v3_ltt_invalid"))?;
+        if ts == 0
+            || ts > received_ms.saturating_add(2000)
+            || received_ms.saturating_sub(ts) > MAX_QUOTE_DELAY_MS
+            || !ltpc.ltp.is_finite()
+            || ltpc.ltp <= 0.0
+        {
+            continue;
+        }
+        out.push((key, ts, ltpc.ltp, frame.frame_type == 1));
+    }
+    Ok(out)
+}
+
 /// Validates a one-use authorized redirect given by Upstox, rather than ever
 /// forwarding bearer headers/credentials to a user-controlled WebSocket host.
 pub fn validate_one_use_redirect(raw: &str) -> io::Result<()> {

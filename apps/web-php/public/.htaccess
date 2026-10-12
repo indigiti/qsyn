@@ -1,6 +1,17 @@
 <IfModule mod_rewrite.c>
     RewriteEngine On
     RewriteBase /qsyn/
+    # Exact owner-ticket WSS ingress to the ALREADY deployed qsyn-stream
+    # loopback. No generic proxy or browser-selected target. When the host
+    # lacks mod_proxy_wstunnel this rule is inert, rather than weakening
+    # the protected Terminal or exposing a public quote endpoint.
+    <IfModule mod_proxy.c>
+        <IfModule mod_proxy_wstunnel.c>
+            RewriteCond %{REQUEST_METHOD} =GET
+            RewriteCond %{HTTP:Upgrade} =websocket [NC]
+            RewriteRule ^ws/personal-index$ ws://127.0.0.1:10251/ws/personal-index [P,L]
+        </IfModule>
+    </IfModule>
     RewriteCond %{REQUEST_FILENAME} !-f
     RewriteCond %{REQUEST_FILENAME} !-d
     RewriteRule ^ index.php [L]

@@ -154,25 +154,14 @@ export function MarketExplorer({theme,openView,CryptoChart,PrivateCharts}){
     </>}
     {market==='indices'&&<>
       <section className="terminal-surface">
-        <div className="terminal-card-head"><h2>Licensed index chart</h2><LockKeyhole size={17}/></div>
-        <p>For NIFTY and SENSEX, the administrator may open a read-only
-          personal historical chart using the verified Upstox Analytics Token.
-          Continuous live data still requires separate authenticated WSS and
-          documented display rights. No synthetic candles are substituted.</p>
-        <p role="status" className="terminal-footnote">Private index activation:
-          {' '}{audit?.next_action_code||'NO_CURRENT_OPERATOR_PREFLIGHT'}.
-          {' '}A saved Analytics Token is not evidence of a licensed live feed.</p>
+        <div className="terminal-card-head"><h2>Upstox personal index charts</h2><LockKeyhole size={17}/></div>
+        <p>Your stored one-year Analytics Token powers these private read-only charts.
+          Select a trading date for historical candles, or Today for direct Upstox
+          1-minute OHLC updates during market hours. No OAuth, worker plan, or
+          additional setup screen is required.</p>
       </section>
-      {['NIFTY','SENSEX'].includes(currentInstrument?.symbol)
-        ? <PrivateIndexHistoryChart key={currentInstrument.id}
-            symbol={currentInstrument.symbol}/>
-        : <PrivateCharts embedded onlyIndex selectedIndex={currentInstrument}/>}
-      {['NIFTY','SENSEX'].includes(currentInstrument?.symbol)&&
-        <details onToggle={event=>setShowLicensedStream(event.currentTarget.open)}>
-          <summary>Licensed continuous index feed</summary>
-          {showLicensedStream&&<PrivateCharts embedded onlyIndex
-            selectedIndex={currentInstrument}/>}
-        </details>}
+      {currentInstrument&&<PrivateIndexHistoryChart key={currentInstrument.id}
+        symbol={currentInstrument.symbol}/>}
     </>}
     {market==='stocks'&&<section className="terminal-surface">
       <div className="terminal-card-head"><h2>NSE / BSE equities</h2><LockKeyhole size={16}/></div>

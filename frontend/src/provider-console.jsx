@@ -22,20 +22,12 @@ export function ProviderStatusPanel(){
             credentials:'same-origin',cache:'no-store',signal:controller.signal,
             headers:{Accept:'application/json'}});
           const data=res.ok?await res.json():null;
-          const status=await fetch('/qsyn/api/v1/admin/index-ops/status',{
-            credentials:'same-origin',cache:'no-store',signal:controller.signal,
-            headers:{Accept:'application/json'}}).then(r=>r.ok?r.json():null).catch(()=>null);
-          const known=status?.schema==='QSYN-INDEX-WEB-OPERATIONS/1';
-          const code=known && status.private_plan_unapproved_draft ? 'INDEX_PLAN_DRAFT_PENDING_RIGHTS'
-            :known && !status.private_plan_ready ? 'INDEX_PLAN_NOT_PROVISIONED'
-            :known && !status.executor_ready ? 'INDEX_EXECUTOR_UNAVAILABLE'
-            :known && !status.rust_binary_ready ? 'INDEX_WORKER_BINARY_UNAVAILABLE'
-            :known && !status.archive_ready ? 'INDEX_HISTORY_STORAGE_UNAVAILABLE'
-            :known && !status.preflight_enabled ? 'INDEX_PREFLIGHT_NOT_READY'
-            :known && status.services?.worker==='running' ? 'WORKER_RUNNING_FEED_NOT_VERIFIED'
-            :known && status.services?.worker==='stopped' ? 'INDEX_WORKER_STOPPED'
-            :data?.schema==='QSYN-UPSTOX-ANALYTICS-STATUS/1' && data.token_stored===true
-              ? 'TOKEN_STORED_FEED_NOT_VERIFIED':'FEED_NOT_VERIFIED';
+          // Personal market data depends only on the stored read-only
+          // Analytics Token. Index worker/supervisor plans are unrelated.
+          const code=data?.schema==='QSYN-UPSTOX-ANALYTICS-STATUS/1'
+            ? (data.token_stored===true
+              ? 'ANALYTICS_TOKEN_STORED':'ANALYTICS_TOKEN_REQUIRED')
+            : 'ANALYTICS_STATUS_UNAVAILABLE';
           return [provider.id,{code,status:'not_verified'}];
         }catch{return [provider.id,{code:'ADMIN_STATUS_UNAVAILABLE',status:'not_verified'}];}
       }
@@ -61,7 +53,7 @@ export function ProviderStatusPanel(){
   return <section className="qt-provider-status" aria-label="Market-data provider status">
     <div className="qt-provider-header">
       <div><h3>Available data sources</h3><p className="terminal-footnote">
-        Connect public venues instantly; licensed Indian indices use a separate private setup.</p></div>
+        Use public crypto APIs or your private Upstox Analytics Token for personal indices.</p></div>
       <button type="button" className="terminal-action terminal-secondary-action"
         disabled={busy} onClick={()=>setGeneration(x=>x+1)}>
         <RefreshCw size={15}/>{busy?' Checking…':' Recheck'}</button>

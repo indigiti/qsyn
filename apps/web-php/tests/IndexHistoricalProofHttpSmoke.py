@@ -64,6 +64,23 @@ def main():
         assert request(admin,origin,API,'POST',invalid,status['csrf'])[0]==422,invalid
       code,result,_=request(admin,origin,API,'POST',good,status['csrf'])
       assert code==409 and result['error']=='upstox_analytics_token_not_ready',(code,result)
+      ticket='/qsyn/api/v1/admin/upstox/personal-index/ticket'
+      rust_history='/qsyn/api/v1/admin/upstox/personal-index/history'
+      for uri in (ticket,rust_history):
+        assert request(guest,origin,uri,'POST',{'symbol':'NIFTY'})[0]==401
+        assert request(admin,origin,uri)[0]==405
+        assert request(admin,origin,uri,'POST',{'symbol':'NIFTY'})[0]==403
+        assert request(admin,origin,uri,'POST',{'symbol':'NIFTY'},
+          status['csrf'],browser_origin='http://invalid.example')[0]==403
+        assert request(admin,origin,uri,'POST',{'symbol':'OTHER'},status['csrf'])[0]==422
+        assert request(admin,origin,uri,'POST',{'symbol':'NIFTY','url':'https://invalid.example'},
+          status['csrf'])[0]==422
+      code,result,_=request(admin,origin,ticket,'POST',
+        {'symbol':'NIFTY'},status['csrf'])
+      assert code==409 and result['error']=='upstox_analytics_token_not_ready'
+      code,result,_=request(admin,origin,rust_history,'POST',
+        {'symbol':'NIFTY','day':completed_day},status['csrf'])
+      assert code==409 and result['error']=='upstox_analytics_token_not_ready'
       chart='/qsyn/api/v1/admin/upstox/private-index-chart'
       owner={**good,'private_view_acknowledged':True}
       assert request(guest,origin,chart,'POST',owner)[0]==401
@@ -77,7 +94,7 @@ def main():
       assert request(admin,origin,chart,'POST',{**owner,
         'private_view_acknowledged':False},status['csrf'])[0]==422
       assert request(admin,origin,chart,'POST',{**owner,
-        'symbol':'BANKNIFTY'},status['csrf'])[0]==422
+        'symbol':'UNSUPPORTED'},status['csrf'])[0]==422
       code,result,_=request(admin,origin,chart,'POST',owner,status['csrf'])
       assert code==409 and result['error']=='upstox_analytics_token_not_ready',(code,result)
       assert not list(runtime.rglob('*index*'))

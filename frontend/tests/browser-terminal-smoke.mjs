@@ -315,28 +315,19 @@ try {
   // Homepage index selection survives the password-protected Terminal
   // transition with public alias ONLY (no bearer/account/private key).
   await page.evaluate(()=>sessionStorage.setItem('qsyn-public-index-intent-v1','NSE_INDEX:index:NIFTY'));
-  await page.route('**/qsyn/api/v1/admin/upstox/private-chart-access',async route=>{
-    await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({
-      schema:'QSYN-PRIVATE-OPERATOR-CHART-ACCESS/1',profile:'operator-admin',
-      authenticated:true,account_id:'fixture-account',csrf:'a'.repeat(64),
-      trading_enabled:false,
-    })});
-  });
   await page.goto(origin+'/qsyn/terminal/markets',{waitUntil:'domcontentloaded'});
   await page.getByRole('heading',{name:'Market explorer'}).waitFor();
   if(await page.getByRole('button',{name:'Indices',exact:true}).getAttribute('aria-pressed')!=='true')
     throw new Error('Homepage NIFTY selection did not open India indices');
   if(await page.getByRole('combobox',{name:'Market instrument'}).inputValue()!=='NSE_INDEX:index:NIFTY')
     throw new Error('Selected NIFTY was lost across administrator navigation');
-  await page.getByText('Licensed continuous index feed').click();
-  await page.getByRole('textbox',{name:'Private index instrument key'}).waitFor();
-  if(await page.getByRole('textbox',{name:'Private index instrument key'}).inputValue()!=='NSE_INDEX|Nifty 50')
-    throw new Error('Private NIFTY candidate key not prefilled for explicit grant validation');
+  await page.getByRole('heading',{name:'NIFTY · Upstox personal chart'}).waitFor();
+  if(await page.getByRole('button',{name:'Open NIFTY historical chart'}).isEnabled())
+    throw new Error('Index chart opened without private Analytics Token');
   const reused=await page.evaluate(()=>sessionStorage.getItem('qsyn-public-index-intent-v1'));
   if(reused!==null)throw new Error('Index handoff intent was not consumed');
   if(await page.locator('.terminal-private-chart-grid').count()!==0)
-    throw new Error('Private index stream started without explicit approval');
-  await page.unroute('**/qsyn/api/v1/admin/upstox/private-chart-access');
+    throw new Error('Legacy private grant stream unexpectedly mounted');
   // Unified shell: no iframe, redirect or new page for markets, strategies,
   // broker readiness, diagnostics, operations or saved workspaces.
   await page.goto(origin+'/qsyn/terminal?view=diagnostics',{waitUntil:'domcontentloaded'});
@@ -359,6 +350,11 @@ try {
         provider_user_id_checked_at_exchange:true,
         index_feed_activated:false,trading_enabled:false,
       })});
+  });
+  await page.route('**/qsyn/api/v1/admin/upstox/analytics/status',async route=>{
+    await route.fulfill({status:200,contentType:'application/json',
+      body:JSON.stringify({schema:'QSYN-UPSTOX-ANALYTICS-STATUS/1',
+        token_stored:true,csrf:'b'.repeat(64),trading_enabled:false})});
   });
   await page.route('**/qsyn/api/v1/admin/upstox/discover',async route=>{
     const req=route.request(); indexDiscoverCalls++;
@@ -386,7 +382,7 @@ try {
      || await primary.getByRole('button',{name:'Rust Runtime'}).count()
      || await primary.getByRole('button',{name:'Route management'}).count())
     throw new Error('Non-core navigation still advertises unfinished workspaces');
-  await page.getByRole('button',{name:/Upstox access/}).first().click();
+  await page.getByRole('button',{name:/Upstox Token/}).first().click();
   if(new URL(page.url()).pathname!=='/qsyn/terminal/brokers')
     throw new Error('Broker view not routed in React');
   await page.getByRole('button',{name:'Refresh Upstox status'}).waitFor({timeout:12000});
@@ -394,24 +390,18 @@ try {
     || await page.locator('.qt-broker-grid').count()!==0
     || await page.getByRole('heading',{name:'Configure first OpenAlgo connection'}).count()!==0)
     throw new Error('Unverified OpenAlgo broker selection/setup unexpectedly visible');
-  const lookupButton=page.getByRole('button',{name:'Discover index instrument keys'});
+  const lookupButton=page.getByRole('button',{name:'Discover available indices'});
   await lookupButton.waitFor({state:'visible',timeout:12000});
   if(!await lookupButton.isEnabled())
     throw new Error('Configured Upstox failed to render enabled instrument discovery');
-  await page.getByRole('button',{name:/Private setup/}).first().click();
-  await page.getByRole('heading',{name:'Prepare your private index workspace'}).waitFor();
-  if(await page.getByRole('button',{name:'Prepare private index files'}).isEnabled())
-    throw new Error('Unbound private preparation incorrectly allowed');
-  await page.getByRole('button',{name:/Validate/}).first().click();
-  await page.getByRole('heading',{name:'Indian indices · web operations'}).waitFor();
-  if(await page.getByRole('button',{name:'Validate live worker plan'}).isEnabled() ||
-     await page.getByRole('button',{name:'Validate history importer'}).isEnabled() ||
-     await page.getByRole('button',{name:'Import approved historical candles'}).isEnabled() ||
-     await page.getByRole('button',{name:'Start worker'}).isEnabled())
-    throw new Error('Unprovisioned index web operations unexpectedly executable');
+  if(await page.getByRole('button',{name:/Private setup/}).count()
+     || await page.getByRole('button',{name:/Validate/}).count()
+     || await page.getByRole('button',{name:'Connect Upstox (OAuth)'}).count()
+     || await page.getByRole('heading',{name:'Configure Upstox developer application'}).count())
+    throw new Error('Personal Analytics Token page still requires OAuth or an index plan');
   if(browserErrors.length)
     throw new Error('Configured broker produced a JavaScript exception: '+JSON.stringify(browserErrors));
-  await page.getByRole('button',{name:/Upstox access/}).first().click();
+  await page.getByRole('button',{name:/Upstox Token/}).first().click();
   await lookupButton.click();
   await page.getByRole('heading',{name:'Upstox NSE/BSE index lookup'}).waitFor();
   if(indexDiscoverCalls!==1)
@@ -443,10 +433,11 @@ try {
   if(await page.locator('.qt-broker-card,.qt-broker-grid').count()!==0 ||
     await page.getByRole('heading',{name:'Configure first OpenAlgo connection'}).count()!==0)
     throw new Error('Unconfigured OpenAlgo controls reappeared on reload');
-  await page.getByRole('button',{name:/Upstox access/}).first().click();
-  await page.getByRole('button',{name:'Discover index instrument keys'}).waitFor({state:'visible'});
+  await page.getByRole('button',{name:/Upstox Token/}).first().click();
+  await page.getByRole('button',{name:'Discover available indices'}).waitFor({state:'visible'});
   if(browserErrors.length)
     throw new Error('Brokers deep-link crashed: '+JSON.stringify(browserErrors));
+  await page.unroute('**/qsyn/api/v1/admin/upstox/analytics/status');
   await page.unroute('**/qsyn/api/v1/admin/upstox/status');
   await page.unroute('**/qsyn/api/v1/admin/upstox/discover');
   await page.getByRole('button',{name:'Terminal operations',exact:true}).first().click();
@@ -482,11 +473,11 @@ try {
   await page.getByRole('button',{name:'Indices',exact:true}).click();
   await page.getByRole('combobox',{name:'Exchange venue'}).selectOption('BSE_INDEX');
   await page.getByRole('combobox',{name:'Market instrument'}).selectOption('BSE_INDEX:index:SENSEX');
-  if(await page.getByText('Licensed index chart').count()!==1)
+  if(await page.getByText('Upstox personal index charts').count()!==1)
     throw Error('Index chart readiness was not integrated into Markets');
-  await page.getByRole('heading',{name:'SENSEX · Upstox historical candles'}).waitFor();
+  await page.getByRole('heading',{name:'SENSEX · Upstox personal chart'}).waitFor();
   if(await page.getByRole('button',{name:'Open SENSEX historical chart'}).isEnabled())
-    throw Error('Private index chart opened without account and explicit viewing scope');
+    throw Error('Private chart opened without the stored Analytics Token');
   // Offline-only browser fixture: prove OpenAlgo renders a complete Upstox-
   // shaped 09:15–15:29 IST day instead of silently dropping the first 75 bars.
   const fullDayDate='2026-10-09';
@@ -503,21 +494,18 @@ try {
       live_feed_verified:false,trading_enabled:false,
     })}));
   let privateChartRequests=0;
-  await page.route('**/qsyn/api/v1/admin/upstox/private-index-chart',async route=>{
+  await page.route('**/qsyn/api/v1/admin/upstox/personal-index/history',async route=>{
     const body=route.request().postDataJSON();
-    if(route.request().method()!=='POST'||body.confirmed!==true||
-       body.private_view_acknowledged!==true||body.symbol!=='SENSEX'||
+    if(route.request().method()!=='POST'||body.symbol!=='SENSEX'||
        body.day!==fullDayDate||
        route.request().headers()['x-csrf-token']!=='a'.repeat(64))
       throw Error('Unscoped historical chart request');
     privateChartRequests++;
     await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({
-      schema:'QSYN-PRIVATE-UPSTOX-HISTORY-CHART/1',
-      source:'upstox_private_analytics_history',exchange:'BSE_INDEX',
+      schema:'QSYN-UPSTOX-RUST-INDEX-HISTORY/1',
+      source:'upstox_v3_rust_history',
       symbol:'SENSEX',interval:'1m',day_ist:fullDayDate,
-      bars:sessionBars,account_scoped:true,personal_private_view_only:true,
-      public_redistribution_allowed:false,display_rights_approved_by_app:false,
-      live_stream_verified:false,trading_enabled:false,
+      bars:sessionBars,public_redistribution_allowed:false,trading_enabled:false,
     })});
   });
   // The current tokenless component has already mounted. Remount after the
@@ -526,7 +514,6 @@ try {
   await page.getByRole('button',{name:'Indices',exact:true}).click();
   await page.getByRole('combobox',{name:'Exchange venue'}).selectOption('BSE_INDEX');
   await page.getByRole('combobox',{name:'Market instrument'}).selectOption('BSE_INDEX:index:SENSEX');
-  await page.getByRole('checkbox',{name:/Personal account view only/}).check();
   await page.getByRole('button',{name:'Open SENSEX historical chart'}).click();
   await page.getByText(/375 Upstox 1-minute historical candles/).waitFor({timeout:14000});
   await page.getByText(/09:15–15:29 IST/).waitFor({timeout:14000});
@@ -534,7 +521,35 @@ try {
     throw Error('Expected one private history call per selected date');
   if(await page.locator('.qt-private-history-host canvas').count()===0)
     throw Error('Complete private index history did not mount an OpenAlgo canvas');
-  await page.unroute('**/qsyn/api/v1/admin/upstox/private-index-chart');
+  // Same personal chart must refresh genuine Upstox-shaped today's OHLC
+  // through a private admin endpoint (never through an OAuth/grant/plan).
+  await page.unroute('**/qsyn/api/v1/admin/upstox/personal-index/history');
+  const nowParts=new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Kolkata',
+    year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date());
+  const datePart=key=>nowParts.find(p=>p.type===key)?.value;
+  const today=datePart('year')+'-'+datePart('month')+'-'+datePart('day');
+  const currentMinute=Math.floor(Date.now()/60000)*60;
+  let rustTicketCalls=0;
+  await page.route('**/qsyn/api/v1/admin/upstox/personal-index/ticket',async route=>{
+    rustTicketCalls++;
+    if(route.request().method()!=='POST'||
+       route.request().headers()['x-csrf-token']!=='a'.repeat(64)||
+       route.request().postDataJSON()?.symbol!=='SENSEX')
+      throw Error('Rust V3 WebSocket ticket lost private admin CSRF');
+    await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({
+      schema:'QSYN-PERSONAL-INDEX-RUST-TICKET/1',symbol:'SENSEX',
+      expires_in_seconds:35,ticket:'fixture.rust.only',
+      websocket_path:'/qsyn/ws/personal-index',trading_enabled:false,
+      source:'rust_upstox_v3'
+    })});
+  });
+  await page.getByRole('button',{name:'Today',exact:true}).click();
+  await page.getByRole('button',{name:'Open SENSEX historical chart'}).click();
+  await page.getByText(/Rust WebSocket connected|RUST_UPSTOX_WEBSOCKET_UNAVAILABLE|Rust WebSocket disconnected/)
+    .first().waitFor({timeout:15000});
+  if(rustTicketCalls<1)throw Error('Rust WS ticket was never requested');
+  await page.unroute('**/qsyn/api/v1/admin/upstox/personal-index/ticket');
+  await page.unroute('**/qsyn/api/v1/admin/upstox/personal-index/history');
   await page.unroute('**/qsyn/api/v1/admin/upstox/index-history-proof');
   await page.getByRole('button',{name:'Stocks',exact:true}).click();
   await page.getByText('Stock market adapter not operationally verified').first().waitFor();

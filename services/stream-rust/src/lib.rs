@@ -12,6 +12,7 @@ pub mod offline_rebuild;
 pub mod oms_live_gate;
 pub mod openalgo_stream;
 pub mod paper_oms;
+pub mod personal_index;
 pub mod private_chart_hub;
 pub mod private_history_http;
 pub mod private_index_history_http;

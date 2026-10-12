@@ -3,8 +3,6 @@ import {Activity,AlertTriangle,CheckCircle2,ClipboardCopy,LockKeyhole,RefreshCw,
 import {CRYPTO_MARKETS} from './crypto-catalog.js';
 import {INDIA_INDEX_MARKETS} from './india-index-catalog.js';
 import {ProviderStatusPanel} from './provider-console.jsx';
-import {IndexWebOperationsPanel} from './index-ops-panel.jsx';
-import {IndexProvisionPanel} from './index-provision-panel.jsx';
 import {IndexHistoryProofPanel} from './index-history-proof-panel.jsx';
 import './terminal-unified.css';
 
@@ -394,26 +392,23 @@ function NativeUpstoxPanel({refreshTick=0}){
         never paste Upstox tokens, OAuth codes, cookies or passwords into support messages.</p>
     </section>}
     <div className="qt-summary">
-      <div><strong>Upstox OAuth token</strong><p>{profileCheck?.session_verified?'Profile verified now · not continuously monitored':status?.token_stored?'Stored privately · verify current session':status?.configured?'Authorization required':'Not configured'}</p></div>
-      <div><strong>Analytics read-only token</strong><p>{analytics?.token_stored
-        ? 'Stored privately · last authorization does not prove current feed'
-        : 'Not stored or operator import disabled'}</p></div>
-      <div><strong>Index feed / license</strong><p>Not activated · no live prices</p></div>
-      <div><strong>QSYN order execution</strong><p>Disabled</p></div>
+      <div><strong>Upstox personal market data</strong><p>{analytics?.token_stored
+        ? 'Analytics Token stored · read-only historical and 1m OHLC available'
+        : 'Store your one-year Analytics Token below'}</p></div>
+      <div><strong>QSYN trading</strong><p>Disabled · no OAuth required for market-data charts</p></div>
     </div>
     <section className="terminal-surface" aria-label="Upstox Analytics Token setup">
       <div className="terminal-card-head"><h3>Upstox Analytics Token · read-only</h3><ShieldCheck size={17}/></div>
-      <p>Alternative to daily OAuth/app-secret setup. Generate a 1-year read-only
+      <p>Generate your 1-year read-only
         token in Upstox Developer Apps → Analytics. QSYN verifies its market-data
-        feed authorization and stores it in a separate private 0600 file.
-        QSYN uses your existing private Upstox account binding, with an
-        administrator login and CSRF verification; no additional environment
-        flag is required unless your operator explicitly disables import.
-        Importing does not activate a trading connection or licensed live feed.</p>
+        authorization and stores it in a private 0600 file. QSYN's personal
+        charts use this same token for historical candles and current-day
+        Upstox 1-minute OHLC quotes. No OAuth login, private index plan,
+        worker Supervisor or additional approval wizard is involved.</p>
       {analytics ? <>
         <p role="status">{analytics.token_stored
-          ? 'Analytics Token is stored privately; exchange account identity and continuous market data remain unverified.'
-          : 'No Analytics Token stored. OAuth remains optional for normal broker operations.'}</p>
+          ? 'Analytics Token stored securely. Personal chart data is ready; live updates require fresh provider OHLC during trading hours.'
+          : 'No Analytics Token stored. Import your Upstox Analytics Token to start.'}</p>
         <form className="qt-form qt-openalgo-setup" autoComplete="off"
           onSubmit={e=>{e.preventDefault();void analyticsAction('import');}}>
           <label>Analytics Token (not app API secret)
@@ -452,44 +447,13 @@ function NativeUpstoxPanel({refreshTick=0}){
           : ' Check administrator access and the private runtime.'}
         {' '}Do not share tokens in chat.</p>}
     </section>
-    {status&&!status.configured&&<form className="qt-form qt-openalgo-setup"
-      onSubmit={e=>{e.preventDefault();void action('setup',form);}} autoComplete="off">
-      <h3>Configure Upstox developer application</h3>
-      <p>Use the API key and API secret issued by your own Upstox Developer App.
-        These are NOT OpenAlgo credentials. QSYN stores them only in its private server directory.</p>
-      <label>Upstox application API key
-        <input required minLength={8} maxLength={128} autoComplete="off"
-          value={form.client_id} onChange={e=>setForm(p=>({...p,client_id:e.target.value}))}/></label>
-      <label>Upstox application API secret
-        <input required type="password" minLength={8} maxLength={512} autoComplete="off"
-          value={form.client_secret} onChange={e=>setForm(p=>({...p,client_secret:e.target.value}))}/></label>
-      <label>Expected Upstox User ID (account verification)
-        <input required minLength={2} maxLength={128} autoComplete="off"
-          value={form.expected_user_id} onChange={e=>setForm(p=>({...p,expected_user_id:e.target.value}))}/></label>
-      <p className="terminal-footnote">Set your Upstox app's exact redirect URI to:
-        <code>{status.oauth_callback_uri}</code>
-      </p>
-      <label className="qt-setup-confirm">
-        <input type="checkbox" checked={form.confirmed}
-          onChange={e=>setForm(p=>({...p,confirmed:e.target.checked}))}/>
-        I control this Upstox developer application and have registered the callback URL.
-        The account will be used for authorized market data only; no trading is activated.
-      </label>
-      <button className="terminal-action" type="submit" disabled={busy||!form.confirmed}>
-        Save Upstox application</button>
-    </form>}
-    {status?.configured&&<div className="qt-actions">
-      <button type="button" className="terminal-action" disabled={busy}
-        onClick={()=>void action('begin',{})}>Connect Upstox (OAuth)</button>
+    <div className="qt-actions">
       <button type="button" className="terminal-action terminal-secondary-action"
-        disabled={busy||!status.token_stored} onClick={()=>void action('verify',{})}>
-        <ShieldCheck size={16}/> Verify current Upstox session</button>
-      <button type="button" className="terminal-action terminal-secondary-action"
-        disabled={busy||(!status.token_stored&&!analytics?.token_stored)} onClick={()=>void action('discover',{})}>
-        <Search size={16}/> Discover index instrument keys</button>
-      <button type="button" className="terminal-action terminal-secondary-action" disabled={busy}
-        onClick={()=>void load()}><RefreshCw size={16}/> Refresh OAuth status</button>
-    </div>}
+        disabled={busy||!analytics?.token_stored}
+        onClick={()=>void action('discover',{})}>
+        <Search size={16}/> Discover available indices
+      </button>
+    </div>
     {indexDiscovery&&<section className="terminal-surface" aria-label="Upstox index instrument lookup">
       <div className="terminal-card-head"><h3>Upstox NSE/BSE index lookup</h3>
         <button type="button" className="terminal-action terminal-secondary-action"
@@ -509,26 +473,21 @@ function NativeUpstoxPanel({refreshTick=0}){
         exchange display/retention rights, licensed Rust index streaming, public
         redistribution and trading all remain disabled or unverified.</p>
     </section>}
-    <p className="terminal-footnote">Provider login and consent happen on Upstox.
-      QSYN checks the returned user ID and stores the access token in a 0600 private file.
-      A stored token is not proof of a currently active WebSocket, an exchange data license,
-      or permission to redistribute NSE/BSE prices. Trading stays disabled.</p>
+    <p className="terminal-footnote">Read-only personal market data uses your stored
+      Analytics Token. No OAuth, additional index plan or public market-data endpoint.
+      Orders remain disabled.</p>
   </div>;
 }
 const SETUP_STEPS=Object.freeze([
   {label:'Providers',detail:'Market source overview'},
-  {label:'Upstox access',detail:'Token and index discovery'},
-  {label:'Private setup',detail:'Prepare safe server files'},
-  {label:'Validate',detail:'History and worker checks'},
+  {label:'Upstox Token',detail:'Read-only personal market data'},
 ]);
 export function BrokersWorkspace({openView}){
   const [nativeRefreshTick,setNativeRefreshTick]=useState(0);
   const [step,setStep]=useState(0);
   const descriptions=[
     'Check which exchanges respond and choose a private data source.',
-    'Secure your Upstox connection and discover candidate NSE/BSE instruments.',
-    'Create a private, inactive index plan and archive using QSYN Web.',
-    'Validate operator-approved rights, import permitted history and check the worker.',
+    'Store or verify your one-year read-only Upstox Analytics Token.',
   ];
   return <div className="terminal-page qt-unified qt-connections-page">
     <PanelTitle eyebrow="MARKET DATA · CONNECTION CENTER"
@@ -561,19 +520,6 @@ export function BrokersWorkspace({openView}){
             <RefreshCw size={16}/> Refresh Upstox status</button></div>
           <NativeUpstoxPanel refreshTick={nativeRefreshTick}/>
         </>}
-        {step===2&&<><IndexProvisionPanel/>
-          <div className="qt-market-tags">{INDIA_INDEX_MARKETS.map(item=>
-            <span key={item.id}>{item.name} · {item.exchange==='BSE_INDEX'?'BSE':'NSE'}</span>)}</div>
-        </>}
-        {step===3&&<>
-          <IndexWebOperationsPanel/>
-          <div className="qt-actions">
-            <button type="button" className="terminal-action terminal-secondary-action"
-              onClick={()=>openView('diagnostics')}>Open diagnostics</button>
-            <button type="button" className="terminal-action terminal-secondary-action"
-              onClick={()=>openView('private-live')}>Authorized chart viewer</button>
-          </div>
-        </>}
         <div className="qt-setup-navigation">
           <button type="button" className="terminal-action terminal-secondary-action"
             onClick={()=>setStep(s=>Math.max(0,s-1))} disabled={step===0}>Previous</button>
@@ -585,17 +531,17 @@ export function BrokersWorkspace({openView}){
       <aside className="qt-setup-aside terminal-surface" aria-label="Connection help">
         <div className="qt-setup-art" aria-hidden="true"><ShieldCheck size={42}/></div>
         <p className="terminal-eyebrow">SECURE BY DESIGN</p>
-        <h2>Private market data, without the console</h2>
-        <p>Set up tokens and draft index files through QSYN. Your browser never
-          receives the private Upstox token, writes a server path, or grants trading access.</p>
+        <h2>One token. Your personal charts.</h2>
+        <p>Store your Upstox Analytics Token once. QSYN privately retrieves
+          exchange candles and current-day 1-minute OHLC without OAuth or
+          manually prepared worker plans.</p>
         <div className="qt-setup-assurances">
-          <div><ShieldCheck size={16}/><span>Existing PHP/Rust runtime — no extra worker executable</span></div>
-          <div><LockKeyhole size={16}/><span>Private owner-only files and administrator CSRF checks</span></div>
-          <div><Activity size={16}/><span>Real index data only after verified exchange permissions</span></div>
+          <div><ShieldCheck size={16}/><span>Single read-only Analytics Token · one-year validity</span></div>
+          <div><LockKeyhole size={16}/><span>Private token storage and administrator session</span></div>
+          <div><Activity size={16}/><span>Real Upstox OHLC timestamps, never synthetic candles</span></div>
         </div>
-        <p className="terminal-footnote">Draft configuration is not an exchange
-          license. Live candles remain unavailable until an authorized worker,
-          private history reader and account-bound chart access are verified.</p>
+        <p className="terminal-footnote">Personal chart only. No public price
+          redistribution or order execution.</p>
       </aside>
     </div>
   </div>;
