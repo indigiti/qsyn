@@ -8,6 +8,10 @@ on:
       - 'apps/**'
       - 'frontend/**'
       - 'services/**'
+      - 'ops/rust_footprint_guard.py'
+      - 'ops/test_rust_footprint_guard.py'
+      - 'docs/RUST_RELEASE_GUARDRAILS.md'
+      - '.github/CODEOWNERS'
   # DigiOps matches its artifact to the newest source SHA on main.
   # Never path-filter main pushes: architecture, ops and upstream-lock merges
   # also need an attested digiops-release artifact at the exact merged SHA.
@@ -18,6 +22,7 @@ on:
 
 permissions:
   contents: read
+  actions: read  # read back only the just-uploaded ZIP metadata
 
 jobs:
   package:
@@ -25,6 +30,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Enforce Rust footprint source contract
+        run: |
+          python3 ops/rust_footprint_guard.py source .
+          python3 -m unittest discover -s ops -p 'test_rust_footprint_guard.py' -v
       - uses: shivammathur/setup-php@v2
         with:
           php-version: "8.3"
@@ -382,43 +391,10 @@ jobs:
           test -s staging/private/app/ops/qsyn-private-feed.supervisor.conf.example
           test -s staging/RELEASE.json
           test -s staging/private/build/release.json
-      - name: Audit DigiOps payload size
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 - <<'PY'
-          import os
-          from pathlib import Path
-          from zipfile import ZipFile, ZIP_DEFLATED
-
-          root = Path("staging")
-          files = sorted(p for p in root.rglob("*") if p.is_file())
-          report = []
-          with ZipFile("/tmp/qsyn-payload-size-audit.zip", "w", ZIP_DEFLATED, compresslevel=9) as archive:
-              for file in files:
-                  archive.write(file, file.relative_to(root))
-          with ZipFile("/tmp/qsyn-payload-size-audit.zip") as archive:
-              report = [(i.filename, i.file_size, i.compress_size)
-                        for i in archive.infolist() if not i.is_dir()]
-          total_raw = sum(item[1] for item in report)
-          total_zip = os.path.getsize("/tmp/qsyn-payload-size-audit.zip")
-          print(f"QSYN DigiOps release: {len(report)} files, {total_raw / 1048576:.2f} MiB raw, {total_zip / 1048576:.2f} MiB compressed")
-          for name, raw, compressed in sorted(report, key=lambda x: x[2], reverse=True)[:15]:
-              print(f"{compressed / 1048576:.2f} MiB compressed / {raw / 1048576:.2f} MiB raw: {name}")
-          summary = os.environ.get("GITHUB_STEP_SUMMARY")
-          if summary:
-              with open(summary, "a", encoding="utf8") as handle:
-                  handle.write(f"### QSYN DigiOps payload size\\n\\n"
-                               f"- Files: {len(report)}\\n"
-                               f"- Uncompressed: {total_raw / 1048576:.2f} MiB\\n"
-                               f"- Estimated ZIP (level 9): {total_zip / 1048576:.2f} MiB\\n\\n")
-          # Historical baseline: artifact 11726108092, 14,869,791 bytes
-          # at upload-artifact default compression level.
-          # Keep a size budget with room for legitimate code growth.
-          if total_zip > 14_500_000:
-              raise SystemExit(f"release_size_budget_exceeded: {total_zip} > 14500000")
-          PY
+      - name: Enforce single ELF and strict deployment size budget
+        run: python3 ops/rust_footprint_guard.py staging staging
       - name: Publish DigiOps artifact
+        id: publish
         uses: actions/upload-artifact@v4
         with:
           name: digiops-release
@@ -427,16 +403,53 @@ jobs:
           include-hidden-files: true
           retention-days: 30
           compression-level: 9
+      - name: Enforce actual uploaded ZIP size limit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_ID: ${{ steps.publish.outputs.artifact-id }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          import sys
+          import urllib.request
+
+          sys.path.insert(0, str(Path("ops").resolve()))
+          from rust_footprint_guard import MAX_ARTIFACT_ZIP_BYTES
+
+          artifact_id = os.environ["ARTIFACT_ID"]
+          if not artifact_id.isdecimal():
+              raise SystemExit("missing_valid_uploaded_artifact_id")
+          repository = os.environ["GITHUB_REPOSITORY"]
+          url = f"https://api.github.com/repos/{repository}/actions/artifacts/{artifact_id}"
+          request = urllib.request.Request(url, headers={
+              "Authorization": "Bearer " + os.environ["GH_TOKEN"],
+              "Accept": "application/vnd.github+json",
+              "X-GitHub-Api-Version": "2022-11-28",
+          })
+          with urllib.request.urlopen(request, timeout=30) as response:
+              metadata = json.load(response)
+          actual = metadata.get("size_in_bytes")
+          if metadata.get("name") != "digiops-release" or not isinstance(actual, int):
+              raise SystemExit("unexpected_uploaded_artifact_metadata")
+          print(f"Actual DigiOps ZIP: {actual:,} bytes; cap: {MAX_ARTIFACT_ZIP_BYTES:,}")
+          if actual > MAX_ARTIFACT_ZIP_BYTES:
+              raise SystemExit("RUST_ARTIFACT_ZIP_BUDGET_EXCEEDED")
+          PY
 
   verify-artifact:
     name: Verify downloaded DigiOps entrypoint
     runs-on: ubuntu-latest
     needs: package
     steps:
+      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           name: digiops-release
           path: verified-release
+      - name: Verify downloaded runtime launchers and budget
+        run: python3 ops/rust_footprint_guard.py extracted verified-release
       - name: Validate exact artifact layout
         shell: bash
         run: |
