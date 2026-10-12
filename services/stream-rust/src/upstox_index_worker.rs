@@ -136,8 +136,7 @@ impl IndexWorkerSettings {
         if !matches!(
             session.schema.as_str(),
             "QSYN-UPSTOX-AUTH-SESSION/1" | "QSYN-UPSTOX-ANALYTICS-SESSION/1"
-        )
-            || session.broker != "upstox"
+        ) || session.broker != "upstox"
             || session.user_id != self.upstox_user_id
             || session.created_at.is_empty()
             || session.order_routing_enabled
