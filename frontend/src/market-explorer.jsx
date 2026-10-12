@@ -11,6 +11,7 @@ export function MarketExplorer({theme,openView,CryptoChart,PrivateCharts}){
   const [market,setMarket]=useState(DEFAULT_MARKET);
   const family=marketFamily(market);
   const [venue,setVenue]=useState('BINANCE');
+  const [optionProvider,setOptionProvider]=useState('simulation');
   const [instrument,setInstrument]=useState('');
   const [cryptoCheck,setCryptoCheck]=useState(null);
   const [tokenStatus,setTokenStatus]=useState(null);
@@ -23,7 +24,7 @@ export function MarketExplorer({theme,openView,CryptoChart,PrivateCharts}){
   const venueInstruments=instruments.filter(x=>x.exchange===currentVenue);
   const currentInstrument=venueInstruments.find(x=>x.id===instrument)||venueInstruments[0]||null;
   const provider=market==='crypto'?currentVenue.toLowerCase():
-    market==='options'?'simulation':'upstox';
+    market==='options'?optionProvider:'upstox';
   const evidence=providerEvidence({
     market,provider,health:cryptoCheck,tokenStatus,
     operatorPreflight:audit
@@ -90,7 +91,7 @@ export function MarketExplorer({theme,openView,CryptoChart,PrivateCharts}){
           </select></label>
         <label>Market-data provider
           <select aria-label="Market data provider" value={provider}
-            onChange={e=>{if(e.target.value==='simulation')setMarket('options');}}
+            onChange={e=>{if(market==='options')setOptionProvider(e.target.value);}}
             disabled={family.providers.length===1 || market==='crypto'}>
             {(market==='crypto'?[provider]:family.providers).map(id=>
               <option key={id} value={id}>{providerFor(id).label}</option>)}
@@ -159,9 +160,10 @@ export function MarketExplorer({theme,openView,CryptoChart,PrivateCharts}){
     </section>}
     {market==='options'&&<section className="terminal-surface">
       <div className="terminal-card-head"><h2>Options research and CE/PE feeds</h2><ShieldCheck size={16}/></div>
-      <p>Strategy Studio currently uses deterministic options simulation. Live NSE/BSE
-        derivatives need a contract/expiry-specific authorized market-data source.
-        The strategy builder will not silently use simulated values as live prices.</p>
+      <p>{optionProvider==='simulation'
+        ? 'Strategy Studio uses deterministic options simulation. This never becomes a broker quote or order.'
+        : 'Upstox CE/PE requires exact contract, expiry and independently authorized private market-data access. No live option source is verified.'}
+        {' '}The strategy builder never silently substitutes one provider for another.</p>
       <div className="qt-actions">
         <button className="terminal-action" onClick={()=>openView('strategy')}>
           Open Strategy Studio <ArrowRight size={16}/></button>
