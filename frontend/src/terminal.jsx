@@ -19,6 +19,7 @@ import { createWidget, createChartGrid, mountIndicatorSettings } from 'openalgo-
 import {bindIndicatorLegendSettings} from './indicator-legend-settings.js';
 import { observeChartCancellations } from './chart-cancellation.js';
 import { QsynMarketsFeed } from './qsyn-markets-feed.js';
+import {saveIndexIntent} from './private-index-intent.js';
 import {MAX_AUTO_BACKFILL_BARS,INITIAL_BACKFILL_BARS} from './crypto-feed.js';
 import {observeWickScienceBackfill} from './wick-science-auto-backfill.js';
 import { cryptoDefault } from './crypto-catalog.js';
@@ -153,9 +154,10 @@ const ignoreHomepageWidget = () => {};
  */
 function HomepageChart({ theme, embedded = false,
   initialExchange = cryptoDefault.exchange+':'+cryptoDefault.market,
-  initialSymbol = cryptoDefault.symbol }) {
+  initialSymbol = cryptoDefault.symbol, onPrivateIndexRequest = null }) {
   const host=useRef(null);
   const [message,setMessage]=useState('Connecting public exchange candles…');
+  const [blockedIndex,setBlockedIndex]=useState(null);
   const nativeWorkspaces=useMemo(()=>cryptoNativeWorkspaceStore(),[]);
   const nativeWatchlists=useMemo(()=>nativeCryptoWatchlists(),[]);
   useEffect(()=>{
@@ -163,7 +165,9 @@ function HomepageChart({ theme, embedded = false,
     let active=true;
     // Upstream ChartGrid can reject an obsolete internal load when it cancels
     // a refresh or changes interval; a known AbortError is not an app fault.
-    const feed=new QsynMarketsFeed(s=>{if(active)setMessage(s);});
+    const feed=new QsynMarketsFeed(s=>{if(active)setMessage(s);},{
+      onBlockedIndex:index=>{if(active)setBlockedIndex(index);}
+    });
     const grid=createChartGrid(host.current,{
       feed,symbol:initialSymbol,
       exchange:initialExchange,
@@ -246,11 +250,28 @@ function HomepageChart({ theme, embedded = false,
       grid.destroy();feed.destroy();
     };
   },[theme,nativeWorkspaces,nativeWatchlists,initialExchange,initialSymbol]);
+  const openPrivateIndex=()=>{
+    if(!blockedIndex)return;
+    if(typeof onPrivateIndexRequest==='function'){
+      onPrivateIndexRequest(blockedIndex);
+      return;
+    }
+    // The homepage is public. Only a previously authorized operator can
+    // access licensed history in the private terminal. Persist alias only.
+    saveIndexIntent(blockedIndex);
+    window.location.assign('/qsyn/terminal/markets');
+  };
   return <main className={embedded ? 'qsyn-homepage terminal-market-embedded' : 'qsyn-homepage'} aria-label="QSYN crypto and India index charts">
     <div className="qsyn-home-chart">
       <div className="qsyn-crypto-grid" ref={host}/>
       <span className="qsyn-screenreader-status" role="status" aria-live="polite">{message}</span>
-      {message.startsWith("India index ·") && <p className="qsyn-india-entitlement-note">{message}</p>}
+      {blockedIndex && <div className="qsyn-india-entitlement-note" role="status">
+        <strong>{blockedIndex.name} · private Upstox data required</strong>
+        <button type="button" onClick={openPrivateIndex}>
+          Open authorized {blockedIndex.symbol} chart
+        </button>
+        <span>No public NSE/BSE index candles are available here. A valid Upstox token alone does not grant display rights or start the private index worker.</span>
+      </div>}
     </div>
   </main>;
 }
