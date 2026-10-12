@@ -46,7 +46,80 @@ pub(crate) async fn main() {
                         .await
                         .map(|result| println!("{}", json!(result)))
                 }
+                [mode, plan_file, archive_root, date]
+            if mode == "check-all" || mode == "backfill-all" =>
+        {
+            let authorized = (|| -> io::Result<IndexWorkerSettings> {
+                let settings = IndexWorkerSettings::from_private_file(Path::new(plan_file))?;
+                settings.validate(epoch_ms()?)?;
+                day_for_operator(date, epoch_ms()?)?;
+                root_check(Path::new(archive_root))?;
+                if settings.instruments.is_empty() || settings.instruments.len() > 8 {
+                    return Err(denied());
+                }
+                for instrument in &settings.instruments {
+                    approved_key(&settings, &instrument.instrument_key)?;
+                }
+                Ok(settings)
+            })();
+            match (mode.as_str(), authorized) {
+                ("check-all", Ok(settings)) => {
+                    println!("{}", json!({
+                        "schema":"QSYN-UPSTOX-INDEX-HISTORY-BATCH-PREFLIGHT/1",
+                        "approved_instrument_count":settings.instruments.len(),
+                        "operator_config":"validated",
+                        "provider_called":false,
+                        "history_imported":false,
+                        "trading_enabled":false
+                    }));
+                    Ok(())
+                }
+                ("backfill-all", Ok(settings))
+                    if env::var("QSYN_UPSTOX_INDEX_HISTORY_ENABLE").as_deref() == Ok("1")
+                        && env::var("QSYN_TRADING_ENABLED").as_deref() != Ok("1")
+                        && env::var("QSYN_ENABLE_LIVE_TRADING").as_deref() != Ok("1") =>
+                {
+                    // Only serial imports: bounded Upstox load, simple account
+                    // isolation and one authorization/rights recheck per key.
+                    // Failure never converts missing candles into demo data.
+                    let mut results = Vec::with_capacity(settings.instruments.len());
+                    let mut failed = false;
+                    for instrument in &settings.instruments {
+                        match backfill_index_day(
+                            &settings,
+                            Path::new(archive_root),
+                            &instrument.instrument_key,
+                            date,
+                        ).await {
+                            Ok(result) => results.push(json!(result)),
+                            Err(_) => {
+                                failed = true;
+                                results.push(json!({
+                                    "instrument":instrument.instrument_key,
+                                    "status":"private_index_history_denied"
+                                }));
+                                // Never proceed after rights/account authorization
+                                // fails: the next symbol cannot inherit approval.
+                                break;
+                            }
+                        }
+                    }
+                    println!("{}",json!({
+                        "schema":"QSYN-UPSTOX-PRIVATE-INDEX-BATCH-IMPORT/1",
+                        "status":if failed {"incomplete"} else {"completed"},
+                        "date":date,
+                        "approved_instrument_count":settings.instruments.len(),
+                        "processed_instrument_count":results.len(),
+                        "results":results,
+                        "public_redistribution_allowed":false,
+                        "trading_enabled":false
+                    }));
+                    if failed { Err(denied()) } else { Ok(()) }
+                }
                 _ => Err(denied()),
+            }
+        }
+        _ => Err(denied()),
             }
         }
         _ => Err(denied()),
