@@ -354,7 +354,7 @@ try {
       })});
   });
   await page.getByRole('button',{name:'Data Providers & Connections',exact:true}).first().click();
-  await page.getByRole('heading',{name:'Accounts & authorizations'}).waitFor();
+  await page.getByRole('heading',{name:'Data providers & connections'}).waitFor();
   if(new URL(page.url()).pathname!=='/qsyn/terminal/brokers')
     throw new Error('Broker view not routed in React');
   await page.getByRole('button',{name:'Refresh broker status'}).waitFor({timeout:12000});
@@ -391,7 +391,7 @@ try {
     throw new Error('Brokers HTML missing unique CSP nonce or script binding');
   if(String(brokerResponse.headers()['cache-control']||'').includes('no-transform'))
     throw new Error('Brokers unexpectedly disabled Cloudflare JavaScript Detections');
-  await page.getByRole('heading',{name:'Accounts & authorizations'}).waitFor();
+  await page.getByRole('heading',{name:'Data providers & connections'}).waitFor();
   await page.getByRole('button',{name:'Discover index instrument keys'}).waitFor({state:'visible'});
   if(browserErrors.length)
     throw new Error('Brokers deep-link crashed: '+JSON.stringify(browserErrors));
