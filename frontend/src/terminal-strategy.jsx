@@ -2,6 +2,7 @@ import React,{useEffect,useRef,useState} from 'react';
 import {Activity,CandlestickChart,Layers,Plus,Save,Trash2} from 'lucide-react';
 import {createWidget} from 'openalgo-charts/widget';
 import 'openalgo-charts/indicators';
+import {fetchSimulatedResearch} from './market-model.js';
 import './terminal-unified.css';
 
 const UNDERLYINGS=['NIFTY','BANKNIFTY','FINNIFTY'];
@@ -26,16 +27,6 @@ const contractValid=(v,market)=>{
       &&market.chain.some(row=>row.strike===x.strike);
   });
 };
-async function simulation(path,signal){
-  const response=await fetch('/qsyn/api/v1/studio/'+path,{
-    credentials:'same-origin',cache:'no-store',signal,headers:{Accept:'application/json'}});
-  if(!response.ok)throw Error('Simulation endpoint unavailable ('+response.status+')');
-  const data=await response.json();
-  if(data.mode!=='simulated'||data.source!=='deterministic-options-laboratory'||
-      data.trading_enabled!==false||data.broker_connected!==false)
-    throw Error('Unexpected data source; strategy chart blocked');
-  return data;
-}
 function StrategyChart({series,interval,theme}) {
   const host=useRef(null);
   const [error,setError]=useState('');
@@ -109,7 +100,7 @@ export function StrategyWorkspace({theme}){
     invalidate();
     const a=new AbortController();
     setMarket(null);setLegs([]);setResult(null);setSeries(null);setError('');
-    void simulation('market?underlying='+encodeURIComponent(underlying),a.signal)
+    void fetchSimulatedResearch('market?underlying='+encodeURIComponent(underlying),a.signal)
       .then(data=>{
         if(a.signal.aborted)return;
         if(data.underlying!==underlying||!Array.isArray(data.chain)||data.chain.length<5)
@@ -126,7 +117,7 @@ export function StrategyWorkspace({theme}){
     setBusy(true);setError('');
     try{
       const query=new URLSearchParams({underlying,expiry,interval,legs:JSON.stringify(legs)});
-      const data=await simulation('bars?'+query);
+      const data=await fetchSimulatedResearch('bars?'+query);
       if(serial!==latestRef.current)return;
       if(data.underlying!==underlying||data.expiry!==expiry||
           data.interval!==interval||!Array.isArray(data.bars)||
@@ -178,7 +169,7 @@ export function StrategyWorkspace({theme}){
   },[market,pending]);
   return <div className="terminal-page qt-unified">
     <header className="terminal-title"><div><p className="terminal-eyebrow">OPTIONS RESEARCH · SIMULATION</p>
-      <h1>Strategy Studio</h1><p>Native React research workspace using QSYN's existing simulated premium API. No real NSE/Upstox data or orders.</p></div></header>
+      <h1>Strategy Studio</h1><p>Shares QSYN's versioned market-source validation. Current option contracts and candles are explicitly deterministic simulation; live Upstox feeds and orders remain separate and unavailable in this research mode.</p></div></header>
     <section className="terminal-surface">
       <div className="qt-actions qt-field-row">
         <label>Underlying<select aria-label="Strategy underlying" value={underlying} onChange={e=>setUnderlying(e.target.value)}>
