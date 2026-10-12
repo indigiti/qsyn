@@ -121,14 +121,11 @@ pub(crate) async fn main() {
                         .await
                         .map(|result| println!("{}", json!(result)))
                 }
-                [mode, plan_file, archive_root, date] if mode == "check-all" || mode == "backfill-all" => {
+                _ => Err(denied()),
+            }
+        }
+        [mode, plan_file, archive_root, date] if mode == "check-all" || mode == "backfill-all" => {
             batch(mode, plan_file, archive_root, date).await
-        }
-        _ => Err(denied()),
-            }
-        }
-        _ => Err(denied()),
-            }
         }
         _ => Err(denied()),
     };
