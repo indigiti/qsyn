@@ -31,3 +31,5 @@ An accepted Supervisor start command is **not** proof of a running worker or fre
 A missing plan, unknown account rights, unconfigured PHP operator permissions or Supervisor privilege fails closed. Web login alone is not authority to activate market-data distribution. The final acceptance condition is actual exchange-timestamped candles for NIFTY, BANKNIFTY, FINNIFTY, MIDCPNIFTY, INDIA VIX and SENSEX in authorized QSYN charts.
 
 The host operator can disable the page's executable actions immediately by setting `QSYN_INDEX_WEB_OPERATIONS_ENABLED=0`. No new Rust service, binary or database is introduced.
+
+**Emergency stop:** An authorized index-only Supervisor stop remains available even if today's BOD mapping or historical archive later fails validation. Starting a worker always requires a fresh passing preflight; stopping one must not depend on a still-current market-data plan. A zero-candle Upstox response stops the web import with `INDEX_HISTORY_NO_CANDLES` instead of reporting success.
