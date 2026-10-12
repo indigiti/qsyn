@@ -368,19 +368,34 @@ impl UpstoxV3IndexDecoder {
     }
 }
 
-/// Personal-mode V3 feed: reuse the official Protobuf wire model, without
-/// pretending a stored token is a trading account or an institutional plan.
-/// First snapshot is not labeled a live tick; only fresh update frames qualify.
-pub fn decode_personal_index_frame(
+/// A real provider-generated index update. Index levels are not executed
+/// trades: ltt is preserved for diagnostics but never substituted for currentTs.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PersonalIndexUpdate {
+    pub key: String,
+    pub time_ms: u64,
+    pub last_trade_ms: u64,
+    pub price: f64,
+    pub snapshot: bool,
+}
+
+/// Multi-index personal-mode V3 decoder, with a hard six-key allowlist.
+/// currentTs is the Upstox event clock; receive time is only a freshness gate.
+/// Repeated/stale index ltt is NOT evidence that a fresh index update is stale.
+pub fn decode_personal_index_updates(
     raw: &[u8],
-    expected_key: &str,
     received_ms: u64,
-) -> io::Result<Vec<(String, u64, f64, bool)>> {
+) -> io::Result<Vec<PersonalIndexUpdate>> {
     if raw.is_empty() || raw.len() > MAX_FRAME {
         return Err(denied("personal_v3_frame_invalid"));
     }
     let frame = FeedResponse::decode(raw).map_err(|_| denied("personal_v3_protobuf_invalid"))?;
-    if frame.current_ts <= 0 || frame.current_ts as u64 > received_ms.saturating_add(2000) {
+    let generated_ms = u64::try_from(frame.current_ts)
+        .map_err(|_| denied("personal_v3_clock_invalid"))?;
+    if generated_ms == 0
+        || generated_ms > received_ms.saturating_add(2_000)
+        || received_ms.saturating_sub(generated_ms) > 10_000
+    {
         return Err(denied("personal_v3_clock_invalid"));
     }
     if frame.frame_type == 2 {
@@ -389,32 +404,53 @@ pub fn decode_personal_index_frame(
     if frame.frame_type != 0 && frame.frame_type != 1 {
         return Err(denied("personal_v3_type_invalid"));
     }
-    if frame.feeds.len() > 1 {
+    if frame.feeds.len() > 6 {
         return Err(denied("personal_v3_excessive_keys"));
     }
-    let mut out = Vec::new();
+    let mut out = Vec::with_capacity(frame.feeds.len());
     for (key, feed) in frame.feeds {
-        if key != expected_key {
+        if crate::personal_index::symbol_for_key(&key).is_none() {
             return Err(denied("personal_v3_wrong_key"));
         }
         let ltpc = feed
             .last_trade()
             .ok_or_else(|| denied("personal_v3_ltp_missing"))?;
-        let ts = u64::try_from(ltpc.ltt).map_err(|_| denied("personal_v3_ltt_invalid"))?;
-        if ts == 0
-            || ts > received_ms.saturating_add(2000)
-            || received_ms.saturating_sub(ts) > MAX_QUOTE_DELAY_MS
+        let last_trade_ms = u64::try_from(ltpc.ltt)
+            .map_err(|_| denied("personal_v3_ltt_invalid"))?;
+        if last_trade_ms == 0
+            || last_trade_ms > generated_ms.saturating_add(2_000)
             || !ltpc.ltp.is_finite()
             || ltpc.ltp <= 0.0
         {
             continue;
         }
-        // Official Upstox V3 MarketDataFeed.proto Type enum:
-        // initial_feed = 0, live_feed = 1, market_info = 2.
-        // Frame 1 MUST enter the live candle builder; only 0 is a snapshot.
-        out.push((key, ts, ltpc.ltp, frame.frame_type == 0));
+        out.push(PersonalIndexUpdate {
+            key, time_ms: generated_ms, last_trade_ms,
+            price: ltpc.ltp, snapshot: frame.frame_type == 0,
+        });
     }
     Ok(out)
+}
+
+/// Compatibility entry point for an exact single-index frame. All production
+/// personal viewers now share decode_personal_index_updates on one upstream.
+pub fn decode_personal_index_frame(
+    raw: &[u8],
+    expected_key: &str,
+    received_ms: u64,
+) -> io::Result<Vec<(String, u64, f64, bool)>> {
+    if crate::personal_index::symbol_for_key(expected_key).is_none() {
+        return Err(denied("personal_v3_wrong_key"));
+    }
+    decode_personal_index_updates(raw, received_ms)?
+        .into_iter()
+        .map(|update| {
+            if update.key != expected_key {
+                return Err(denied("personal_v3_wrong_key"));
+            }
+            Ok((update.key, update.time_ms, update.price, update.snapshot))
+        })
+        .collect()
 }
 
 /// Validates a one-use authorized redirect given by Upstox, rather than ever
@@ -852,13 +888,14 @@ mod tests {
             received
         )
         .is_err());
-        assert!(decode_personal_index_frame(
+        let stale_ltt = decode_personal_index_frame(
             &make(1, key, (received - 10_000) as i64),
             key,
-            received
+            received,
         )
-        .unwrap()
-        .is_empty());
+        .unwrap();
+        assert_eq!(stale_ltt.len(), 1, "fresh currentTs is valid despite stale index ltt");
+        assert_eq!(stale_ltt[0].1, received - 100);
         let info = FeedResponse {
             frame_type: 2,
             current_ts: received as i64,
