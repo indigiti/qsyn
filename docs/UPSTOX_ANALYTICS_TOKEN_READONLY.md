@@ -152,3 +152,35 @@ The operator may force-disable intake with
 the existing app binding. Private 0700/0600 storage, an authenticated admin
 session, CSRF, read-only Upstox feed-authorization check, and non-trading
 guards remain mandatory.
+
+## Operator-only index activation readiness report
+
+Open **QSYN Terminal → Brokers → Index activation diagnostic**, then select
+**Run secure audit**. This requires an authenticated QSYN administrator.
+The redacted report has schema `QSYN-INDEX-ACTIVATION-PREFLIGHT/1` in
+`index_activation`. It includes only the presence of an owner-only
+Analytics Token file, a configured owner-only index-worker plan, and
+explicit *not verified* status for current NSE/BSE BOD mapping, licensed
+display rights, a running worker, private WebSocket and real prices.
+
+For a plan stored outside QSYN's PHP runtime directory, the Cloudways
+operator may set `QSYN_UPSTOX_INDEX_WORKER_PLAN_FILE` to the exact absolute
+owner-only 0600 operator plan path. This optional environment setting lets
+the diagnostic API check **presence and file permissions only** (maximum
+8 KiB). It does **not** run Rust, parse secrets, validate plan contents, or
+claim an operational license or market feed. No private path is returned
+in the browser.
+
+- `OPERATOR_PROVISION_INDEX_WORKER_PLAN`: no readable private plan advertised;
+  confirm the operator's server-side plan and optional diagnostic path.
+- `OPERATOR_RUN_INDEX_WORKER_CHECK`: a private plan file is present;
+  **the operator must still** run
+  `qsyn-upstox-index-worker check /ABS/PRIVATE/config/index-worker-plan.json`
+  on the server, which uses the independently implemented Rust checks.
+- Neither case means "activated." A success from the Rust check still
+  requires operator-supervised running process, private WSS ingress, real
+  exchange timestamps and licensed display permissions.
+
+A previously verified `UPSTOX_ANALYTICS_MARKET_AUTHORIZED_NOW` is sufficient
+evidence of read-only Upstox market-feed authorization **at check time**;
+there is no need to replace that valid token to troubleshoot the worker.
