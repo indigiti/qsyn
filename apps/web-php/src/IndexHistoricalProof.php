@@ -38,7 +38,7 @@ final class IndexHistoricalProof
             && (!function_exists('posix_geteuid') || $stat['uid'] === posix_geteuid());
     }
 
-    private static function privateToken(): ?string
+    public static function privateToken(): ?string
     {
         $runtime = (string)(getenv('QSYN_RUNTIME_DIR') ?: dirname(__DIR__, 2).'/runtime');
         if (!str_starts_with($runtime, '/') || str_contains($runtime, '/..')
