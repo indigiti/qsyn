@@ -21,3 +21,11 @@
 @media(max-width:750px){.terminal-shell .qt-market-status-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
  .terminal-shell .qt-market-families{display:grid;grid-template-columns:repeat(4,minmax(0,1fr))}
  .terminal-shell .qt-market-family{padding:9px 4px;font-size:11px}}
+
+/* Authenticated Upstox personal historical chart — no synthetic fallback. */
+.qt-market-explorer .qt-private-history-chart{display:flex;flex-direction:column;gap:12px}
+.qt-market-explorer .qt-private-history-chart .qt-prepare-confirm{display:flex;gap:8px;align-items:flex-start;font-size:12px;line-height:1.5}
+.qt-market-explorer .qt-private-history-host{min-height:440px;height:min(68vh,650px);overflow:hidden}
+.qt-market-explorer .qt-private-history-chart .qt-index-proof-actions{display:flex;gap:12px;flex-wrap:wrap}
+.qt-market-explorer .qt-private-history-chart .qt-index-proof-actions label{font-size:12px;display:flex;flex-direction:column;gap:5px}
+.qt-market-explorer .qt-private-history-chart input[type=date]{padding:8px;border-radius:7px;border:1px solid var(--q-line);color:var(--q-fg);background:var(--q-bg)}

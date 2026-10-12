@@ -165,6 +165,77 @@ final class IndexHistoricalProof
         ]);
     }
 
+    /**
+     * Account-owner-only historical view. This endpoint is never used by the
+     * public homepage, provides no WSS, and cannot grant redistribution rights.
+     */
+    public static function dispatchPrivateChart(array $server, ?callable $transport = null): array
+    {
+        if (($server['REQUEST_METHOD']??'GET')!=='POST')
+            return [405,['error'=>'method_not_allowed']];
+        if (!RustAdmin::originAllowed($server))
+            return [403,['error'=>'secure_same_origin_required']];
+        RustAdmin::boot();
+        if (!RustAdmin::authenticated())
+            return [401,['error'=>'admin_login_required']];
+        if (getenv('QSYN_TRADING_ENABLED')==='1'
+            || getenv('QSYN_ENABLE_LIVE_TRADING')==='1'
+            || getenv('QSYN_INDEX_PRIVATE_HISTORY_CHART_ENABLED')==='0')
+            return [503,['error'=>'private_chart_disabled']];
+        if (!RustAdmin::verifyCsrf((string)($server['HTTP_X_CSRF_TOKEN']??'')))
+            return [403,['error'=>'csrf_invalid']];
+        if (!preg_match('~\Aapplication/json(?:\s*;|$)~i',
+            (string)($server['CONTENT_TYPE']??'')))
+            return [415,['error'=>'json_required']];
+        $raw=file_get_contents('php://input',false,null,0,513);
+        if (!is_string($raw)||strlen($raw)>512)
+            return [413,['error'=>'request_too_large']];
+        try { $body=json_decode($raw,true,4,JSON_THROW_ON_ERROR); }
+        catch (\Throwable) { return [400,['error'=>'invalid_json']]; }
+        if (!is_array($body)||array_is_list($body)||count($body)!==4
+            || ($body['confirmed']??null)!==true
+            || ($body['private_view_acknowledged']??null)!==true
+            || !is_string($body['symbol']??null)
+            || !array_key_exists($body['symbol'],self::KEYS)
+            || !self::validDay($body['day']??null))
+            return [422,['error'=>'invalid_private_chart_scope']];
+        $token=self::privateToken();
+        if ($token===null) return [409,['error'=>'upstox_analytics_token_not_ready']];
+        $key=self::KEYS[$body['symbol']];
+        $day=$body['day'];
+        $url='https://api.upstox.com/v3/historical-candle/'
+            .rawurlencode($key).'/minutes/1/'.$day.'/'.$day;
+        try {
+            $provider=$transport?$transport($url,$token):self::request($url,$token);
+            if (!is_array($provider)) throw new \RuntimeException('invalid_provider');
+            if (($provider['http_status']??0)!==200) {
+                return [502,['error'=>'private_upstox_history_unavailable',
+                    'provider_http_status'=>(int)($provider['http_status']??0)]];
+            }
+            $bars=UpstoxIndexV3::normalize($provider['body']??[],'1m',time());
+            $tz=new \DateTimeZone('Asia/Kolkata');
+            foreach ($bars as $bar) {
+                if ((new \DateTimeImmutable('@'.$bar['time']))
+                    ->setTimezone($tz)->format('Y-m-d')!==$day)
+                    throw new \RuntimeException('invalid_candle_day');
+            }
+            if (!$bars) return [404,['error'=>'no_private_history_for_date']];
+            return [200,[
+                'schema'=>'QSYN-PRIVATE-UPSTOX-HISTORY-CHART/1',
+                'source'=>'upstox_private_analytics_history',
+                'exchange'=>$body['symbol']==='SENSEX'?'BSE_INDEX':'NSE_INDEX',
+                'symbol'=>$body['symbol'],'interval'=>'1m','day_ist'=>$day,
+                'bars'=>$bars,'account_scoped'=>true,
+                'personal_private_view_only'=>true,
+                'public_redistribution_allowed'=>false,
+                'display_rights_approved_by_app'=>false,
+                'live_stream_verified'=>false,'trading_enabled'=>false,
+            ]];
+        } catch (\Throwable) {
+            return [502,['error'=>'private_upstox_history_invalid']];
+        }
+    }
+
     /** @return array{0:int,1:array<string,mixed>} */
     public static function dispatch(array $server, ?callable $transport = null): array
     {

@@ -328,6 +328,7 @@ try {
     throw new Error('Homepage NIFTY selection did not open India indices');
   if(await page.getByRole('combobox',{name:'Market instrument'}).inputValue()!=='NSE_INDEX:index:NIFTY')
     throw new Error('Selected NIFTY was lost across administrator navigation');
+  await page.getByText('Licensed continuous index feed').click();
   await page.getByRole('textbox',{name:'Private index instrument key'}).waitFor();
   if(await page.getByRole('textbox',{name:'Private index instrument key'}).inputValue()!=='NSE_INDEX|Nifty 50')
     throw new Error('Private NIFTY candidate key not prefilled for explicit grant validation');
@@ -482,6 +483,9 @@ try {
   await page.getByRole('combobox',{name:'Market instrument'}).selectOption('BSE_INDEX:index:SENSEX');
   if(await page.getByText('Licensed index chart').count()!==1)
     throw Error('Index chart readiness was not integrated into Markets');
+  await page.getByRole('heading',{name:'SENSEX · Upstox historical candles'}).waitFor();
+  if(await page.getByRole('button',{name:'Open SENSEX historical chart'}).isEnabled())
+    throw Error('Private index chart opened without account and explicit viewing scope');
   await page.getByRole('button',{name:'Stocks',exact:true}).click();
   await page.getByText('Stock market adapter not operationally verified').first().waitFor();
   await page.getByRole('button',{name:'Options',exact:true}).click();
