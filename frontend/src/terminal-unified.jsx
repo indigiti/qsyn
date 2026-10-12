@@ -5,6 +5,7 @@ import {INDIA_INDEX_MARKETS} from './india-index-catalog.js';
 import {ProviderStatusPanel} from './provider-console.jsx';
 import {IndexWebOperationsPanel} from './index-ops-panel.jsx';
 import {IndexProvisionPanel} from './index-provision-panel.jsx';
+import {IndexHistoryProofPanel} from './index-history-proof-panel.jsx';
 import './terminal-unified.css';
 
 const VENUES=['BINANCE','BYBIT','OKX','COINBASE','KRAKEN','BITGET','HYPERLIQUID'];
@@ -553,6 +554,7 @@ export function BrokersWorkspace({openView}){
               Indian indices require an independent private feed approval.</span></div>
         </>}
         {step===1&&<>
+          <IndexHistoryProofPanel/>
           <div className="qt-actions"><button type="button"
             className="terminal-action terminal-secondary-action"
             onClick={()=>setNativeRefreshTick(t=>t+1)}>
