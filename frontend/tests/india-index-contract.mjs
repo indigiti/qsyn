@@ -130,8 +130,14 @@ try {
   const historyBeforeScroll=historyCalls;
   const older=await authed.getBarsPage({...indexReq,before:minute[0].time,countBack:300});
   assert.equal(older.bars.length,300,'native left-scroll appends older real Rust candles');
-  assert.equal(older.bars[0].time,epoch('2026-10-08T10:30:00+05:30'));
-  assert.equal(older.bars.at(-1).time,epoch('2026-10-08T15:29:00+05:30'));
+  // The newest completed weekday depends on when CI runs; never pin this
+  // cursor to an October 2026 fixture date.
+  let priorDay=minute[0].time-86400;
+  while ([0,6].includes(new Date((priorDay+19800)*1000).getUTCDay()))
+    priorDay-=86400;
+  const priorDayIst=new Date((priorDay+19800)*1000).toISOString().slice(0,10);
+  assert.equal(older.bars[0].time,epoch(priorDayIst+'T10:30:00+05:30'));
+  assert.equal(older.bars.at(-1).time,epoch(priorDayIst+'T15:29:00+05:30'));
   assert(older.bars.every(b=>b.time<minute[0].time));
   assert.equal(older.nextBefore,older.bars[0].time);
   assert.equal(older.hasMore,true);
