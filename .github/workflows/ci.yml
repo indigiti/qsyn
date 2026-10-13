@@ -274,6 +274,9 @@ jobs:
       - name: Verify provider-backed automatic max history, native paging and polling safety
         run: node tests/crypto-backfill.test.mjs
         working-directory: frontend
+      - name: Verify automatic real-candle gap recovery for every 1m+ interval
+        run: node tests/market-gap-recovery.test.mjs
+        working-directory: frontend
       - run: |
           test -s frontend/dist/chart.js
           test -s frontend/dist/terminal.js
