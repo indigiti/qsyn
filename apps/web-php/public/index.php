@@ -211,6 +211,27 @@ if ($route === '/qsyn/api/v1/studio/market' || $route === '/qsyn/api/v1/studio/b
     }
 }
 
+// Owner-private index data without a QSYN administrator login. This route is
+// inaccessible by default and requires an explicit edge-protected owner IP.
+if (preg_match('#^/qsyn/api/v1/owner-index/(status|history|ticket)$#',$route,$ownerIndex)) {
+    $src=dirname(__DIR__).'/src';
+    if (!is_file($src.'/PersonalIndexViewer.php'))
+        $src=dirname(__DIR__,2).'/private_html/qsyn/app/src';
+    foreach (['RustAdmin','UpstoxIndexV3','IndexHistoricalProof','PersonalIndexViewer','PersonalIndexGateway'] as $unit) {
+        if (!is_file($src.'/'.$unit.'.php'))respond(['error'=>'owner_index_unavailable'],503);
+        require_once $src.'/'.$unit.'.php';
+    }
+    header('Cache-Control: private, no-store');
+    header('X-Robots-Tag: noindex, nofollow');
+    header('X-QSYN-Request-ID: '.bin2hex(random_bytes(8)));
+    [$status,$payload]=match($ownerIndex[1]){
+        'status'=>\QSYN\MarketData\\PersonalIndexViewer::status($_SERVER),
+        'history'=>\QSYN\MarketData\\PersonalIndexGateway::history($_SERVER,true),
+        'ticket'=>\QSYN\MarketData\\PersonalIndexGateway::ticket($_SERVER,true),
+    };
+    respond($payload,$status);
+}
+
 // Browser-admin to single Rust market-data ELF. No OAuth, plans or HTTP
 // bearer transmission. WS upgrade is forwarded separately by the HTTPS host.
 if (preg_match('#^/qsyn/api/v1/admin/upstox/personal-index/(history|ticket)$#',
