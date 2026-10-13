@@ -225,9 +225,9 @@ if (preg_match('#^/qsyn/api/v1/owner-index/(status|history|ticket)$#',$route,$ow
     header('X-Robots-Tag: noindex, nofollow');
     header('X-QSYN-Request-ID: '.bin2hex(random_bytes(8)));
     [$status,$payload]=match($ownerIndex[1]){
-        'status'=>\QSYN\MarketData\\PersonalIndexViewer::status($_SERVER),
-        'history'=>\QSYN\MarketData\\PersonalIndexGateway::history($_SERVER,true),
-        'ticket'=>\QSYN\MarketData\\PersonalIndexGateway::ticket($_SERVER,true),
+        'status'=>\QSYN\MarketData\PersonalIndexViewer::status($_SERVER),
+        'history'=>\QSYN\MarketData\PersonalIndexGateway::history($_SERVER,true),
+        'ticket'=>\QSYN\MarketData\PersonalIndexGateway::ticket($_SERVER,true),
     };
     respond($payload,$status);
 }
