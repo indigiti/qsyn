@@ -17,6 +17,17 @@ export function validIndexBarTime(time,interval){
   return INTERVALS.has(interval);
 }
 
+// Keep historical and streaming bucket boundaries identical, including the
+// 09:15 IST anchor for hourly candles and IST midnight for daily candles.
+function indexBucketStart(time,interval){
+  const step=STEPS[interval];
+  const istDay=Math.floor((time+IST_OFFSET)/86400)*86400-IST_OFFSET;
+  const open=istDay+9*3600+15*60;
+  return interval==='1d'?istDay:interval==='1h'
+    ?open+Math.floor((time-open)/step)*step
+    :Math.floor((time+IST_OFFSET)/step)*step-IST_OFFSET;
+}
+
 /** Aggregate REAL Rust-returned 1m OHLC into native chart intervals.
  * Never synthesize missing periods or exchange prices. Session 1h buckets
  * start at the exchange open (09:15 IST); 1d candles use IST midnight.
@@ -24,13 +35,9 @@ export function validIndexBarTime(time,interval){
 export function aggregatePersonalIndexBars(bars,interval){
   if(!INTERVALS.has(interval)||!Array.isArray(bars))throw Error('INVALID_INDEX_INTERVAL');
   if(interval==='1m'||interval==='1s')return bars;
-  const groups=new Map(),step=STEPS[interval];
+  const groups=new Map();
   for(const bar of bars){
-    const istDay=Math.floor((bar.time+IST_OFFSET)/86400)*86400-IST_OFFSET;
-    const open=istDay+9*3600+15*60;
-    const time=interval==='1d'?istDay:interval==='1h'
-      ?open+Math.floor((bar.time-open)/step)*step
-      :Math.floor((bar.time+IST_OFFSET)/step)*step-IST_OFFSET;
+    const time=indexBucketStart(bar.time,interval);
     const previous=groups.get(time);
     if(!previous)groups.set(time,{time,open:bar.open,high:bar.high,
       low:bar.low,close:bar.close,volume:bar.volume});
@@ -42,6 +49,31 @@ export function aggregatePersonalIndexBars(bars,interval){
     }
   }
   return [...groups.values()].sort((a,b)=>a.time-b.time);
+}
+
+/** Streaming fast path: only the current exchange bucket can change when a
+ * new minute arrives. Recompute that bucket from the latest raw minutes so
+ * revised provider OHLC values never leave stale highs, lows or volumes.
+ * Historical aggregation remains authoritative for initial chart backfill.
+ */
+export function latestPersonalIndexBar(bars,interval){
+  if(!INTERVALS.has(interval)||!Array.isArray(bars))
+    throw Error('INVALID_INDEX_INTERVAL');
+  if(!bars.length)return null;
+  const last=bars[bars.length-1];
+  if(interval==='1m'||interval==='1s')return last;
+  const time=indexBucketStart(last.time,interval);
+  let first=bars.length-1;
+  while(first>0&&indexBucketStart(bars[first-1].time,interval)===time)
+    first--;
+  let high=-Infinity,low=Infinity,volume=0;
+  for(let i=first;i<bars.length;i++){
+    const bar=bars[i];
+    high=Math.max(high,bar.high);
+    low=Math.min(low,bar.low);
+    volume+=bar.volume;
+  }
+  return {time,open:bars[first].open,high,low,close:last.close,volume};
 }
 
 /** Public cryptocurrencies remain public. India index candles require an
@@ -305,8 +337,8 @@ export class QsynMarketsFeed extends QsynCryptoFeed {
         prior.push(minuteBar);
       if(prior.length>400)prior.shift();
       this.personalBars.set(instrument.id,prior);
-      const bars=aggregatePersonalIndexBars(prior,req.interval);
-      if(bars.length)onBar(bars.at(-1),{provisional:true});
+      const latest=latestPersonalIndexBar(prior,req.interval);
+      if(latest)onBar(latest,{provisional:true});
     });
   }
   async searchSymbols({query}){
