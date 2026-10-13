@@ -78,6 +78,11 @@ export class PrivateIndexHistoryFeed {
     const controller=new AbortController();
     let stopped=false,socket=null,lastTimestamp=0,retryDelay=2000,reconnectTimer=null;
     this.controllers.add(controller);
+    // Intl.DateTimeFormat construction is relatively expensive on a hot
+    // WebSocket path; status changes are presentation-only, not tick delivery.
+    const tickClock=new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Kolkata',
+      hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'});
+    let lastStatusSecond=-1;
     const scheduleReconnect=()=>{
       if(stopped||this.closed||controller.signal.aborted)return;
       if(reconnectTimer!==null)clearTimeout(reconnectTimer);
@@ -139,10 +144,14 @@ export class PrivateIndexHistoryFeed {
           lastTimestamp=data.time_ms;
           retryDelay=2000;
           onBar(bar);
-          this.onLive('Rust Upstox V3 tick · '+
-            new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Kolkata',
-              hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'})
-              .format(new Date(data.time_ms))+' IST');
+          // Never throttle ticks/candles. Only dedupe the informational
+          // React status message to one update per exchange second.
+          const statusSecond=Math.floor(data.time_ms/1000);
+          if(statusSecond!==lastStatusSecond){
+            lastStatusSecond=statusSecond;
+            this.onLive('Rust Upstox V3 tick · '+
+              tickClock.format(new Date(data.time_ms))+' IST');
+          }
         };
         socket.onerror=()=>{
           if(!stopped)this.onLive('RUST_UPSTOX_WEBSOCKET_UNAVAILABLE');
