@@ -187,7 +187,7 @@ export class QsynMarketsFeed extends QsynCryptoFeed {
     }catch(error){
       if(this.closed||req.signal?.aborted||error?.name==='AbortError')return [];
       this.onState(error?.message==='QSYN_ADMIN_LOGIN_REQUIRED'
-        ?'Private index · sign in to QSYN Terminal'
+        ?'Index source unavailable for this viewer'
         :error?.message==='UPSTOX_PERSONAL_TOKEN_UNAVAILABLE'
           ?'Private index · store or verify your Upstox Analytics Token'
           :'Private index · Rust 1-minute Upstox history unavailable; retry after checking your account');
