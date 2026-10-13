@@ -153,7 +153,7 @@ try{
   })));
   await anonPage.reload({waitUntil:'domcontentloaded'});
   // Anonymous users see source availability, not an administrator login CTA.
-  await anonPage.getByText('Index source unavailable').waitFor({timeout:20000});
+  await anonPage.getByText('Index source unavailable',{exact:true}).waitFor({timeout:20000});
   if(await anonPage.getByText('Sign in to QSYN').count()!==0)
     throw Error('Homepage index selection must not require QSYN administrator login');
   if(anonymousHistory!==0)throw Error('Anonymous NSE/BSE private history exposed');
