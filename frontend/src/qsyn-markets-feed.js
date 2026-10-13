@@ -76,7 +76,7 @@ export class QsynMarketsFeed extends QsynCryptoFeed {
             && state.public_redistribution_allowed===false
             && Array.isArray(state.symbols)
             && state.symbols.length===7
-            && /^20\\d{2}-\\d{2}-\\d{2}$/.test(state.suggested_day_ist)){
+            && /^20\d{2}-\d{2}-\d{2}$/.test(state.suggested_day_ist)){
             return {ownerViewer:true,csrf:null,suggested_day_ist:state.suggested_day_ist};
           }
         }
