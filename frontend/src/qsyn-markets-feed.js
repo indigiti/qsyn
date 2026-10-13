@@ -58,6 +58,8 @@ export class QsynMarketsFeed extends QsynCryptoFeed {
     this.personalBars=new Map();
     this.historyStatus=new Map();
     this.indexHistoryDays=new Map();
+    // A genuinely empty provider response is retryable; never retain it forever.
+    this.indexHistoryMisses=new Map();
     this.activeIndex=null;
   }
   async _proof(){
@@ -171,15 +173,51 @@ export class QsynMarketsFeed extends QsynCryptoFeed {
         }
       }
       if(this.closed||req.signal?.aborted)return [];
+      let previousCoverage='';
       if(bars.length){
-        this.personalBars.set(instrument.id,bars);
+        // Cache the CURRENT date independently from any older candles, so
+        // a later daily-page lookup cannot corrupt this day's OHLC.
         this._cacheIndexDay(instrument,day,bars);
+        // OpenAlgo can initially request 1600 bars but the Upstox reader
+        // serves only ONE trading day. Explicitly load the preceding weekday
+        // when the requested window reaches beyond today's first candle.
+        // Other days remain lazily paginated; tail refreshes stay cheap.
+        const needsPrior=req.noCache!==true && (
+          (Number.isSafeInteger(req.countBack)&&req.countBack>bars.length) ||
+          (Number.isFinite(req.from)&&req.from<bars[0].time));
+        if(needsPrior){
+          const anchor=Math.floor(Date.parse(day+'T00:00:00+05:30')/1000);
+          for(let offset=1;offset<=4;offset++){
+            const previous=new Date((anchor-offset*86400+IST_OFFSET)*1000);
+            if([0,6].includes(previous.getUTCDay()))continue;
+            const olderDay=previous.toISOString().slice(0,10);
+            if(olderDay<'2022-01-01')break;
+            try{
+              const older=await this._historicalDay(
+                instrument,olderDay,proof.csrf,req.signal,proof.ownerViewer===true);
+              if(this.closed||req.signal?.aborted)return [];
+              if(older.length){
+                bars=[...older.filter(bar=>bar.time<bars[0].time),...bars];
+              }else{
+                // No fabricated candles for provider outages or holidays.
+                previousCoverage=' · prior '+olderDay+' history unavailable';
+              }
+            }catch(error){
+              if(this.closed||req.signal?.aborted||error?.name==='AbortError')return [];
+              // An older-day failure must NOT wipe out today's valid bars.
+              previousCoverage=' · prior '+olderDay+' history request failed';
+            }
+            break; // At most one additional history request per initial load.
+          }
+        }
+        this.personalBars.set(instrument.id,bars);
       }
       const result=aggregatePersonalIndexBars(bars,req.interval);
       if(bars.length){
         const label=instrument.name+' · '+bars.length+
-          ' real Rust Upstox 1m candles · '+day+
-          (req.interval==='1m'?'':' · derived '+req.interval);
+          ' real Rust Upstox 1m candles'+
+          (req.interval==='1m'?'':' · derived '+req.interval)+
+          previousCoverage;
         this.historyStatus.set(instrument.id,label);
         this.onState(label);
       }
@@ -212,13 +250,24 @@ export class QsynMarketsFeed extends QsynCryptoFeed {
   async _historicalDay(instrument,day,csrf,signal,ownerViewer=false){
     const key=instrument.id+':'+day;
     if(this.indexHistoryDays.has(key))return this.indexHistoryDays.get(key);
+    if((this.indexHistoryMisses.get(key)||0)>Date.now())return [];
+    this.indexHistoryMisses.delete(key);
     const temp=new PrivateIndexHistoryFeed({symbol:instrument.symbol,day,csrf,ownerViewer,
       onStatus:()=>{},onLive:()=>{}});
     try{
       const bars=await temp.getBars({symbol:instrument.symbol,
         exchange:'UPSTOX_PERSONAL',interval:'1m',signal,strictHistory:true});
       if(this.closed||signal?.aborted)return [];
-      this._cacheIndexDay(instrument,day,bars);
+      if(bars.length){
+        this.indexHistoryMisses.delete(key);
+        this._cacheIndexDay(instrument,day,bars);
+      }else{
+        // Short negative TTL prevents repeated requests during scroll while
+        // allowing recovery after a transient empty Rust/provider response.
+        this.indexHistoryMisses.set(key,Date.now()+30_000);
+        while(this.indexHistoryMisses.size>64)
+          this.indexHistoryMisses.delete(this.indexHistoryMisses.keys().next().value);
+      }
       return bars;
     }finally{
       temp.destroy();
@@ -319,6 +368,7 @@ export class QsynMarketsFeed extends QsynCryptoFeed {
     this.personalBars.clear();
     this.historyStatus.clear();
     this.indexHistoryDays.clear();
+    this.indexHistoryMisses.clear();
     this.personalProof=null;
     super.destroy();
   }
