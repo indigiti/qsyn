@@ -236,6 +236,40 @@ try {
   assert(fallbackBars.every(b=>b.time<Math.floor(Date.now()/1000)));
   fallbackFeed.destroy();
 
+  // Regression: a Tuesday chart must include the preceding Monday session
+  // during the initial load, not show Friday immediately before Tuesday.
+  const continuity=new QsynMarketsFeed();
+  continuity._proof=async()=>({csrf:'a'.repeat(64),suggested_day_ist:'2026-10-09'});
+  const requestedDays=[];
+  const buildDay=day=>{
+    const first=epoch(day+'T09:15:00+05:30');
+    return Array.from({length:375},(_,n)=>({
+      time:first+n*60,open:25100,high:25102,low:25099,close:25101,volume:0
+    }));
+  };
+  continuity._session=()=>({getBars:async()=>buildDay('2026-10-13')});
+  continuity._historicalDay=async(_instrument,day)=>{
+    requestedDays.push(day);
+    return buildDay(day);
+  };
+  const contiguous=await continuity.getBars({...indexReq,countBack:750});
+  assert.equal(contiguous.length,750,'initial window includes two sessions');
+  assert.equal(contiguous[0].time,epoch('2026-10-12T09:15:00+05:30'));
+  assert.equal(contiguous.at(-1).time,epoch('2026-10-13T15:29:00+05:30'));
+  assert.deepEqual(requestedDays,['2026-10-12']);
+  continuity.destroy();
+
+  // Missing previous-day responses must leave the valid session visible
+  // without inventing prices or marking empty history permanently complete.
+  const missing=new QsynMarketsFeed();
+  missing._proof=continuity._proof;
+  missing._session=()=>({getBars:async()=>buildDay('2026-10-13')});
+  missing._historicalDay=async()=>[];
+  const preserved=await missing.getBars({...indexReq,countBack:750});
+  assert.equal(preserved.length,375);
+  assert.equal(preserved[0].time,epoch('2026-10-13T09:15:00+05:30'));
+  missing.destroy();
+
   let fallbackTriggered=false;
   const failedFeed=new QsynMarketsFeed();
   failedFeed._proof=async()=>({csrf:'a'.repeat(64),suggested_day_ist:'2026-10-09'});
