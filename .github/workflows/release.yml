@@ -102,6 +102,8 @@ jobs:
           php -l apps/web-php/src/PersonalIndexGateway.php
           php -l apps/web-php/tests/PersonalIndexGatewayTest.php
           php apps/web-php/tests/PersonalIndexGatewayTest.php
+          php -l apps/web-php/src/PersonalIndexViewer.php
+          php apps/web-php/tests/PersonalIndexViewerTest.php
           python3 apps/web-php/tests/IndexHistoricalProofHttpSmoke.py
           php -l apps/web-php/src/NativeUpstoxIndexDiscovery.php
           php apps/web-php/tests/NativeUpstoxIndexDiscoveryTest.php
@@ -262,6 +264,7 @@ jobs:
           cp apps/web-php/src/IndexWebOperations.php staging/private/app/src/IndexWebOperations.php
           cp apps/web-php/src/IndexHistoricalProof.php staging/private/app/src/IndexHistoricalProof.php
           cp apps/web-php/src/PersonalIndexGateway.php staging/private/app/src/PersonalIndexGateway.php
+          cp apps/web-php/src/PersonalIndexViewer.php staging/private/app/src/PersonalIndexViewer.php
           cp apps/web-php/src/IndexPrivateProvisioning.php staging/private/app/src/IndexPrivateProvisioning.php
           cp apps/web-php/src/FileMockAccountSelection.php staging/private/app/src/FileMockAccountSelection.php
           cp apps/web-php/src/AccountApi.php staging/private/app/src/AccountApi.php
@@ -389,6 +392,8 @@ jobs:
           test -s staging/private/app/src/IndexPrivateProvisioning.php
           test -s staging/private/app/src/IndexHistoricalProof.php
           test -s staging/private/app/src/PersonalIndexGateway.php
+          test -s staging/private/app/src/PersonalIndexViewer.php
+          php -l staging/private/app/src/PersonalIndexViewer.php
           php -l staging/private/app/src/PersonalIndexGateway.php
           php -l staging/private/app/src/IndexHistoricalProof.php
           php -l staging/private/app/src/IndexPrivateProvisioning.php
@@ -563,6 +568,8 @@ jobs:
           test -s verified-release/private/app/src/IndexPrivateProvisioning.php
           test -s verified-release/private/app/src/IndexHistoricalProof.php
           test -s verified-release/private/app/src/PersonalIndexGateway.php
+          test -s verified-release/private/app/src/PersonalIndexViewer.php
+          php -l verified-release/private/app/src/PersonalIndexViewer.php
           php -l verified-release/private/app/src/IndexHistoricalProof.php
           php -l verified-release/private/app/src/IndexPrivateProvisioning.php
           php -l verified-release/private/app/src/IndexWebOperations.php

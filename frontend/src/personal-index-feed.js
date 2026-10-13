@@ -1,8 +1,9 @@
 import {inRegularIndexSession} from './index-regular-session.js';
 
 export class PrivateIndexHistoryFeed {
-  constructor({symbol,day,csrf,onStatus,onLive=()=>{}}){
+  constructor({symbol,day,csrf,onStatus,onLive=()=>{},ownerViewer=false}){
     this.symbol=symbol;this.day=day;this.csrf=csrf;this.onStatus=onStatus;
+    this.ownerViewer=ownerViewer;
     this.onLive=onLive;
     this.closed=false;this.controllers=new Set();
   }
@@ -16,11 +17,11 @@ export class PrivateIndexHistoryFeed {
     req.signal?.addEventListener('abort',abort,{once:true});
     this.controllers.add(ctl);
     try{
-      const response=await fetch('/qsyn/api/v1/admin/upstox/personal-index/history',{
+      const response=await fetch(this.ownerViewer?'/qsyn/api/v1/owner-index/history':'/qsyn/api/v1/admin/upstox/personal-index/history',{
         method:'POST',credentials:'same-origin',cache:'no-store',
         signal:ctl.signal,headers:{
           'Content-Type':'application/json','Accept':'application/json',
-          'X-CSRF-Token':this.csrf
+          ...(this.ownerViewer?{'X-QSYN-View-Only':'1'}:{'X-CSRF-Token':this.csrf})
         },body:JSON.stringify({symbol:this.symbol,day:this.day})
       });
       const json=await response.json();
@@ -98,7 +99,7 @@ export class PrivateIndexHistoryFeed {
         return;
       }
       try{
-        const response=await fetch('/qsyn/api/v1/admin/upstox/personal-index/ticket',{
+        const response=await fetch(this.ownerViewer?'/qsyn/api/v1/owner-index/ticket':'/qsyn/api/v1/admin/upstox/personal-index/ticket',{
           method:'POST',credentials:'same-origin',cache:'no-store',
           signal:controller.signal,
           headers:{'Content-Type':'application/json','Accept':'application/json',

@@ -270,16 +270,10 @@ function HomepageChart({ theme, embedded = false,
       <div className="qsyn-crypto-grid" ref={host}/>
       <span className="qsyn-screenreader-status" role="status" aria-live="polite">{message}</span>
       {blockedIndex && <div className="qsyn-india-entitlement-note" role="status">
-        <div><strong>{blockedIndex.name}</strong><span>Personal Upstox access required</span></div>
-        <p>Sign in to QSYN and use your existing read-only Upstox Analytics Token.
-          NIFTY/SENSEX history and tick updates use the same private Rust source
-          as Markets. No OAuth or index-worker plan is required.</p>
-        <div className="qsyn-india-note-actions">
-          <a href="/qsyn/terminal/brokers">Upstox Token</a>
-          <button type="button" onClick={openPrivateIndex}>
-            Open personal chart →
-          </button>
-        </div>
+        <div><strong>{blockedIndex.name}</strong><span>Index source unavailable</span></div>
+        <p>The read-only index feed is not available for this viewer.
+          NIFTY, SENSEX and other NSE/BSE charts require an authorized owner-only
+          data source; the homepage itself does not require QSYN login.</p>
       </div>}
     </div>
   </main>;

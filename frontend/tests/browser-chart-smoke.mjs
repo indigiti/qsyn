@@ -152,7 +152,10 @@ try{
     schema:'QSYN-PUBLIC-CHART-SELECTION/1',exchange:'BSE_INDEX:index',symbol:'SENSEX'
   })));
   await anonPage.reload({waitUntil:'domcontentloaded'});
-  await anonPage.getByText('Personal Upstox access required').waitFor({timeout:20000});
+  // Anonymous users see source availability, not an administrator login CTA.
+  await anonPage.getByText('Index source unavailable',{exact:true}).waitFor({timeout:20000});
+  if(await anonPage.getByText('Sign in to QSYN').count()!==0)
+    throw Error('Homepage index selection must not require QSYN administrator login');
   if(anonymousHistory!==0)throw Error('Anonymous NSE/BSE private history exposed');
   await anonymous.close();
   if(errors.length)throw Error('Browser script errors: '+errors.join('; ').slice(0,450));

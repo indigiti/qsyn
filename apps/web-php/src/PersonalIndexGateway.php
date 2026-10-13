@@ -13,18 +13,25 @@ final class PersonalIndexGateway
     {
         return [$status,['error'=>$code,'trading_enabled'=>false]];
     }
-    private static function readRequest(array $server):array
+    private static function readRequest(array $server,bool $ownerViewer=false):array
     {
         if (($server['REQUEST_METHOD']??'GET')!=='POST')
             return [405,null];
         if (!RustAdmin::originAllowed($server))return [403,null];
-        RustAdmin::boot();
-        if (!RustAdmin::authenticated())return [401,null];
+        if ($ownerViewer) {
+            // This is NOT an anonymous public feed: exact owner IP + pinned
+            // hostname + explicit opt-in are checked on every request.
+            if (!PersonalIndexViewer::allowed($server))return [403,null];
+            if (($server['HTTP_X_QSYN_VIEW_ONLY']??'')!=='1')return [403,null];
+        } else {
+            RustAdmin::boot();
+            if (!RustAdmin::authenticated())return [401,null];
+        }
         if (getenv('QSYN_TRADING_ENABLED')==='1'
             || getenv('QSYN_ENABLE_LIVE_TRADING')==='1'
             || getenv('QSYN_PERSONAL_INDEX_ENABLED')==='0')
             return [503,null];
-        if (!RustAdmin::verifyCsrf((string)($server['HTTP_X_CSRF_TOKEN']??'')))
+        if (!$ownerViewer && !RustAdmin::verifyCsrf((string)($server['HTTP_X_CSRF_TOKEN']??'')))
             return [403,null];
         if (!preg_match('~\Aapplication/json(?:\s*;|$)~i',
             (string)($server['CONTENT_TYPE']??'')))return [415,null];
@@ -46,9 +53,9 @@ final class PersonalIndexGateway
             return null;
         return $root;
     }
-    public static function ticket(array $server):array
+    public static function ticket(array $server,bool $ownerViewer=false):array
     {
-        [$status,$body]=self::readRequest($server);
+        [$status,$body]=self::readRequest($server,$ownerViewer);
         if ($status!==200)return self::deny('personal_index_request_denied',$status);
         if (count($body)!==1)return self::deny('invalid_personal_index_scope',422);
         $token=IndexHistoricalProof::privateToken();
@@ -116,9 +123,9 @@ final class PersonalIndexGateway
         catch(\Throwable){return null;}
         return is_array($data)?$data:null;
     }
-    public static function history(array $server):array
+    public static function history(array $server,bool $ownerViewer=false):array
     {
-        [$status,$body]=self::readRequest($server);
+        [$status,$body]=self::readRequest($server,$ownerViewer);
         if($status!==200)return self::deny('personal_index_request_denied',$status);
         if(count($body)!==2||!is_string($body['day']??null))
             return self::deny('invalid_personal_history_scope',422);

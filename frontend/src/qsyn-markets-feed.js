@@ -63,6 +63,23 @@ export class QsynMarketsFeed extends QsynCryptoFeed {
   async _proof(){
     if(!this.personalProof){
       this.personalProof=(async()=>{
+        // Owner-only access never consumes an administrator session.
+        const owner=await fetch('/qsyn/api/v1/owner-index/status',{
+          method:'GET',credentials:'same-origin',cache:'no-store',
+          headers:{Accept:'application/json'}
+        }).catch(()=>null);
+        if(owner?.ok){
+          const state=await owner.json();
+          if(state.schema==='QSYN-PERSONAL-INDEX-OWNER-VIEWER/1'
+            && state.access==='owner-ip-allowlist'
+            && state.trading_enabled===false
+            && state.public_redistribution_allowed===false
+            && Array.isArray(state.symbols)
+            && state.symbols.length===7
+            && /^20\d{2}-\d{2}-\d{2}$/.test(state.suggested_day_ist)){
+            return {ownerViewer:true,csrf:null,suggested_day_ist:state.suggested_day_ist};
+          }
+        }
         const response=await fetch(PROOF,{
           method:'GET',credentials:'same-origin',cache:'no-store',
           headers:{Accept:'application/json'},
@@ -84,15 +101,15 @@ export class QsynMarketsFeed extends QsynCryptoFeed {
     }
     return this.personalProof;
   }
-  _session(instrument,day,csrf){
+  _session(instrument,day,csrf,ownerViewer=false){
     const key=instrument.id;
     const old=this.personalFeeds.get(key);
-    if(old?.day===day)return old;
+    if(old?.day===day&&old?.ownerViewer===ownerViewer)return old;
     old?.destroy();
     this.personalBars.delete(key);
     this.historyStatus.delete(key);
     const feed=new PrivateIndexHistoryFeed({
-      symbol:instrument.symbol,day,csrf,
+      symbol:instrument.symbol,day,csrf,ownerViewer,
       onStatus:msg=>{if(!this.closed)this.onState(instrument.name+' · '+msg);},
       onLive:msg=>{
         if(!this.closed)this.onState((this.historyStatus.get(key)||
@@ -118,7 +135,7 @@ export class QsynMarketsFeed extends QsynCryptoFeed {
       this.activeIndex=instrument.id;
       this.onBlockedIndex(null);
       if(req.interval==='1s'){
-        this._session(instrument,todayIst(),proof.csrf);
+        this._session(instrument,todayIst(),proof.csrf,proof.ownerViewer===true);
         this.onState(instrument.name+' · live 1-second bars only; no historical 1s available');
         return [];
       }
@@ -133,7 +150,7 @@ export class QsynMarketsFeed extends QsynCryptoFeed {
       // Live subscriptions remain scoped to the selected/current trading
       // day even when its Upstox intraday history is legitimately empty.
       // Previous-day history must never replace today's live WSS session.
-      const feed=this._session(instrument,requestedDay,proof.csrf);
+      const feed=this._session(instrument,requestedDay,proof.csrf,proof.ownerViewer===true);
       const scoped={...req,exchange:'UPSTOX_PERSONAL',
         symbol:instrument.symbol,interval:'1m',strictHistory:true};
       let bars=await feed.getBars(scoped);
@@ -146,7 +163,7 @@ export class QsynMarketsFeed extends QsynCryptoFeed {
           if(local.getUTCDay()===0||local.getUTCDay()===6)continue;
           const olderDay=local.toISOString().slice(0,10);
           if(olderDay<'2022-01-01')break;
-          const previous=await this._historicalDay(instrument,olderDay,proof.csrf,req.signal);
+          const previous=await this._historicalDay(instrument,olderDay,proof.csrf,req.signal,proof.ownerViewer===true);
           if(previous.length){
             bars=previous;
             day=olderDay;
@@ -170,7 +187,7 @@ export class QsynMarketsFeed extends QsynCryptoFeed {
     }catch(error){
       if(this.closed||req.signal?.aborted||error?.name==='AbortError')return [];
       this.onState(error?.message==='QSYN_ADMIN_LOGIN_REQUIRED'
-        ?'Private index · sign in to QSYN Terminal'
+        ?'Index source unavailable for this viewer'
         :error?.message==='UPSTOX_PERSONAL_TOKEN_UNAVAILABLE'
           ?'Private index · store or verify your Upstox Analytics Token'
           :'Private index · Rust 1-minute Upstox history unavailable; retry after checking your account');
@@ -192,10 +209,10 @@ export class QsynMarketsFeed extends QsynCryptoFeed {
     while(this.indexHistoryDays.size>64)
       this.indexHistoryDays.delete(this.indexHistoryDays.keys().next().value);
   }
-  async _historicalDay(instrument,day,csrf,signal){
+  async _historicalDay(instrument,day,csrf,signal,ownerViewer=false){
     const key=instrument.id+':'+day;
     if(this.indexHistoryDays.has(key))return this.indexHistoryDays.get(key);
-    const temp=new PrivateIndexHistoryFeed({symbol:instrument.symbol,day,csrf,
+    const temp=new PrivateIndexHistoryFeed({symbol:instrument.symbol,day,csrf,ownerViewer,
       onStatus:()=>{},onLive:()=>{}});
     try{
       const bars=await temp.getBars({symbol:instrument.symbol,
@@ -243,7 +260,7 @@ export class QsynMarketsFeed extends QsynCryptoFeed {
         const day=date.toISOString().slice(0,10);
         if(day<'2022-01-01')break;
         oldestSearched=day;
-        const bars=await this._historicalDay(instrument,day,proof.csrf,req.signal);
+        const bars=await this._historicalDay(instrument,day,proof.csrf,req.signal,proof.ownerViewer===true);
         searched++;
         for(const bar of bars){
           if(bar.time<req.before)collected.set(bar.time,bar);

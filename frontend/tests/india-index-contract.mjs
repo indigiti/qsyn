@@ -67,6 +67,55 @@ try {
   assert.equal(blockedEvents.length,1,'blocked index state must not repeat');
   blockedFeed.destroy();
 
+  // An explicitly allowlisted personal viewer can chart all seven indices
+  // without an administrator session. Its endpoints stay separate from admin.
+  const ownerSymbols=[],ownerRequests=[];
+  let ownerStatusCalls=0;
+  globalThis.fetch=async (url,opts={})=>{
+    if(url==='/qsyn/api/v1/owner-index/status'){
+      ownerStatusCalls++;
+      return {ok:true,status:200,json:async()=>({
+        schema:'QSYN-PERSONAL-INDEX-OWNER-VIEWER/1',
+        access:'owner-ip-allowlist',
+        trading_enabled:false,public_redistribution_allowed:false,
+        suggested_day_ist:'2026-10-09',
+        symbols:INDIA_INDEX_MARKETS.map(item=>item.symbol)
+      })};
+    }
+    if(url==='/qsyn/api/v1/owner-index/history'){
+      assert.equal(opts.method,'POST');
+      assert.equal(opts.credentials,'same-origin');
+      assert.equal(opts.headers['X-QSYN-View-Only'],'1');
+      assert.equal('X-CSRF-Token' in opts.headers,false,
+        'owner read-only requests must not require admin CSRF');
+      const payload=JSON.parse(opts.body);
+      assert.deepEqual(Object.keys(payload).sort(),['day','symbol']);
+      ownerSymbols.push(payload.symbol);
+      ownerRequests.push(url);
+      return {ok:true,status:200,json:async()=>({
+        schema:'QSYN-UPSTOX-RUST-INDEX-HISTORY/1',
+        source:'upstox_v3_rust_history',symbol:payload.symbol,
+        day_ist:payload.day,interval:'1m',
+        public_redistribution_allowed:false,trading_enabled:false,
+        bars:[{time:epoch(payload.day+'T09:15:00+05:30'),
+          open:25000,high:25002,low:24998,close:25001,volume:0}]
+      })};
+    }
+    throw Error('OWNER_VIEWER_SHOULD_NOT_CALL_'+url);
+  };
+  const ownerFeed=new QsynMarketsFeed();
+  for(const index of INDIA_INDEX_MARKETS){
+    const bars=await ownerFeed.getBars({
+      exchange:index.exchange+':index',symbol:index.symbol,interval:'1m'
+    });
+    assert.equal(bars.length,1,'owner viewer must show '+index.symbol+' without login');
+  }
+  assert.deepEqual(new Set(ownerSymbols),
+    new Set(INDIA_INDEX_MARKETS.map(index=>index.symbol)));
+  assert.equal(ownerRequests.length,7);
+  assert.equal(ownerStatusCalls,1,'one owner authorization check per feed instance');
+  ownerFeed.destroy();
+
   let proofCalls=0,historyCalls=0,publicIndexRequests=0;
   const scoped=[];
   globalThis.fetch=async (url,opts)=>{
@@ -130,8 +179,14 @@ try {
   const historyBeforeScroll=historyCalls;
   const older=await authed.getBarsPage({...indexReq,before:minute[0].time,countBack:300});
   assert.equal(older.bars.length,300,'native left-scroll appends older real Rust candles');
-  assert.equal(older.bars[0].time,epoch('2026-10-08T10:30:00+05:30'));
-  assert.equal(older.bars.at(-1).time,epoch('2026-10-08T15:29:00+05:30'));
+  // The newest completed weekday depends on when CI runs; never pin this
+  // cursor to an October 2026 fixture date.
+  let priorDay=minute[0].time-86400;
+  while ([0,6].includes(new Date((priorDay+19800)*1000).getUTCDay()))
+    priorDay-=86400;
+  const priorDayIst=new Date((priorDay+19800)*1000).toISOString().slice(0,10);
+  assert.equal(older.bars[0].time,epoch(priorDayIst+'T10:30:00+05:30'));
+  assert.equal(older.bars.at(-1).time,epoch(priorDayIst+'T15:29:00+05:30'));
   assert(older.bars.every(b=>b.time<minute[0].time));
   assert.equal(older.nextBefore,older.bars[0].time);
   assert.equal(older.hasMore,true);
