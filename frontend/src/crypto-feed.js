@@ -1,4 +1,5 @@
 import {CRYPTO_MARKETS,findCrypto} from './crypto-catalog.js';
+import {findProviderGaps,mergeProviderGapBars,shouldAttemptGap} from './market-gap-recovery.js';
 
 /**
  * Provider-authoritative, read-only historical backfill. A single same-origin
@@ -45,6 +46,7 @@ export class QsynCryptoFeed {
     this.controllers=new Set();
     this.timers=new Set();
     this.historyTargets=new Map();
+    this.gapAttempts=new Map();
   }
   setHistoryTarget(exchange,symbol,interval,bars){
     const listing=findCrypto(exchange,symbol);
@@ -78,6 +80,35 @@ export class QsynCryptoFeed {
     if(data.pagination.next_before!==next)
       throw Error('Invalid historical next cursor');
     return {bars,nextBefore:next,hasMore:data.pagination.has_more};
+  }
+  // Re-query only a bounded number of confirmed internal gaps through the
+  // SAME exchange-authoritative Rust/PHP history API. Never fill by time
+  // interpolation and never schedule unrestricted provider requests.
+  async _repairHistoryGaps(bars,req,listing,signal,maxRequests=2){
+    if(signal.aborted||this.closed||bars.length<2)return bars;
+    const step=SECONDS[req.interval];
+    let result=bars;
+    for(const gap of findProviderGaps(bars,step,{limit:maxRequests})){
+      if(signal.aborted||this.closed)break;
+      // A single paged probe must be able to span both ends of this gap.
+      // Huge provider outages should not trigger a page storm.
+      if(gap.missing>=PAGE_BARS)continue;
+      const key=pageIdentity(req,listing)+':'+gap.left+':'+gap.right;
+      if(!shouldAttemptGap(this.gapAttempts,key))continue;
+      try{
+        const page=await this._page(req,listing,signal,
+          Math.min(PAGE_BARS,gap.missing+1),gap.right);
+        if(signal.aborted||this.closed)break;
+        result=mergeProviderGapBars(result,page.bars,step);
+      }catch(error){
+        if(signal.aborted||this.closed||error?.name==='AbortError')break;
+        // Retain previously verified candles, but never trust a malformed
+        // provider replay or claim an unavailable gap was repaired.
+        this.onState('Exchange gap recovery unavailable · verified candles retained');
+        break;
+      }
+    }
+    return result;
   }
   async getBars(req) {
     if(this.closed)return [];
@@ -117,9 +148,14 @@ export class QsynCryptoFeed {
           this.onState(listing.exchange+' · automatically backfilled '+all.size+' / '+desired+' real candles');
       }
       const rows=[...all.values()].sort((a,b)=>a.time-b.time);
+      const repaired=await this._repairHistoryGaps(rows,req,listing,controller.signal);
+      if(controller.signal.aborted||this.closed)return [];
+      const missing=findProviderGaps(repaired,step,{limit:1}).length>0;
       if(!this.closed)this.onState(listing.exchange+' '+listing.market.toUpperCase()+
-        ' · '+rows.length+' verified real candles · gaps not filled');
-      return rows;
+        ' · '+repaired.length+' verified real candles'+
+        (repaired.length>rows.length?' · '+(repaired.length-rows.length)+' gaps recovered':
+          missing?' · unresolved provider gaps':' · no internal gaps detected'));
+      return repaired;
     }catch(error){
       if(controller.signal.aborted || signal?.aborted ||this.closed||error?.name==='AbortError')return [];
       this.onState('Exchange history unavailable · no simulated fallback');
@@ -144,10 +180,13 @@ export class QsynCryptoFeed {
     const cancel=()=>controller.abort();
     req.signal?.addEventListener('abort',cancel,{once:true});
     try{
-      const page=await this._page(req,listing,controller.signal,
-        Math.max(1,Math.min(PAGE_BARS,Number.isSafeInteger(req.countBack)?req.countBack:PAGE_BARS)),
-        before);
-      return {bars:page.bars,hasMore:page.hasMore,nextBefore:page.nextBefore??undefined};
+      const count=Math.max(1,Math.min(PAGE_BARS,
+        Number.isSafeInteger(req.countBack)?req.countBack:PAGE_BARS));
+      const page=await this._page(req,listing,controller.signal,count,before);
+      const repaired=await this._repairHistoryGaps(page.bars,req,listing,controller.signal,1);
+      if(controller.signal.aborted||this.closed)return {bars:[],hasMore:false};
+      const bars=repaired.length>count?repaired.slice(-count):repaired;
+      return {bars,hasMore:page.hasMore,nextBefore:bars[0]?.time};
     }catch(error){
       if(controller.signal.aborted||req.signal?.aborted||this.closed||error?.name==='AbortError')
         return {bars:[],hasMore:false};
@@ -172,7 +211,9 @@ export class QsynCryptoFeed {
         if(!live||!page.bars.length)return;
         const newest=page.bars.at(-1);
         if(newest.time<current){opts.onResync?.();return;}
-        if(current&&newest.time>current+SECONDS[req.interval])opts.onResync?.();
+        if(current&&newest.time>current+SECONDS[req.interval]&&
+          shouldAttemptGap(this.gapAttempts,pageIdentity(req,listing)+
+            ':live:'+current+':'+newest.time))opts.onResync?.();
         if(!current||newest.time>current||JSON.stringify(newest)!==JSON.stringify(last)){
           onBar(newest,{provisional:false});current=newest.time;last=newest;
         }
@@ -198,5 +239,6 @@ export class QsynCryptoFeed {
     for(const timer of this.timers)clearInterval(timer);
     this.timers.clear();
     this.historyTargets.clear();
+    this.gapAttempts.clear();
   }
 }
