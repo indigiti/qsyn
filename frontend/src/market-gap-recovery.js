@@ -29,15 +29,15 @@ function inSameIndexSession(left,right){
 export function findProviderGaps(bars,step,{index=false,limit=GAP_REPAIR_MAX_REQUESTS}={}){
   if(!Array.isArray(bars)||!Number.isSafeInteger(step)||step<60)return [];
   const gaps=[];
-  for(let i=1;i<bars.length&&gaps.length<limit;i++){
+  for(let i=bars.length-1;i>=1&&gaps.length<limit;i--){
     const left=bars[i-1]?.time,right=bars[i]?.time;
     if(!Number.isSafeInteger(left)||!Number.isSafeInteger(right)||
       right<=left+step||(right-left)%step!==0)continue;
     if(index&&(step!==60||!inSameIndexSession(left,right)))continue;
     gaps.push({left,right,missing:(right-left)/step-1});
   }
-  // Prioritize the most recent missing candles in the visible chart.
-  return gaps.reverse();
+  // Already ordered from the most recent gap backward.
+  return gaps;
 }
 
 /** Insert only genuinely returned, timestamp-matched missing slots. Keep
