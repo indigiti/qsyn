@@ -148,8 +148,11 @@ export class QsynCryptoFeed {
           this.onState(listing.exchange+' · automatically backfilled '+all.size+' / '+desired+' real candles');
       }
       const rows=[...all.values()].sort((a,b)=>a.time-b.time);
-      const repaired=await this._repairHistoryGaps(rows,req,listing,controller.signal);
+      const recovered=await this._repairHistoryGaps(rows,req,listing,controller.signal);
       if(controller.signal.aborted||this.closed)return [];
+      // A replay must not expand the chart beyond its requested history
+      // budget (in particular Wick Science's 15,016-candle ceiling).
+      const repaired=recovered.length>desired?recovered.slice(-desired):recovered;
       const missing=findProviderGaps(repaired,step,{limit:1}).length>0;
       if(!this.closed)this.onState(listing.exchange+' '+listing.market.toUpperCase()+
         ' · '+repaired.length+' verified real candles'+
