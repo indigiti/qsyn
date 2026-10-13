@@ -240,7 +240,11 @@ try {
   // depending on the wall clock date at which CI is executed.
   const continuity=new QsynMarketsFeed();
   continuity._proof=async()=>({csrf:'a'.repeat(64),suggested_day_ist:'2026-10-09'});
-  const dayToday=new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Kolkata'});
+  const dayParts=new Intl.DateTimeFormat('en-GB',{
+    timeZone:'Asia/Kolkata',year:'numeric',month:'2-digit',day:'2-digit'
+  }).formatToParts(new Date());
+  const datePart=k=>dayParts.find(item=>item.type===k)?.value;
+  const dayToday=datePart('year')+'-'+datePart('month')+'-'+datePart('day');
   const weekday=new Date(dayToday+'T12:00:00+05:30').getUTCDay();
   const hhmm=Number(new Intl.DateTimeFormat('en-GB',{
     timeZone:'Asia/Kolkata',hour:'2-digit',minute:'2-digit',hourCycle:'h23'
