@@ -58,6 +58,7 @@ async function mount(root, expectedId, prefs) {
     // No browser localStorage persistence: the PHP session-owned workspace
     // is the only authority for selected-account chart preferences.
     navigation: { defaultVisibleBars: prefs.visible_bars, mousePan: 'horizontal' },
+    zoomAnchor: 'cursor',
   });
   mounting = widget.ready.then(() => {
     return widget;
