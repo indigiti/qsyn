@@ -9,6 +9,8 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const load = path => readFileSync(resolve(root, path), 'utf8');
 const pkg = JSON.parse(load('package.json'));
 assert.equal(pkg.dependencies['openalgo-charts'], '2.6.4', 'candidate must be precisely pinned');
+assert.equal(JSON.parse(load('node_modules/openalgo-charts/package.json')).version, '2.6.4',
+  'The chart library actually resolved by the frontend build must match the approved version');
 
 // Fixture documents every actual chart consumer including the non-homepage
 // studio, strategy, private chart and single-grid mounts. Any newly added
@@ -59,4 +61,16 @@ assert.equal(upstreamLock.commit, '12e1114657981a3e50dde8c8ce04eb778ae1cf2f',
   'Do not silently upgrade the separately deployed native OpenAlgo application');
 assert.equal(upstreamLock.frontend_openalgo_charts, '2.6.0',
   'Native OpenAlgo remains pinned; this candidate upgrades only QSYN frontend');
-console.log('PASS: eight QSYN chart mounts preserve cursor zoom, drag policy, and isolated 2.6.4 dependency');
+// Production artifact cost is a QSYN invariant, not merely an upstream claim.
+// Budgets allow modest upgrades but catch accidental bundling of unused tiers.
+// They are raw minified JS bytes; compression will only make delivery smaller.
+for (const [file, limit] of [
+  ['dist/chart.js', 1_500_000],
+  ['dist/account-chart.js', 1_500_000],
+  ['dist/studio.js', 1_600_000],
+  ['dist/terminal.js', 2_050_000],
+]) {
+  const bytes = statSync(resolve(root, file)).size;
+  assert.ok(bytes <= limit, `${file}: ${bytes} bytes exceeds the budget of ${limit}`);
+}
+console.log('PASS: all eight chart mounts, installed 2.6.4, navigation policies, bundle budgets and separate upstream pin');
