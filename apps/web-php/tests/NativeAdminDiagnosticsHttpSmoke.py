@@ -50,6 +50,14 @@ def main():
       assert data["admin"]["cookie_path"]=="/qsyn/"
       keys=[x["component"] for x in data["components"]]
       assert "upstox_profile" in keys and "index_worker_binary" in keys
+      assert "owner_index_viewer" in keys and "owner_index_history_gateway" in keys
+      owner=data["owner_index_access"]
+      assert owner["access_allowed"] is False
+      assert owner["code"]=="OWNER_VIEWER_DISABLED"
+      assert owner["checks"]["viewer_enabled"] is False
+      assert owner["source_prices_verified"] is False
+      assert owner["edge_allowlist_verified"] is False
+      assert str(runtime) not in str(owner)
       assert "upstox_analytics_token_file" in keys and "index_worker_plan" in keys
       assert "index_worker_runtime" in keys and "index_chart_websocket" in keys
       stage=data["index_activation"]
