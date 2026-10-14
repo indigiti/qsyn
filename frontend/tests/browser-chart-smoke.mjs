@@ -82,6 +82,7 @@ try{
   // authenticated Markets chart, without redirecting to obsolete worker plans.
   const sessionDay='2026-10-09';
   let personalHistoryCalls=0,proofRequests=0;
+  const requestedHistoryDays=new Set();
   const browserRequests=[];
   page.on('request',req=>{
     if(req.url().includes('upstox'))browserRequests.push(req.method()+' '+req.url().split('/api/')[1]);
@@ -96,6 +97,7 @@ try{
   await page.route('**/qsyn/api/v1/admin/upstox/personal-index/history',async route=>{
     personalHistoryCalls++;
     const body=route.request().postDataJSON();
+    requestedHistoryDays.add(body.day);
     if(route.request().method()!=='POST'||
        route.request().headers()['x-csrf-token']!=='a'.repeat(64)||
        body.symbol!=='NIFTY')throw Error('Homepage used an unscoped index request');
@@ -117,7 +119,7 @@ try{
   await page.reload({waitUntil:'domcontentloaded'});
   try {
     await page.waitForFunction(()=>document.querySelector('.qsyn-screenreader-status')?.textContent
-      ?.includes('375 real Rust Upstox 1m candles'),null,{timeout:18000});
+      ?.includes('750 real Rust Upstox 1m candles'),null,{timeout:18000});
   } catch(e) {
     const diag=await page.evaluate(()=>({
       status:document.querySelector('.qsyn-screenreader-status')?.textContent,
@@ -131,7 +133,8 @@ try{
       errors:errors.slice(-6),cause:String(e)
     }));
   }
-  if(personalHistoryCalls<1)throw Error('Homepage did not load Rust 1m NIFTY history');
+  if(personalHistoryCalls<2 || requestedHistoryDays.size<2)
+    throw Error('Homepage did not automatically load the preceding NIFTY trading session');
   if(await page.locator('.qsyn-india-entitlement-note').count())
     throw Error('Authenticated homepage still displayed obsolete index-plan blocker');
   if(await page.locator('.qsyn-home-chart canvas').count()===0)

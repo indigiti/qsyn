@@ -236,6 +236,57 @@ try {
   assert(fallbackBars.every(b=>b.time<Math.floor(Date.now()/1000)));
   fallbackFeed.destroy();
 
+  // Initial history must include the preceding trading weekday without
+  // depending on the wall clock date at which CI is executed.
+  const continuity=new QsynMarketsFeed();
+  continuity._proof=async()=>({csrf:'a'.repeat(64),suggested_day_ist:'2026-10-09'});
+  const dayParts=new Intl.DateTimeFormat('en-GB',{
+    timeZone:'Asia/Kolkata',year:'numeric',month:'2-digit',day:'2-digit'
+  }).formatToParts(new Date());
+  const datePart=k=>dayParts.find(item=>item.type===k)?.value;
+  const dayToday=datePart('year')+'-'+datePart('month')+'-'+datePart('day');
+  const weekday=new Date(dayToday+'T12:00:00+05:30').getUTCDay();
+  const hhmm=Number(new Intl.DateTimeFormat('en-GB',{
+    timeZone:'Asia/Kolkata',hour:'2-digit',minute:'2-digit',hourCycle:'h23'
+  }).format(new Date()).replace(':',''));
+  const currentDay=weekday>=1&&weekday<=5&&hhmm>=915
+    ?dayToday:'2026-10-09';
+  const anchor=epoch(currentDay+'T00:00:00+05:30');
+  let previousDay='';
+  for(let offset=1;offset<=4;offset++){
+    const date=new Date((anchor-offset*86400+19800)*1000);
+    if([0,6].includes(date.getUTCDay()))continue;
+    previousDay=date.toISOString().slice(0,10);
+    break;
+  }
+  const requestedDays=[];
+  const buildDay=day=>{
+    const first=epoch(day+'T09:15:00+05:30');
+    return Array.from({length:375},(_,n)=>({
+      time:first+n*60,open:25100,high:25102,low:25099,close:25101,volume:0
+    }));
+  };
+  continuity._session=()=>({getBars:async()=>buildDay(currentDay)});
+  continuity._historicalDay=async(_instrument,day)=>{
+    requestedDays.push(day);
+    return buildDay(day);
+  };
+  const contiguous=await continuity.getBars({...indexReq,countBack:750});
+  assert.equal(contiguous.length,750,'initial window includes two sessions');
+  assert.equal(contiguous[0].time,epoch(previousDay+'T09:15:00+05:30'));
+  assert.equal(contiguous.at(-1).time,epoch(currentDay+'T15:29:00+05:30'));
+  assert.deepEqual(requestedDays,[previousDay]);
+  continuity.destroy();
+
+  const missing=new QsynMarketsFeed();
+  missing._proof=async()=>({csrf:'a'.repeat(64),suggested_day_ist:'2026-10-09'});
+  missing._session=()=>({getBars:async()=>buildDay(currentDay)});
+  missing._historicalDay=async()=>[];
+  const preserved=await missing.getBars({...indexReq,countBack:750});
+  assert.equal(preserved.length,375,'missing prior day preserves valid candles');
+  assert.equal(preserved[0].time,epoch(currentDay+'T09:15:00+05:30'));
+  missing.destroy();
+
   let fallbackTriggered=false;
   const failedFeed=new QsynMarketsFeed();
   failedFeed._proof=async()=>({csrf:'a'.repeat(64),suggested_day_ist:'2026-10-09'});
