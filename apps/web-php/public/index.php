@@ -354,7 +354,7 @@ if ($route === '/qsyn/api/v1/admin/diagnostics/report') {
     if (!is_file($src . '/NativeAdminDiagnostics.php')) {
         $src = dirname(__DIR__, 2) . '/private_html/qsyn/app/src';
     }
-    foreach (['RustAdmin', 'NativeAdminDiagnostics'] as $module) {
+    foreach (['RustAdmin', 'PersonalIndexViewer', 'NativeAdminDiagnostics'] as $module) {
         if (!is_file($src . '/' . $module . '.php')) {
             respond(['error' => 'diagnostics_module_unavailable'], 503);
         }

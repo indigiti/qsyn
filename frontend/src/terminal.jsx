@@ -273,9 +273,12 @@ function HomepageChart({ theme, embedded = false,
       <span className="qsyn-screenreader-status" role="status" aria-live="polite">{message}</span>
       {blockedIndex && <div className="qsyn-india-entitlement-note" role="status">
         <div><strong>{blockedIndex.name}</strong><span>Index source unavailable</span></div>
-        <p>The read-only index feed is not available for this viewer.
-          NIFTY, SENSEX and other NSE/BSE charts require an authorized owner-only
-          data source; the homepage itself does not require QSYN login.</p>
+        <p>The server did not authorize an owner-only index data session for this
+          browser. The homepage needs no QSYN login, but the owner IP, hostname,
+          HTTPS and private Upstox source must pass the server-side checks.
+          For the exact redacted failure code, open the protected
+          <a href="/qsyn/terminal/diagnostics"> Diagnostics &amp; feed health</a>
+          page and run the secure audit.</p>
       </div>}
     </div>
   </main>;

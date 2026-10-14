@@ -50,8 +50,12 @@ final class NativeAdminDiagnostics
             && !is_link($planPath)
             && self::privateFile($planPath)
             && (int)@filesize($planPath) <= 8192;
-        $workerBinary = dirname(__DIR__) . '/bin/qsyn-upstox-index-worker';
-        $workerPackaged = is_file($workerBinary) && !is_link($workerBinary);
+        // Production bundles a single Rust ELF, not the retired standalone
+        // worker executable. Report the real packaged gateway.
+        $workerBinary = dirname(__DIR__) . '/bin/qsyn-stream';
+        $workerPackaged = is_file($workerBinary) && !is_link($workerBinary)
+            && is_executable($workerBinary);
+        $ownerAccess=\QSYN\MarketData\PersonalIndexViewer::accessReport($server);
         $items=[
             ['component'=>'admin_session',
                 'status'=>'ok', 'code'=>'ADMIN_SESSION_VALID'],
@@ -64,6 +68,13 @@ final class NativeAdminDiagnostics
             ['component'=>'upstox_analytics_token_file',
                 'status'=>$analytics?'present_unverified':'unavailable',
                 'code'=>$analytics?'UPSTOX_ANALYTICS_PRIVATE_PRESENT':'UPSTOX_ANALYTICS_PRIVATE_NOT_READABLE'],
+            ['component'=>'owner_index_viewer',
+                'status'=>$ownerAccess['access_allowed']?'configured':'blocked',
+                'code'=>$ownerAccess['code']],
+            ['component'=>'owner_index_history_gateway',
+                'status'=>$workerPackaged?'packaged_not_verified':'unavailable',
+                'code'=>$workerPackaged?'OWNER_RUST_GATEWAY_PACKAGED_NOT_VERIFIED':
+                    'OWNER_RUST_GATEWAY_BINARY_UNAVAILABLE'],
             ['component'=>'index_worker_plan',
                 'status'=>$planPrivate?'present_unverified':($planAdvertised?'invalid_or_unreadable':'not_configured'),
                 'code'=>$planPrivate?'INDEX_OPERATOR_PLAN_PRIVATE_PRESENT_NOT_VALIDATED':
@@ -101,6 +112,9 @@ final class NativeAdminDiagnostics
                 'reason_code'=>$session['reason_code'],
             ],
             'components'=>$items,
+            // Redacted booleans, no addresses, hosts, bearer or client identity.
+            // This report is available ONLY with an authenticated admin session.
+            'owner_index_access'=>$ownerAccess,
             'trading_enabled'=>false,
             'live_index_feed_verified'=>false,
             'index_activation'=>[
