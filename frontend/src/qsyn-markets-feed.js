@@ -182,9 +182,16 @@ export class QsynMarketsFeed extends QsynCryptoFeed {
         // serves only ONE trading day. Explicitly load the preceding weekday
         // when the requested window reaches beyond today's first candle.
         // Other days remain lazily paginated; tail refreshes stay cheap.
-        const needsPrior=req.noCache!==true && (
-          (Number.isSafeInteger(req.countBack)&&req.countBack>bars.length) ||
-          (Number.isFinite(req.from)&&req.from<bars[0].time));
+        // A native OpenAlgo refresh replaces every candle inside its
+        // requested window. If that window touches the preceding session,
+        // return those real historical bars AGAIN, including for noCache.
+        // Otherwise the controller interprets the omitted session as a
+        // deletion and yesterday appears to vanish during polling/repair.
+        // _historicalDay uses the authenticated bounded per-date cache, so
+        // normal tail refreshes do not repeatedly call Upstox for old bars.
+        const needsPrior=(Number.isFinite(req.from)&&req.from<bars[0].time) ||
+          (req.noCache!==true&&Number.isSafeInteger(req.countBack)&&
+            req.countBack>bars.length);
         if(needsPrior){
           const anchor=Math.floor(Date.parse(day+'T00:00:00+05:30')/1000);
           for(let offset=1;offset<=4;offset++){
@@ -199,12 +206,21 @@ export class QsynMarketsFeed extends QsynCryptoFeed {
               if(older.length){
                 bars=[...older.filter(bar=>bar.time<bars[0].time),...bars];
               }else{
+                // If a refresh already showed real older bars in this
+                // interval, an empty provider answer must NOT delete them.
+                const previousShown=this.personalBars.get(instrument.id)||[];
+                const knownPrior=previousShown.some(bar=>bar.time<bars[0].time &&
+                  (!Number.isFinite(req.from)||bar.time>=req.from));
+                if(req.noCache===true&&knownPrior)
+                  throw Error('INDEX_PRIOR_SESSION_REPAIR_INCOMPLETE');
                 // No fabricated candles for provider outages or holidays.
                 previousCoverage=' · prior '+olderDay+' history unavailable';
               }
             }catch(error){
               if(this.closed||req.signal?.aborted||error?.name==='AbortError')return [];
-              // An older-day failure must NOT wipe out today's valid bars.
+              // A refresh failure must retain the existing chart window
+              // instead of passing partial new bars to OpenAlgo.
+              if(req.noCache===true)throw error;
               previousCoverage=' · prior '+olderDay+' history request failed';
             }
             break; // At most one additional history request per initial load.
