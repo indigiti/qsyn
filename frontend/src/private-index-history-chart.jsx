@@ -44,6 +44,7 @@ export function PrivateIndexHistoryChart({symbol}){
         feed,exchange:'UPSTOX_PERSONAL',symbol,interval:'1m',intervals:['1s','1m'],
         theme:'light',persist:false,panels:true,toolbar:true,branding:false,
         navigation:{defaultVisibleBars:120,mousePan:'horizontal'},
+        zoomAnchor:'cursor',
       });
       widget.ready.catch(()=>setStatus('Private chart widget failed to initialize.'));
     }catch{setStatus('Private chart widget failed to initialize.');}
