@@ -276,6 +276,23 @@ try {
   assert.equal(contiguous[0].time,epoch(previousDay+'T09:15:00+05:30'));
   assert.equal(contiguous.at(-1).time,epoch(currentDay+'T15:29:00+05:30'));
   assert.deepEqual(requestedDays,[previousDay]);
+  // OpenAlgo refreshes its entire requested time window. A noCache
+  // refresh spanning the previous session must return that session again,
+  // or the controller removes it as an absent part of the replacement.
+  const repaired=await continuity.getBars({...indexReq,
+    noCache:true,from:epoch(previousDay+'T09:15:00+05:30'),
+    to:epoch(currentDay+'T15:29:00+05:30'),countBack:750});
+  assert.equal(repaired.length,750,'refresh must keep all real preceding candles');
+  assert.equal(repaired[0].time,epoch(previousDay+'T09:15:00+05:30'));
+  assert.equal(repaired.at(-1).time,epoch(currentDay+'T15:29:00+05:30'));
+  assert.deepEqual(requestedDays,[previousDay,previousDay],
+    'same previous-day cache serves refresh without a second provider request');
+  // A failed older-session repair must fail closed (return no replacement),
+  // not drop the 375 valid prior-day bars already drawn.
+  continuity._historicalDay=async()=>{throw Error('INDEX_HISTORY_TRANSIENT_FAILURE');};
+  assert.deepEqual(await continuity.getBars({...indexReq,noCache:true,
+    from:epoch(previousDay+'T09:15:00+05:30')}),[],
+    'failed refresh retains upstream controller history');
   continuity.destroy();
 
   const missing=new QsynMarketsFeed();

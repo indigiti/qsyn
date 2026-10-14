@@ -23,6 +23,7 @@ import {saveIndexIntent} from './private-index-intent.js';
 import {loadPublicChartSelection,observePublicChartSelection} from './public-chart-selection.js';
 import {MAX_AUTO_BACKFILL_BARS,INITIAL_BACKFILL_BARS} from './crypto-feed.js';
 import {observeWickScienceBackfill} from './wick-science-auto-backfill.js';
+import {observeIndexChartViewport} from './index-chart-viewport-recovery.js';
 import { cryptoDefault } from './crypto-catalog.js';
 import { nativeCryptoWatchlists, noSyntheticQuotes } from './native-crypto-watchlists.js';
 import 'openalgo-charts/indicators';
@@ -225,14 +226,15 @@ function HomepageChart({ theme, embedded = false,
           bindIndicatorLegendSettings(widget,mountIndicatorSettings));
       }
     };
-    let seenWidget=null,stopWick=()=>{};
+    let seenWidget=null,stopWick=()=>{},stopViewport=()=>{};
     const syncWick=()=>{
       if(!active)return;
       const widget=grid.active()?.widget;
       if(widget===seenWidget)return;
-      stopWick();
+      stopWick();stopViewport();
       seenWidget=widget;
       stopWick=observeWickScienceBackfill(widget,feed);
+      stopViewport=observeIndexChartViewport(widget);
     };
     const updateGrid=()=>{syncToolbar();syncLegendSettings();syncWick();};
     const offActive=grid.on('active',updateGrid);
@@ -245,7 +247,7 @@ function HomepageChart({ theme, embedded = false,
     });
     updateGrid();
     return ()=>{
-      active=false;stopWick();
+      active=false;stopWick();stopViewport();
       for(const stop of legendStops.values())stop();legendStops.clear();
       observer.disconnect();offActive?.();offLayout?.();stopSelection();
       window.removeEventListener('resize',syncToolbar);
