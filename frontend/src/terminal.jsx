@@ -530,6 +530,8 @@ function PrivateMarketPanel({ account, instrument, label, authMode = 'private_te
       widget = createWidget(host, {
         feed, symbol:instrument, exchange:'UPSTOX_PRIVATE', interval:'1m',
         intervals:['1m'], theme:'dark', persist:false, panels:true,
+        // Prior to 2.6.3, this unconfigured widget allowed time + price dragging.
+        navigation:{mousePan:'both'},
         zoomAnchor:'cursor',
       });
       stopLegendSettings=bindIndicatorLegendSettings(widget,mountIndicatorSettings);
