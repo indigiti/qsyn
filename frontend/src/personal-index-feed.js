@@ -1,5 +1,17 @@
 import {inRegularIndexSession} from './index-regular-session.js';
 
+/** Match the PHP personal-index gateway for BOTH history and live tickets.
+ * Owner-only viewers send a view-only marker; administrator sessions send
+ * their CSRF proof. Never send either privilege into the other mode.
+ */
+export function personalIndexRequestHeaders(ownerViewer,csrf){
+  return {
+    'Content-Type':'application/json',
+    'Accept':'application/json',
+    ...(ownerViewer?{'X-QSYN-View-Only':'1'}:{'X-CSRF-Token':csrf})
+  };
+}
+
 export class PrivateIndexHistoryFeed {
   constructor({symbol,day,csrf,onStatus,onLive=()=>{},ownerViewer=false}){
     this.symbol=symbol;this.day=day;this.csrf=csrf;this.onStatus=onStatus;
@@ -19,10 +31,7 @@ export class PrivateIndexHistoryFeed {
     try{
       const response=await fetch(this.ownerViewer?'/qsyn/api/v1/owner-index/history':'/qsyn/api/v1/admin/upstox/personal-index/history',{
         method:'POST',credentials:'same-origin',cache:'no-store',
-        signal:ctl.signal,headers:{
-          'Content-Type':'application/json','Accept':'application/json',
-          ...(this.ownerViewer?{'X-QSYN-View-Only':'1'}:{'X-CSRF-Token':this.csrf})
-        },body:JSON.stringify({symbol:this.symbol,day:this.day})
+        signal:ctl.signal,headers:personalIndexRequestHeaders(this.ownerViewer,this.csrf),body:JSON.stringify({symbol:this.symbol,day:this.day})
       });
       const json=await response.json();
       if(!response.ok)throw Error(json.error||'PRIVATE_INDEX_HISTORY_UNAVAILABLE');
@@ -102,8 +111,7 @@ export class PrivateIndexHistoryFeed {
         const response=await fetch(this.ownerViewer?'/qsyn/api/v1/owner-index/ticket':'/qsyn/api/v1/admin/upstox/personal-index/ticket',{
           method:'POST',credentials:'same-origin',cache:'no-store',
           signal:controller.signal,
-          headers:{'Content-Type':'application/json','Accept':'application/json',
-            'X-CSRF-Token':this.csrf},
+          headers:personalIndexRequestHeaders(this.ownerViewer,this.csrf),
           body:JSON.stringify({symbol:this.symbol})
         });
         const auth=await response.json();

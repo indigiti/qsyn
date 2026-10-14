@@ -24,3 +24,41 @@ The homepage selects this mode only when an owner-only status check succeeds. Ot
 2. From the allowlisted IP, `status` returns seven symbols and explicit `trading_enabled:false`. Only then test chart history and live timestamps with the actual deployed Rust service and a valid private Analytics Token.
 3. Confirm that `/qsyn/terminal/*`, Upstox administrator APIs, order routes and Rust admin actions still require their existing authorization.
 4. Confirm unauthenticated homepage remains chart-only. Never substitute simulated candles for absent NSE/BSE data or claim continuous 1s live data before observing real exchange timestamps.
+
+## Troubleshooting: homepage says "Index source unavailable"
+
+This label means the index chart did not obtain either an allowlisted owner-viewer
+status or the separate administrator proof. **The homepage itself is public;
+its index market-data feed is not.** A successful DigiOps application
+deployment does not install an Upstox Analytics Token, start the private Rust
+reader, or enable the owner-viewer gate.
+
+From the intended **owner browser**, open
+`https://stage.digiti.in/qsyn/api/v1/owner-index/status`:
+
+| Result | Meaning and next check |
+| --- | --- |
+| `403 owner_viewer_unavailable` | Owner-only viewer is disabled or request did not match the exact, verified owner IP, pinned host, HTTPS or read-only flags. Review the three private Cloudways settings above and the trusted proxy/edge policy. Do not allow all visitors or blindly trust `X-Forwarded-For`. |
+| `503 owner_index_unavailable` | Required PHP module missing from the deployed private DigiOps artifact; verify release files. |
+| `200 QSYN-PERSONAL-INDEX-OWNER-VIEWER/1` | Owner-gate passed; **not** proof of market-data availability. The next checks are the independently provisioned Upstox private Analytics Token, permitted exchange rights, Rust personal-history reader and HTTPS/WSS ingress. |
+| `404`, HTML, redirect, or unexpected body | Check release SHA, `/qsyn/` rewrite rules and Cloudways reverse-proxy routing before investigating broker data. |
+
+After a 200 status, Chrome DevTools → Network shows two separate
+`POST` endpoints: `/qsyn/api/v1/owner-index/history` (real 1m candles)
+and `/qsyn/api/v1/owner-index/ticket` (short-lived Rust WSS authorization).
+Both requests send `X-QSYN-View-Only: 1` in the current frontend.
+A `409 upstox_analytics_token_not_ready` means the private token is absent or
+failed validation. A `502 rust_personal_history_invalid_or_unavailable`
+means the Rust history process did not return a valid licensed response.
+A successful ticket response alone is **not** proof of a running WebSocket
+or received exchange ticks; verify WSS and provider timestamps separately.
+
+The real visitor's `REMOTE_ADDR` as seen by the trusted web server must
+match the owner IP. On a shared Cloudways reverse proxy it might instead be
+a proxy IP; never whitelist the proxy's IP as the owner. When a stable
+verified client IP cannot be obtained, use an authenticated private network
+(VPN/Zero Trust) or keep the owner-only viewer disabled.
+
+Only display NSE/BSE index candles if your broker/exchange grants the specific
+private display rights. Never replace missing feed data with fabricated prices,
+borrow an unrelated user's token or expose an unrestricted public API.
