@@ -255,6 +255,7 @@ async function chart(rootId, symbol, bars) {
     feed: sourceFeed(symbol, bars), symbol, exchange: 'QSYN',
     interval: state.interval, theme: document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light',
     navigation: { defaultVisibleBars: 90, mousePan: 'horizontal' },
+    zoomAnchor: 'cursor',
   });
   mountedCharts.set(rootId, widget);
   try {
