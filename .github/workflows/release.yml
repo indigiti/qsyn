@@ -183,6 +183,7 @@ jobs:
           npm install --no-audit --no-fund
           npm run build
           node tests/india-index-contract.mjs
+          node --test tests/personal-index-viewer-ticket.test.mjs
           node tests/chart-cancellation-contract.mjs
           node tests/terminal-routes-contract.mjs
           node tests/market-provider-contract.mjs
