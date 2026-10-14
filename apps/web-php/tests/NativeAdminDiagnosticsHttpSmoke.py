@@ -22,6 +22,7 @@ def main():
       "echo password_hash($argv[1],PASSWORD_DEFAULT);",PASSWORD],text=True).strip()
     env={**os.environ,"QSYN_ALLOW_HTTP_TEST":"1","QSYN_CONTROL_ENABLED":"1",
       "QSYN_ADMIN_PASSWORD_HASH":hashed,"QSYN_RUNTIME_DIR":str(runtime),
+      "QSYN_PERSONAL_INDEX_OWNER_VIEWER":"0",
       "QSYN_UPSTOX_INDEX_WORKER_PLAN_FILE":str(plan)}
     port=open_port()
     origin=f"http://127.0.0.1:{port}"
