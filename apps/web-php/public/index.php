@@ -808,7 +808,7 @@ if ($route === '/qsyn/app' || $route === '/qsyn/app/') {
 
 // Administrator-only Rust service control. Never accessible without a configured
 // admin password, valid PHP session, CSRF token and allowlisted local adapter.
-if (preg_match('#^(?:/qsyn)?/api/v1/admin/rust/(state|login|logout|action|demo|setup)$#', $route, $matches)) {
+if (preg_match('#^(?:/qsyn)?/api/v1/admin/rust/(state|login|logout|action|demo|depth|setup)$#', $route, $matches)) {
     $operation = $matches[1];
     $source = dirname(__DIR__) . '/src';
     if (!is_file($source . '/RustAdmin.php')) {
@@ -826,7 +826,7 @@ if (preg_match('#^(?:/qsyn)?/api/v1/admin/rust/(state|login|logout|action|demo|s
     \QSYN\Admin\RustAdmin::boot();
 
     $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
-    $expected = ($operation === 'state' || ($operation === 'demo' && $method === 'GET')) ? 'GET' : 'POST';
+    $expected = ($operation === 'state' || (in_array($operation, ['demo', 'depth'], true) && $method === 'GET')) ? 'GET' : 'POST';
     if ($method !== $expected) {
         header('Allow: ' . $expected);
         respond(['error' => 'method_not_allowed'], 405);
@@ -899,6 +899,16 @@ if (preg_match('#^(?:/qsyn)?/api/v1/admin/rust/(state|login|logout|action|demo|s
             respond(\QSYN\Admin\RustDemoConfig::state());
         }
     }
+    if ($operation === 'depth') {
+        if (!is_file($source . '/RustCryptoDepthConfig.php') || !is_file($source . '/RustProbe.php')) {
+            respond(['error' => 'depth_control_unavailable'], 503);
+        }
+        require_once $source . '/RustProbe.php';
+        require_once $source . '/RustCryptoDepthConfig.php';
+        if ($method === 'GET') {
+            respond(\QSYN\Admin\RustCryptoDepthConfig::state());
+        }
+    }
     if (!\QSYN\Admin\RustAdmin::verifyCsrf((string)($_SERVER['HTTP_X_CSRF_TOKEN'] ?? ''))) {
         respond(['error' => 'csrf_invalid'], 403);
     }
@@ -912,6 +922,13 @@ if (preg_match('#^(?:/qsyn)?/api/v1/admin/rust/(state|login|logout|action|demo|s
         }
         $outcome = \QSYN\Admin\RustDemoConfig::change($data['enabled']);
         respond($outcome, $outcome['ok'] ? 200 : 409);
+    }
+    if ($operation === 'depth') {
+        if (!array_key_exists('enabled', $data) || !is_bool($data['enabled'])) {
+            respond(['error' => 'enabled_must_be_boolean'], 422);
+        }
+        $outcome = \QSYN\Admin\RustCryptoDepthConfig::change($data['enabled']);
+        respond($outcome, ($outcome['ok'] ?? false) ? 200 : 409);
     }
     if ($operation === 'action') {
         $action = (string)($data['action'] ?? '');
