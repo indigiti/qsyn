@@ -2,8 +2,8 @@
 //! private Upstox data or per-browser upstream credentials are accepted.
 //! Provider OHLCV comes from validated exchange REST history and native
 //! public upstream WebSocket candles, with REST refresh on reconnect.
-mod stream;
 mod depth;
+mod stream;
 use axum::{
     extract::Query,
     http::StatusCode,
