@@ -117,7 +117,7 @@ export function DiagnosticsWorkspace(){
       const context=await jsonGet(path);
       if(context.schema!=='QSYN-OWNER-BROWSER-GRANT/1'||context.grant_ready!==true
         ||!/^[a-f0-9]{64}$/.test(context.csrf))
-        throw Error('OWNER_BROWSER_GRANT_NOT_PROVISIONED');
+        throw Error('OWNER_PRIVATE_RUNTIME_NOT_WRITABLE');
       const response=await fetch(path,{
         method:'POST',credentials:'same-origin',cache:'no-store',
         headers:{'Accept':'application/json','X-CSRF-Token':context.csrf}
@@ -125,7 +125,14 @@ export function DiagnosticsWorkspace(){
       const data=await response.json();
       if(!response.ok||data.schema!=='QSYN-OWNER-BROWSER-GRANT/1'
         ||data.browser_authorized!==true)throw Error(data.error||'OWNER_BROWSER_GRANT_FAILED');
-      setOwnerGrantMessage('This browser is authorized for read-only index charts through '+data.expires_at_utc+'. Open the homepage to view indices.');
+      // setcookie() succeeding on the server does not prove the browser
+      // accepted the host-only cookie; verify the actual owner gate.
+      const owner=await jsonGet('/qsyn/api/v1/owner-index/status');
+      if(owner.schema!=='QSYN-PERSONAL-INDEX-OWNER-VIEWER/1'
+        ||owner.access!=='owner-browser-grant'||owner.trading_enabled!==false)
+        throw Error('OWNER_BROWSER_COOKIE_NOT_EFFECTIVE');
+      setOwnerGrantMessage('Personal index chart access enabled in this browser until '+data.expires_at_utc+'. Fixed owner IP is not required.');
+      await runAdminAudit();
     }catch(error){setOwnerGrantMessage(String(error.message||'OWNER_BROWSER_GRANT_FAILED'));}
     finally{setOwnerGrantBusy(false);}
   }
@@ -158,7 +165,7 @@ export function DiagnosticsWorkspace(){
           {auditLoading?' Checking…':'Run secure audit'}</button>
         <button type="button" className="terminal-action terminal-secondary-action"
           disabled={ownerGrantBusy} onClick={()=>void authorizeOwnerBrowser()}>
-          <ShieldCheck size={15}/>{ownerGrantBusy?' Authorizing…':' Authorize this browser for index charts'}</button>
+          <ShieldCheck size={15}/>{ownerGrantBusy?' Enabling…':' Enable personal index charts in this browser'}</button>
         <button type="button" className="terminal-action terminal-secondary-action"
           disabled={!adminAudit}
           onClick={()=>void navigator.clipboard?.writeText(JSON.stringify(adminAudit,null,2))}>
