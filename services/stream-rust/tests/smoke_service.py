@@ -126,7 +126,31 @@ def run_instance_with_runtime(enable_demo: bool, runtime: str) -> None:
             "trading_enabled": False,
             "demo_runtime_control": True,
             "demo_ws_enabled": enable_demo,
+            "crypto_depth_runtime_control": True,
+            "crypto_depth_enabled": False,
         }, f"Unexpected Rust health response: {health}"
+
+        # Public order book depth stays disabled unless the private admin flag
+        # is enabled. Toggling must take effect without a Rust restart.
+        depth = "exchange=BINANCE&market=spot&symbol=BTCUSDT&limit=20"
+        url = f"http://127.0.0.1:{port}/api/v1/crypto/depth?{depth}"
+        code, body = http_status(url)
+        assert code == 503 and json.loads(body)["error"] == "crypto_depth_disabled"
+        flag = Path(runtime) / "crypto-depth.flag"
+        flag.write_text("1\n")
+        flag.chmod(0o600)
+        health_live = json.loads(http_status(f"http://127.0.0.1:{port}/health")[1])
+        assert health_live["crypto_depth_enabled"] is True
+        # Avoid external REST calls; /health is the authoritative live gate.
+        flag.write_text("0\n")
+        assert json.loads(http_status(f"http://127.0.0.1:{port}/health")[1])["crypto_depth_enabled"] is False
+        code, body = http_status(url)
+        assert code == 503 and json.loads(body)["error"] == "crypto_depth_disabled"
+        flag.write_text("1\n")
+        flag.chmod(0o644)
+        assert json.loads(http_status(f"http://127.0.0.1:{port}/health")[1])["crypto_depth_enabled"] is False
+        flag.unlink()
+        print("PASS: depth runtime flag is immediate, disabled by default and permission-checked")
 
         # Read-only crypto telemetry cannot start an upstream worker or return
         # fabricated candles. Invalid instruments fail before any network I/O.

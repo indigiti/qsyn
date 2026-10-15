@@ -7,7 +7,7 @@ Status: review-only, not activated on staging. This phase adds **read-only REST 
 - Endpoint: `GET /qsyn/api/v1/crypto/depth?exchange=BINANCE&market=spot&symbol=BTCUSDT&limit=20`
 - Exact allowlist: Binance spot/perpetual, BTCUSDT or ETHUSDT only.
 - Response schema: `QSYN-PUBLIC-CRYPTO-DEPTH/1`; bid/ask prices, base-unit sizes and USDT notional, REST snapshot sequence, receipt time and age.
-- Disabled by default. The private Rust service must explicitly receive `QSYN_CRYPTO_DEPTH_ENABLED=1`. PHP cannot enable the runtime and there is no public toggle.
+- Disabled by default. The existing admin dashboard under `/qsyn/terminal/operations` can enable/disable snapshots after a verified Rust upgrade using a private `0600` `crypto-depth.flag` stored in the shared persistent `QSYN_RUNTIME_DIR`. Rust reads this flag on every request, so no process restart is required. It is protected by the existing QSYN administrator session, strict origin checks and CSRF; it is not available from the homepage or public APIs. `QSYN_CRYPTO_DEPTH_ENABLED=1` remains a supervised-process startup fallback when no private flag exists, but private `0` overrides it.
 - Maximum 100 upstream levels per side (fixed provider request); response is capped at requested 5–100 levels. One two-second cache per permitted instrument. A per-instrument mutex coalesces requests and prevents unbounded upstream fan-out.
 - TLS only, fixed Binance URLs, fixed timeout and response-size cap. Malformed, empty, crossed or unsorted depth fails closed. No stale fallback after a failed refresh.
 - No keys, credentials, private-account state or trading permissions; frontend bundles and original homepage are unchanged.

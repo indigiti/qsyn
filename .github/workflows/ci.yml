@@ -47,6 +47,7 @@ jobs:
           php -l apps/web-php/src/RustAdminBootstrap.php
           php -l apps/web-php/tools/make-admin-config.php
           php -l apps/web-php/src/RustDemoConfig.php
+          php -l apps/web-php/src/RustCryptoDepthConfig.php
           php -l apps/web-php/src/RustSupervisor.php
           php -l apps/web-php/public/admin-rust.php
           php -l apps/web-php/dev-router.php
@@ -157,6 +158,7 @@ jobs:
           php apps/web-php/tests/RustAdminTest.php
           php apps/web-php/tests/RustAdminBootstrapTest.php
           php apps/web-php/tests/RustDemoConfigTest.php
+          php apps/web-php/tests/RustCryptoDepthConfigTest.php
       - name: Validate offline administrator config generator
         run: |
           set -euo pipefail

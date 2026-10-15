@@ -58,6 +58,8 @@ final class RustProbe
             'trading_enabled' => ($payload['trading_enabled'] ?? null) === true,
             'demo_runtime_control' => ($payload['demo_runtime_control'] ?? null) === true,
             'demo_ws_enabled' => ($payload['demo_ws_enabled'] ?? null) === true,
+            'crypto_depth_runtime_control' => ($payload['crypto_depth_runtime_control'] ?? null) === true,
+            'crypto_depth_enabled' => ($payload['crypto_depth_enabled'] ?? null) === true,
             'runtime_version' => is_string($payload['runtime_version'] ?? null)
                 ? substr($payload['runtime_version'], 0, 32) : null,
             'runtime_commit' => is_string($payload['runtime_commit'] ?? null)

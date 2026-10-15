@@ -52,6 +52,8 @@ async fn health() -> Json<Value> {
         "upstox_connected": false,
         "trading_enabled": false,
         "demo_runtime_control": true,
+        "crypto_depth_runtime_control": true,
+        "crypto_depth_enabled": process_control::crypto_depth_enabled(),
         "demo_ws_enabled": process_control::demo_ws_enabled(),
         "runtime_version": env!("CARGO_PKG_VERSION"),
         "runtime_commit": option_env!("QSYN_SOURCE_SHA").unwrap_or("development"),
