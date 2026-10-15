@@ -171,7 +171,8 @@ function HomepageChart({ theme, embedded = false,
     // Upstream ChartGrid can reject an obsolete internal load when it cancels
     // a refresh or changes interval; a known AbortError is not an app fault.
     const feed=new QsynMarketsFeed(s=>{if(active)setMessage(s);},{
-      onBlockedIndex:index=>{if(active)setBlockedIndex(index);}
+      onBlockedIndex:index=>{if(active)setBlockedIndex(index);},
+      initialPriorSession:true,
     });
     const grid=createChartGrid(host.current,{
       feed,symbol:firstSymbol,
