@@ -32,4 +32,43 @@ checkOwner(PersonalIndexViewer::status([...$server,'HTTP_HOST'=>'evil.example'])
 checkOwner(PersonalIndexViewer::status([...$server,'REQUEST_METHOD'=>'POST'])[0]===405,'status_read_only');
 putenv('QSYN_TRADING_ENABLED=1');
 checkOwner(PersonalIndexViewer::status($server)[0]===403,'trading_enabled_denied');
+// Opt-in signed browser grants are independent of the IP/hostname, but still
+// require a private server-held signing key and a valid owner browser cookie.
+$root=sys_get_temp_dir().'/qsyn-owner-browser-'.bin2hex(random_bytes(6));
+mkdir($root,0700);chmod($root,0700);
+file_put_contents($root.'/owner-index-grant.key',random_bytes(32));
+chmod($root.'/owner-index-grant.key',0600);
+putenv('QSYN_RUNTIME_DIR='.$root);
+putenv('QSYN_PERSONAL_INDEX_OWNER_AUTH=browser_grant');
+putenv('QSYN_TRADING_ENABLED=0');
+putenv('QSYN_PERSONAL_INDEX_ENABLED=1');
+unset($_COOKIE['QSYN_OWNER_INDEX']);
+$foreign=[...$server,'REMOTE_ADDR'=>'203.0.113.30','HTTP_HOST'=>'other.example','HTTPS'=>'on'];
+checkOwner(PersonalIndexViewer::status($foreign)[0]===403,'missing_browser_grant_denied');
+$report=PersonalIndexViewer::accessReport($foreign);
+checkOwner($report['code']==='OWNER_BROWSER_GRANT_MISSING_OR_EXPIRED','missing_grant_code');
+$expires=time()+3600;
+$prefix=$expires.'.'.bin2hex(random_bytes(16));
+$signature=hash_hmac('sha256','QSYN-OWNER-INDEX-V1:'.$prefix,
+    file_get_contents($root.'/owner-index-grant.key'));
+$_COOKIE['QSYN_OWNER_INDEX']=$prefix.'.'.$signature;
+checkOwner(PersonalIndexViewer::status($foreign)[0]===200,'valid_browser_grant_allows_changed_ip_host');
+checkOwner(PersonalIndexViewer::status($foreign)[1]['access']==='owner-browser-grant','browser_grant_mode');
+$_COOKIE['QSYN_OWNER_INDEX']=$prefix.'.'.str_repeat('a',64);
+checkOwner(PersonalIndexViewer::status($foreign)[0]===403,'tampered_grant_denied');
+$expired=(time()-5).'.'.bin2hex(random_bytes(16));
+$_COOKIE['QSYN_OWNER_INDEX']=$expired.'.'.hash_hmac('sha256',
+    'QSYN-OWNER-INDEX-V1:'.$expired,file_get_contents($root.'/owner-index-grant.key'));
+checkOwner(PersonalIndexViewer::status($foreign)[0]===403,'expired_grant_denied');
+$_COOKIE['QSYN_OWNER_INDEX']=$prefix.'.'.$signature;
+checkOwner(PersonalIndexViewer::status([...$foreign,'HTTPS'=>'off','HTTP_X_FORWARDED_PROTO'=>''])[0]===403,
+    'insecure_transport_denied');
+putenv('QSYN_TRADING_ENABLED=1');
+checkOwner(PersonalIndexViewer::status($foreign)[0]===403,'trading_mode_browser_denied');
+putenv('QSYN_TRADING_ENABLED=0');
+unlink($root.'/owner-index-grant.key');rmdir($root);
+putenv('QSYN_PERSONAL_INDEX_OWNER_AUTH');
+putenv('QSYN_RUNTIME_DIR');
+unset($_COOKIE['QSYN_OWNER_INDEX']);
+
 echo "PASS owner-only index viewer, all 7 symbols, denied by default, no trading\n";

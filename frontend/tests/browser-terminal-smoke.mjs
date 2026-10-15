@@ -376,8 +376,9 @@ try {
   });
   await page.getByRole('button',{name:'Data Providers & Connections',exact:true}).first().click();
   await page.getByRole('heading',{name:'Data providers & connections'}).waitFor();
-  // Core hides obsolete workspaces from primary nav but never breaks deep links.
+  // Core exposes Diagnostics next to Markets and provider setup.
   const primary=page.locator('nav[aria-label="Terminal"]');
+  await primary.getByRole('button',{name:'Diagnostics & feed health'}).waitFor();
   if(await primary.getByRole('button',{name:'Strategy Studio'}).count()
      || await primary.getByRole('button',{name:'Rust Runtime'}).count()
      || await primary.getByRole('button',{name:'Route management'}).count())

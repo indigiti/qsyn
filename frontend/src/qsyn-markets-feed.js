@@ -50,9 +50,10 @@ export function aggregatePersonalIndexBars(bars,interval){
  * The same Rust history and WSS adapter powers the private Markets chart.
  */
 export class QsynMarketsFeed extends QsynCryptoFeed {
-  constructor(onState=()=>{}, {onBlockedIndex=()=>{}}={}){
+  constructor(onState=()=>{}, {onBlockedIndex=()=>{},initialPriorSession=false}={}){
     super(onState);
     this.onBlockedIndex=onBlockedIndex;
+    this.initialPriorSession=initialPriorSession;
     this.personalProof=null;
     this.personalFeeds=new Map();
     this.personalBars=new Map();
@@ -73,7 +74,7 @@ export class QsynMarketsFeed extends QsynCryptoFeed {
         if(owner?.ok){
           const state=await owner.json();
           if(state.schema==='QSYN-PERSONAL-INDEX-OWNER-VIEWER/1'
-            && state.access==='owner-ip-allowlist'
+            && ['owner-ip-allowlist','owner-browser-grant'].includes(state.access)
             && state.trading_enabled===false
             && state.public_redistribution_allowed===false
             && Array.isArray(state.symbols)
@@ -189,7 +190,14 @@ export class QsynMarketsFeed extends QsynCryptoFeed {
         // deletion and yesterday appears to vanish during polling/repair.
         // _historicalDay uses the authenticated bounded per-date cache, so
         // normal tail refreshes do not repeatedly call Upstox for old bars.
-        const needsPrior=(Number.isFinite(req.from)&&req.from<bars[0].time) ||
+        // The widget may omit both from and countBack on first render.
+        // Still request one prior real session; otherwise a full-day response
+        // (375 bars) permanently hides yesterday until a manual pan/zoom.
+        // Also preserve a previously displayed prior day on tail/repair calls.
+        const existing=this.personalBars.get(instrument.id);
+        const needsPrior=(this.initialPriorSession&&!existing) ||
+          (existing?.some(bar=>bar.time<bars[0].time)??false) ||
+          (Number.isFinite(req.from)&&req.from<bars[0].time) ||
           (req.noCache!==true&&Number.isSafeInteger(req.countBack)&&
             req.countBack>bars.length);
         if(needsPrior){

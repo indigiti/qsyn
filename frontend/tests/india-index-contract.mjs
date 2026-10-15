@@ -238,7 +238,7 @@ try {
 
   // Initial history must include the preceding trading weekday without
   // depending on the wall clock date at which CI is executed.
-  const continuity=new QsynMarketsFeed();
+  const continuity=new QsynMarketsFeed(()=>{}, {initialPriorSession:true});
   continuity._proof=async()=>({csrf:'a'.repeat(64),suggested_day_ist:'2026-10-09'});
   const dayParts=new Intl.DateTimeFormat('en-GB',{
     timeZone:'Asia/Kolkata',year:'numeric',month:'2-digit',day:'2-digit'
@@ -271,8 +271,8 @@ try {
     requestedDays.push(day);
     return buildDay(day);
   };
-  const contiguous=await continuity.getBars({...indexReq,countBack:750});
-  assert.equal(contiguous.length,750,'initial window includes two sessions');
+  const contiguous=await continuity.getBars(indexReq);
+  assert.equal(contiguous.length,750,'chart widget without countBack still gets two real sessions');
   assert.equal(contiguous[0].time,epoch(previousDay+'T09:15:00+05:30'));
   assert.equal(contiguous.at(-1).time,epoch(currentDay+'T15:29:00+05:30'));
   assert.deepEqual(requestedDays,[previousDay]);
