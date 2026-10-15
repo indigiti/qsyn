@@ -446,6 +446,20 @@ try {
   await page.unroute('**/qsyn/api/v1/admin/upstox/discover');
   await page.getByRole('button',{name:'Terminal operations',exact:true}).first().click();
   await page.getByRole('heading',{name:'Service administration'}).waitFor();
+  await page.getByRole('button',{name:'Enable crypto depth'}).waitFor({state:'visible'});
+  await page.getByRole('button',{name:'Disable crypto depth'}).waitFor({state:'visible'});
+  if(await page.getByRole('button',{name:'Enable crypto depth'}).isEnabled() ||
+     await page.getByRole('button',{name:'Disable crypto depth'}).isEnabled())
+    throw new Error('Depth toggle became actionable without a verified Rust runtime');
+  const depthState=await page.request.get(origin+'/qsyn/api/v1/admin/rust/depth');
+  if(depthState.status()!==200|| (await depthState.json()).engine_online!==false)
+    throw new Error('Depth status failed to report offline Rust');
+  const depthUnauthorized=await page.request.post(origin+'/qsyn/api/v1/admin/rust/depth',{
+    data:{enabled:true},
+  });
+  if(depthUnauthorized.status()!==403)
+    throw new Error('Depth toggle did not require authenticated admin CSRF');
+
   if(await page.getByRole('button',{name:'Restart',exact:true}).count() &&
      await page.getByRole('button',{name:'Restart',exact:true}).isEnabled())
     throw new Error('Public visitor gained Rust restart privileges');
