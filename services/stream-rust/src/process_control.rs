@@ -249,6 +249,35 @@ pub fn demo_ws_enabled() -> bool {
     }
 }
 
+/// Operator-controlled public crypto order-book snapshot gate.
+/// Read on each request so the authenticated dashboard can change state
+/// without restarting Rust or reconfiguring Supervisor. The flag is owned
+/// by the private shared runtime, never by the public web directory.
+pub fn crypto_depth_enabled() -> bool {
+    let fallback = env::var("QSYN_CRYPTO_DEPTH_ENABLED").as_deref() == Ok("1");
+    let Ok(dir) = runtime_dir() else {
+        return false;
+    };
+    let flag = dir.join("crypto-depth.flag");
+    let meta = match fs::symlink_metadata(&flag) {
+        Ok(meta) => meta,
+        Err(err) if err.kind() == io::ErrorKind::NotFound => return fallback,
+        Err(_) => return false,
+    };
+    if !meta.file_type().is_file()
+        || meta.file_type().is_symlink()
+        || meta.len() > 16
+        || (std::os::unix::fs::PermissionsExt::mode(&meta.permissions()) & 0o077) != 0
+    {
+        return false;
+    }
+    match fs::read_to_string(flag).ok().as_deref().map(str::trim) {
+        Some("1") => true,
+        Some("0") => false,
+        _ => false,
+    }
+}
+
 pub fn is_managed(args: &[String]) -> bool {
     args == [DAEMON_ARG]
 }
