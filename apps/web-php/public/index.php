@@ -296,9 +296,8 @@ if ($route === '/qsyn/api/v1/studio/market' || $route === '/qsyn/api/v1/studio/b
     }
 }
 
-// Owner-private index data without a QSYN administrator login. This route is
-// inaccessible by default and requires an explicit edge-protected owner IP.
-if (preg_match('#^/qsyn/api/v1/owner-index/(status|history|ticket)$#',$route,$ownerIndex)) {
+// Owner-private index data requires a verified legacy IP or browser grant.
+if (preg_match('#^/qsyn/api/v1/owner-index/(status|history|ticket|browser-grant)$#',$route,$ownerIndex)) {
     $src=dirname(__DIR__).'/src';
     if (!is_file($src.'/PersonalIndexViewer.php'))
         $src=dirname(__DIR__,2).'/private_html/qsyn/app/src';
@@ -311,6 +310,7 @@ if (preg_match('#^/qsyn/api/v1/owner-index/(status|history|ticket)$#',$route,$ow
     header('X-QSYN-Request-ID: '.bin2hex(random_bytes(8)));
     [$status,$payload]=match($ownerIndex[1]){
         'status'=>\QSYN\MarketData\PersonalIndexViewer::status($_SERVER),
+        'browser-grant'=>\QSYN\MarketData\PersonalIndexViewer::browserGrant($_SERVER),
         'history'=>\QSYN\MarketData\PersonalIndexGateway::history($_SERVER,true),
         'ticket'=>\QSYN\MarketData\PersonalIndexGateway::ticket($_SERVER,true),
     };
