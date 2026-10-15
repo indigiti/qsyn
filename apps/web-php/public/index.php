@@ -156,6 +156,91 @@ if ($route === '/qsyn/api/v1/crypto/bars' || $route === '/qsyn/api/v1/crypto/hea
     respond($data);
 }
 
+// Opt-in public crypto order-book snapshots; explicitly independent of candles.
+// One fixed loopback Rust service, four allowed markets and no client-set URLs.
+if ($route === '/qsyn/api/v1/crypto/depth') {
+    if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'GET') {
+        header('Allow: GET');
+        respond(['error' => 'method_not_allowed'], 405);
+    }
+    $exchange = $_GET['exchange'] ?? '';
+    $market = $_GET['market'] ?? '';
+    $symbol = $_GET['symbol'] ?? '';
+    $limit = $_GET['limit'] ?? '20';
+    if ($exchange !== 'BINANCE'
+        || !in_array($market, ['spot','perp'], true)
+        || !in_array($symbol, ['BTCUSDT','ETHUSDT'], true)
+        || !is_string($limit) || !ctype_digit($limit)
+        || (int)$limit < 5 || (int)$limit > 100) {
+        respond(['error' => 'unsupported_crypto_depth_instrument'], 422);
+    }
+    $params = http_build_query(compact('exchange', 'market', 'symbol', 'limit'), '', '&', PHP_QUERY_RFC3986);
+    $ch = curl_init('http://127.0.0.1:10251/api/v1/crypto/depth?' . $params);
+    if ($ch === false) respond(['error' => 'crypto_depth_unavailable'], 503);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true, CURLOPT_CONNECTTIMEOUT => 2,
+        CURLOPT_TIMEOUT => 7, CURLOPT_FOLLOWLOCATION => false,
+        CURLOPT_HTTPHEADER => ['Accept: application/json'],
+    ]);
+    $body = curl_exec($ch);
+    $status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    if ($status === 503) respond(['error' => 'crypto_depth_disabled'], 503);
+    if ($status !== 200 || !is_string($body) || strlen($body) > 65536) {
+        respond(['error' => 'crypto_depth_unavailable'], 503);
+    }
+    try {
+        $data = json_decode($body, true, 20, JSON_THROW_ON_ERROR);
+    } catch (\Throwable) {
+        respond(['error' => 'crypto_depth_invalid_response'], 502);
+    }
+    if (!is_array($data)
+        || ($data['schema'] ?? '') !== 'QSYN-PUBLIC-CRYPTO-DEPTH/1'
+        || ($data['source'] ?? '') !== 'exchange_public'
+        || ($data['exchange'] ?? '') !== $exchange
+        || ($data['market'] ?? '') !== $market
+        || ($data['symbol'] ?? '') !== $symbol
+        || ($data['trading_enabled'] ?? true) !== false
+        || ($data['feed_transport'] ?? '') !== 'rest_snapshot'
+        || !isset($data['last_update_id'], $data['received_at_ms'], $data['age_ms'])
+        || !is_int($data['last_update_id']) || $data['last_update_id'] < 1
+        || !is_int($data['received_at_ms']) || !is_int($data['age_ms'])
+        || $data['age_ms'] > 5000
+        || !is_array($data['depth']['bids'] ?? null)
+        || !is_array($data['depth']['asks'] ?? null)
+        || count($data['depth']['bids']) < 1 || count($data['depth']['asks']) < 1
+        || count($data['depth']['bids']) > (int)$limit
+        || count($data['depth']['asks']) > (int)$limit) {
+        respond(['error' => 'crypto_depth_invalid_response'], 502);
+    }
+    // Ensure upstream book values are finite, positive and sorted; never
+    // relay an arbitrary or malformed feed payload to a chart consumer.
+    foreach (['bids','asks'] as $side) {
+        $previous = $side === 'bids' ? INF : 0.0;
+        foreach ($data['depth'][$side] as $row) {
+            if (!is_array($row) || !isset($row['price'],$row['size'],$row['notional_usdt'])
+                || !is_numeric($row['price']) || !is_numeric($row['size'])
+                || !is_numeric($row['notional_usdt'])) {
+                respond(['error' => 'crypto_depth_invalid_response'], 502);
+            }
+            $price = (float)$row['price'];
+            $size = (float)$row['size'];
+            $notional = (float)$row['notional_usdt'];
+            if (!is_finite($price) || !is_finite($size) || !is_finite($notional)
+                || $price <= 0 || $size <= 0 || $notional <= 0
+                || ($side === 'bids' && $price >= $previous)
+                || ($side === 'asks' && $price <= $previous)) {
+                respond(['error' => 'crypto_depth_invalid_response'], 502);
+            }
+            $previous = $price;
+        }
+    }
+    if ($data['depth']['bids'][0]['price'] >= $data['depth']['asks'][0]['price']) {
+        respond(['error' => 'crypto_depth_invalid_response'], 502);
+    }
+    respond($data);
+}
+
 // Integrated Options Studio is a public, read-only simulation, NOT a broker API.
 // It is independent of disabled-by-default user/account/fixture features.
 if ($route === '/qsyn/api/v1/studio/market' || $route === '/qsyn/api/v1/studio/bars'
