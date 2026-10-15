@@ -9,25 +9,25 @@ configuration for the **data-viewing** path. It does **not** publish exchange
 data or authorize any trading action. Keep HTTPS and licensed display rights.
 
 1. Provision a fresh random, **exactly 32-byte** key outside public_html at
-   \`$QSYN_RUNTIME_DIR/owner-index-grant.key\`, owned by the serving PHP user,
-   file mode \`0600\`. Set \`QSYN_RUNTIME_DIR\` to its existing canonical private
+   `$QSYN_RUNTIME_DIR/owner-index-grant.key`, owned by the serving PHP user,
+   file mode `0600`. Set `QSYN_RUNTIME_DIR` to its existing canonical private
    directory. Never commit, print, or expose the key.
-2. Set \`QSYN_PERSONAL_INDEX_OWNER_VIEWER=1\`,
-   \`QSYN_PERSONAL_INDEX_ENABLED=1\` and
-   \`QSYN_PERSONAL_INDEX_OWNER_AUTH=browser_grant\`. Leave both trading flags off.
+2. Set `QSYN_PERSONAL_INDEX_OWNER_VIEWER=1`,
+   `QSYN_PERSONAL_INDEX_ENABLED=1` and
+   `QSYN_PERSONAL_INDEX_OWNER_AUTH=browser_grant`. Leave both trading flags off.
    The legacy IP and host settings are ignored **only in this mode**.
 3. Sign in to the protected QSYN terminal, open
-   \`/qsyn/terminal/diagnostics\`, and select
+   `/qsyn/terminal/diagnostics`, and select
    **Authorize this browser for index charts**. This verifies the administrator
    session and CSRF and sets an HttpOnly, Secure, SameSite=Strict,
-   host-only, seven-day read-only cookie scoped to \`/qsyn/\`.
+   host-only, seven-day read-only cookie scoped to `/qsyn/`.
 4. Open the homepage on **the same browser and site**. The signed cookie
    survives changes of public IP. Other browsers receive 403 until authorized
    individually. Renew before expiry using the Diagnostics action.
 
 Test failures: a missing, expired, tampered or wrongly signed cookie, a missing
 key, inactive owner viewer, HTTP outside loopback tests, and trading-enabled
-mode must all deny \`/owner-index/status\`, history, and ticket issuance.
+mode must all deny `/owner-index/status`, history, and ticket issuance.
 Changing or deleting the server signing key immediately invalidates previously
 authorized browsers. The administrator, OMS, Upstox OAuth, Rust service and
 exchange entitlement restrictions remain unchanged.
