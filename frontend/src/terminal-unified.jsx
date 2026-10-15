@@ -552,12 +552,20 @@ export function OperationsWorkspace(){
   const [confirmPassword,setConfirmPassword]=useState(''),[busy,setBusy]=useState(false);
   const [message,setMessage]=useState('Only authenticated administrators can control the Rust process.');
   const [demo,setDemo]=useState(null);
+  const [depth,setDepth]=useState(null);
   const refresh=useCallback(async()=>{
     try {
       const data=await jsonGet(ADMIN_API+'state');
       setState(data);
-      setDemo(data.authenticated
-        ?await jsonGet(ADMIN_API+'demo').catch(()=>null):null);
+      if(data.authenticated){
+        const [demoState,depthState]=await Promise.all([
+          jsonGet(ADMIN_API+'demo').catch(()=>null),
+          jsonGet(ADMIN_API+'depth').catch(()=>null),
+        ]);
+        setDemo(demoState);setDepth(depthState);
+      }else{
+        setDemo(null);setDepth(null);
+      }
     }catch{setMessage('Administrator status unavailable');}
   },[]);
   useEffect(()=>{void refresh();},[refresh]);
@@ -616,6 +624,30 @@ export function OperationsWorkspace(){
             {action==='start'?'Start':action==='stop'?'Stop':'Restart'}</button>)}
           <button className="terminal-action terminal-secondary-action" disabled={busy}
             onClick={()=>void execute(async()=>{await adminPost('logout',{},csrf);setMessage('Administrator signed out.');})}>Sign out</button>
+        </div>
+        <div className="qt-operations-warning">
+          <strong>Binance order-book snapshots</strong>
+          <p role="status">State: {depth?.enabled===true?'Enabled':depth?.enabled===false?'Disabled':'Unverified'} ·
+            {' '}Runtime: {depth?.engine_online?'online':'offline'} · Read-only; no trades or historical liquidity.
+            {' '}Changes apply without a Rust restart.</p>
+          {!depth?.supported&&<p>Upgrade the running Rust binary to this release before using the controls.</p>}
+          {depth?.supported&&!depth?.writable&&<p>Private QSYN runtime must be writable by the PHP application.</p>}
+          <div className="qt-actions">
+            {['Enable','Disable'].map((name,i)=>{
+              const enabled=i===0;
+              return <button key={name} className="terminal-action terminal-secondary-action"
+                disabled={busy||!csrf||!depth?.supported||!depth?.writable||!depth?.engine_online||
+                  depth.enabled===enabled}
+                onClick={()=>{
+                  if(enabled&&!window.confirm('Enable public Binance BTC/ETH order-book snapshots? Confirm exchange display permissions and intended access restrictions.'))return;
+                  void execute(async()=>{
+                    const result=await adminPost('depth',{enabled},csrf);
+                    if(result.enabled!==enabled)throw Error('depth_state_not_confirmed');
+                    setMessage('Crypto depth '+(enabled?'enabled':'disabled')+' and verified by Rust.');
+                  });
+                }}>{name} crypto depth</button>;
+            })}
+          </div>
         </div>
         <div className="qt-actions"><span>Demo WebSocket mode: {demo?.enabled===true?'Enabled':demo?.enabled===false?'Disabled':'Unverified'}</span>
           {['Enable','Disable'].map((name,i)=><button key={name} className="terminal-action terminal-secondary-action"
