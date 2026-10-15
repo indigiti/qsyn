@@ -46,6 +46,8 @@ export function DiagnosticsWorkspace(){
   const [last,setLast]=useState(0);
   const [adminAudit,setAdminAudit]=useState(null),[auditError,setAuditError]=useState('');
   const [auditLoading,setAuditLoading]=useState(false);
+  const [ownerGrantMessage,setOwnerGrantMessage]=useState('');
+  const [ownerGrantBusy,setOwnerGrantBusy]=useState(false);
   const probe=useCallback(async(signal)=>{
     setBusy(true);
     const values=await Promise.all(VENUES.map(async ex=>{
@@ -108,6 +110,25 @@ export function DiagnosticsWorkspace(){
       setAuditError(ctl.signal.aborted?'DIAGNOSTICS_REQUEST_TIMEOUT':'DIAGNOSTICS_NETWORK_ERROR');
     }finally{clearTimeout(timeout);setAuditLoading(false);}
   }
+  async function authorizeOwnerBrowser(){
+    setOwnerGrantBusy(true);setOwnerGrantMessage('');
+    try{
+      const path='/qsyn/api/v1/owner-index/browser-grant';
+      const context=await jsonGet(path);
+      if(context.schema!=='QSYN-OWNER-BROWSER-GRANT/1'||context.grant_ready!==true
+        ||!/^[a-f0-9]{64}$/.test(context.csrf))
+        throw Error('OWNER_BROWSER_GRANT_NOT_PROVISIONED');
+      const response=await fetch(path,{
+        method:'POST',credentials:'same-origin',cache:'no-store',
+        headers:{'Accept':'application/json','X-CSRF-Token':context.csrf}
+      });
+      const data=await response.json();
+      if(!response.ok||data.schema!=='QSYN-OWNER-BROWSER-GRANT/1'
+        ||data.browser_authorized!==true)throw Error(data.error||'OWNER_BROWSER_GRANT_FAILED');
+      setOwnerGrantMessage('This browser is authorized for read-only index charts through '+data.expires_at_utc+'. Open the homepage to view indices.');
+    }catch(error){setOwnerGrantMessage(String(error.message||'OWNER_BROWSER_GRANT_FAILED'));}
+    finally{setOwnerGrantBusy(false);}
+  }
   async function sampleDemo() {
     setSample({message:'Checking demo stream…'});
     try {
@@ -136,10 +157,14 @@ export function DiagnosticsWorkspace(){
           onClick={()=>void runAdminAudit()}><RefreshCw size={15}/>
           {auditLoading?' Checking…':'Run secure audit'}</button>
         <button type="button" className="terminal-action terminal-secondary-action"
+          disabled={ownerGrantBusy} onClick={()=>void authorizeOwnerBrowser()}>
+          <ShieldCheck size={15}/>{ownerGrantBusy?' Authorizing…':' Authorize this browser for index charts'}</button>
+        <button type="button" className="terminal-action terminal-secondary-action"
           disabled={!adminAudit}
           onClick={()=>void navigator.clipboard?.writeText(JSON.stringify(adminAudit,null,2))}>
           <ClipboardCopy size={15}/> Copy diagnostic JSON</button>
       </div>
+      {ownerGrantMessage&&<p role="status">{ownerGrantMessage}</p>}
       {auditError&&<p role="alert">Diagnostic check: {auditError}.
         The admin login or server connectivity may need attention.</p>}
       {adminAudit&&<div>
