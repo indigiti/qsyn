@@ -19,6 +19,7 @@ final class RustCryptoDepthConfig
             || !is_dir($root) || is_link($root) || !is_writable($root)) {
             return null;
         }
+        clearstatcache(true, $root);
         $mode = @fileperms($root);
         if ($mode === false || ($mode & 0002) !== 0) {
             return null;
