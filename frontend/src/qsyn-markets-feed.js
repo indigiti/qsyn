@@ -73,7 +73,7 @@ export class QsynMarketsFeed extends QsynCryptoFeed {
         if(owner?.ok){
           const state=await owner.json();
           if(state.schema==='QSYN-PERSONAL-INDEX-OWNER-VIEWER/1'
-            && state.access==='owner-ip-allowlist'
+            && ['owner-ip-allowlist','owner-browser-grant'].includes(state.access)
             && state.trading_enabled===false
             && state.public_redistribution_allowed===false
             && Array.isArray(state.symbols)
