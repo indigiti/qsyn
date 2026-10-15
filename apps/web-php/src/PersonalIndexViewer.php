@@ -4,8 +4,8 @@ namespace QSYN\MarketData;
 
 /**
  * Optional personal, non-public index chart access without administrator login.
- * Both Cloudways edge and application must restrict requests to the owner's
- * fixed IP. No user-supplied forwarding headers or arbitrary provider symbols.
+ * Legacy deployments retain the fixed-IP gate. An administrator can instead
+ * authorize this browser using a private signed cookie and no fixed IP.
  */
 final class PersonalIndexViewer
 {
@@ -22,26 +22,74 @@ final class PersonalIndexViewer
 
     private static function browserGrantMode(): bool
     {
-        return getenv('QSYN_PERSONAL_INDEX_OWNER_AUTH') === 'browser_grant';
+        $mode=getenv('QSYN_PERSONAL_INDEX_OWNER_AUTH');
+        // Explicit legacy mode remains supported; otherwise a private key
+        // created through the protected admin action opts into browser mode.
+        return $mode === 'browser_grant'
+            || ($mode !== 'legacy_ip' && self::signingKey() !== null);
     }
 
-    /** Independent 0600 signing key outside public_html; never reuse Upstox tokens. */
+    /** Existing private runtime; never create keys in release/public paths. */
+    private static function runtimeDir(bool $writable=false): ?string
+    {
+        $root=(string)(getenv('QSYN_RUNTIME_DIR') ?: dirname(__DIR__,2).'/runtime');
+        if (!str_starts_with($root,'/') || $root==='/'
+            || str_contains($root,'/..') || str_contains($root,'//')
+            || is_link($root) || realpath($root)!==$root
+            || preg_match('~/(?:public_html|webroot|www)(?:/|$)~i',$root)
+            || !is_dir($root) || ($writable && !is_writable($root)))
+            return null;
+        $mode=@fileperms($root);
+        return $mode!==false && ($mode & 0002)===0 ? $root : null;
+    }
+
+    private static function keyPath(bool $writable=false): ?string
+    {
+        $root=self::runtimeDir($writable);
+        return $root===null ? null : $root.'/owner-index-grant.key';
+    }
+
+    /** 32-byte key owned by PHP, mode 0600; never reuse Upstox tokens. */
     private static function signingKey(): ?string
     {
-        $root = getenv('QSYN_RUNTIME_DIR');
-        if (!is_string($root) || !str_starts_with($root, '/')
-            || $root === '/' || str_contains($root, '/..') || str_contains($root, '//')
-            || is_link($root) || realpath($root) !== $root
-            || preg_match('~/(?:public_html|webroot|www)(?:/|$)~i', $root)) return null;
-        $file = $root.'/owner-index-grant.key';
-        clearstatcache(true, $file);
-        $stat = @lstat($file);
-        if ($stat === false || !is_file($file) || is_link($file)
-            || ($stat['mode'] & 0077) !== 0 || $stat['size'] !== 32
-            || (function_exists('posix_geteuid') && $stat['uid'] !== posix_geteuid()))
+        $file=self::keyPath();
+        if ($file===null) return null;
+        clearstatcache(true,$file);
+        $stat=@lstat($file);
+        if ($stat===false || !is_file($file) || is_link($file)
+            || ($stat['mode'] & 0077)!==0 || $stat['size']!==32
+            || (function_exists('posix_geteuid') && $stat['uid']!==posix_geteuid()))
             return null;
-        $key = @file_get_contents($file);
-        return is_string($key) && strlen($key) === 32 ? $key : null;
+        $key=@file_get_contents($file);
+        return is_string($key)&&strlen($key)===32 ? $key : null;
+    }
+
+    /**
+     * Admin-CSRF-only first run. Exclusive creation never truncates an existing
+     * key or overwrites other browser grants; missing private runtime fails shut.
+     */
+    private static function provisionSigningKey(): ?string
+    {
+        $existing=self::signingKey();
+        if ($existing!==null) return $existing;
+        $path=self::keyPath(true);
+        if ($path===null || file_exists($path) || is_link($path)) return null;
+        $previous=umask(0077);
+        try {
+            $stream=@fopen($path,'x+b');
+        } finally {
+            umask($previous);
+        }
+        if ($stream===false) return self::signingKey(); // concurrent first grant
+        $ok=false;
+        try {
+            $key=random_bytes(32);
+            $ok=fwrite($stream,$key)===32 && fflush($stream) && @chmod($path,0600);
+        } finally {
+            fclose($stream);
+            if (!$ok) @unlink($path);
+        }
+        return $ok ? self::signingKey() : null;
     }
 
     private static function secureTransport(array $server): bool
@@ -56,7 +104,11 @@ final class PersonalIndexViewer
     private static function sharedChecks(): array
     {
         return [
-            'viewer_enabled'=>getenv('QSYN_PERSONAL_INDEX_OWNER_VIEWER') === '1',
+            // An explicit 0 always disables grants. Otherwise the
+            // administrator-created private key enables personal-owner mode.
+            'viewer_enabled'=>getenv('QSYN_PERSONAL_INDEX_OWNER_VIEWER') === '1'
+                || (getenv('QSYN_PERSONAL_INDEX_OWNER_VIEWER') !== '0'
+                    && self::browserGrantMode()),
             'history_gateway_enabled'=>getenv('QSYN_PERSONAL_INDEX_ENABLED') !== '0',
             'trading_disabled'=>getenv('QSYN_TRADING_ENABLED') !== '1'
                 && getenv('QSYN_ENABLE_LIVE_TRADING') !== '1',
@@ -92,20 +144,27 @@ final class PersonalIndexViewer
         \QSYN\Admin\RustAdmin::boot();
         if (!\QSYN\Admin\RustAdmin::authenticated())
             return [401, ['error'=>'admin_login_required']];
-        if (!self::browserGrantMode() || !self::sharedChecks()['viewer_enabled']
-            || !self::sharedChecks()['history_gateway_enabled']
-            || !self::sharedChecks()['trading_disabled'])
+        if (getenv('QSYN_PERSONAL_INDEX_OWNER_VIEWER')==='0'
+            || getenv('QSYN_PERSONAL_INDEX_OWNER_AUTH')==='legacy_ip'
+            || getenv('QSYN_PERSONAL_INDEX_ENABLED')==='0'
+            || getenv('QSYN_TRADING_ENABLED')==='1'
+            || getenv('QSYN_ENABLE_LIVE_TRADING')==='1')
             return [503, ['error'=>'owner_browser_grant_disabled']];
-        $key = self::signingKey();
-        if ($method === 'GET') return [200, [
+        $key=self::signingKey();
+        if ($method==='GET') return [200, [
             'schema'=>'QSYN-OWNER-BROWSER-GRANT/1',
-            'grant_ready'=>$key !== null,
+            'grant_ready'=>$key!==null || self::keyPath(true)!==null,
+            'key_provisioned'=>$key!==null,
             'csrf'=>\QSYN\Admin\RustAdmin::csrf(),
             'trading_enabled'=>false,
         ]];
         if (!\QSYN\Admin\RustAdmin::verifyCsrf((string)($server['HTTP_X_CSRF_TOKEN'] ?? '')))
             return [403, ['error'=>'csrf_invalid']];
-        if ($key === null) return [503, ['error'=>'owner_browser_grant_key_unavailable']];
+        // No manual Cloudways env or key setup: only the authenticated admin
+        // can create the private key. All viewer/history APIs stay denied until
+        // this authorization is complete.
+        $key=self::provisionSigningKey();
+        if ($key===null) return [503, ['error'=>'owner_browser_grant_key_unavailable']];
         $expiry=time()+self::BROWSER_GRANT_SECONDS;
         $value=$expiry.'.'.bin2hex(random_bytes(16));
         $value.='.'.hash_hmac('sha256', 'QSYN-OWNER-INDEX-V1:'.$value, $key);
