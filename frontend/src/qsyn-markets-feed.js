@@ -50,9 +50,10 @@ export function aggregatePersonalIndexBars(bars,interval){
  * The same Rust history and WSS adapter powers the private Markets chart.
  */
 export class QsynMarketsFeed extends QsynCryptoFeed {
-  constructor(onState=()=>{}, {onBlockedIndex=()=>{}}={}){
+  constructor(onState=()=>{}, {onBlockedIndex=()=>{},initialPriorSession=false}={}){
     super(onState);
     this.onBlockedIndex=onBlockedIndex;
+    this.initialPriorSession=initialPriorSession;
     this.personalProof=null;
     this.personalFeeds=new Map();
     this.personalBars=new Map();
@@ -194,7 +195,8 @@ export class QsynMarketsFeed extends QsynCryptoFeed {
         // (375 bars) permanently hides yesterday until a manual pan/zoom.
         // Also preserve a previously displayed prior day on tail/repair calls.
         const existing=this.personalBars.get(instrument.id);
-        const needsPrior=!existing || existing.some(bar=>bar.time<bars[0].time) ||
+        const needsPrior=(this.initialPriorSession&&!existing) ||
+          (existing?.some(bar=>bar.time<bars[0].time)??false) ||
           (Number.isFinite(req.from)&&req.from<bars[0].time) ||
           (req.noCache!==true&&Number.isSafeInteger(req.countBack)&&
             req.countBack>bars.length);
