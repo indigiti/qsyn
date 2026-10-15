@@ -53,7 +53,7 @@ fn slots() -> &'static Mutex<HashMap<String, SnapshotSlot>> {
 }
 
 fn enabled() -> bool {
-    std::env::var("QSYN_CRYPTO_DEPTH_ENABLED").ok().as_deref() == Some("1")
+    crate::process_control::crypto_depth_enabled()
 }
 
 fn valid(req: &DepthRequest) -> bool {
