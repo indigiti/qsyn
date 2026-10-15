@@ -3,6 +3,7 @@
 //! Provider OHLCV comes from validated exchange REST history and native
 //! public upstream WebSocket candles, with REST refresh on reconnect.
 mod stream;
+mod depth;
 use axum::{
     extract::Query,
     http::StatusCode,
@@ -630,6 +631,7 @@ pub fn router() -> Router {
     Router::new()
         .route("/api/v1/crypto/bars", get(bars))
         .route("/api/v1/crypto/health", get(health))
+        .route("/api/v1/crypto/depth", get(depth::depth))
 }
 #[cfg(test)]
 mod tests {
