@@ -2,40 +2,44 @@
 
 The homepage at `/qsyn/` is already unauthenticated and read-only. This change separates its **owner-only** NSE/BSE chart authorization from the terminal administrator login; it does **not** create a publicly redistributable Upstox index feed.
 
-## Alternative: authorize the owner browser without a fixed IP
+## Single-owner QSYN: one-click browser authorization (recommended)
 
-Opt-in browser grant mode removes the static owner IP and owner hostname
-configuration for the **data-viewing** path. It does **not** publish exchange
-data or authorize any trading action. Keep HTTPS and licensed display rights.
+With a successful deployment and an existing writable QSYN **private** runtime,
+the owner does **not** need to configure a static IP, a pinned hostname, a
+separate service, or PHP environment variables just to authorize the chart.
 
-1. Provision a fresh random, **exactly 32-byte** key outside public_html at
-   `$QSYN_RUNTIME_DIR/owner-index-grant.key`, owned by the serving PHP user,
-   file mode `0600`. Set `QSYN_RUNTIME_DIR` to its existing canonical private
-   directory. Never commit, print, or expose the key.
-2. Set `QSYN_PERSONAL_INDEX_OWNER_VIEWER=1`,
-   `QSYN_PERSONAL_INDEX_ENABLED=1` and
-   `QSYN_PERSONAL_INDEX_OWNER_AUTH=browser_grant`. Leave both trading flags off.
-   The legacy IP and host settings are ignored **only in this mode**.
-3. Sign in to the protected QSYN terminal, open
-   `/qsyn/terminal/diagnostics`, and select
-   **Authorize this browser for index charts**. This verifies the administrator
-   session and CSRF and sets an HttpOnly, Secure, SameSite=Strict,
-   host-only, seven-day read-only cookie scoped to `/qsyn/`.
-4. Open the homepage on **the same browser and site**. The signed cookie
-   survives changes of public IP. Other browsers receive 403 until authorized
-   individually. Renew before expiry using the Diagnostics action.
+1. Sign in to the existing password-protected Terminal and open
+   `/qsyn/terminal/diagnostics`.
+2. Click **Enable personal index charts in this browser**. A same-origin,
+   admin-session + CSRF-protected POST first creates a random 32-byte
+   `owner-index-grant.key` in the existing private runtime, mode `0600`
+   and owned by PHP. It does **not** modify the Upstox session or enable orders.
+3. QSYN issues an HttpOnly, host-only, Secure, SameSite=Strict signed cookie
+   under `/qsyn/` for seven days and checks that the browser actually
+   received authorization. Then open `/qsyn/` and select the index.
+4. A second browser must be explicitly authorized. Changing public IP does not
+   invalidate the first authorized browser. Repeating the action renews
+   authorization but never replaces an existing signing key.
 
-Test failures: a missing, expired, tampered or wrongly signed cookie, a missing
-key, inactive owner viewer, HTTP outside loopback tests, and trading-enabled
-mode must all deny `/owner-index/status`, history, and ticket issuance.
-Changing or deleting the server signing key immediately invalidates previously
-authorized browsers. The administrator, OMS, Upstox OAuth, Rust service and
-exchange entitlement restrictions remain unchanged.
+Prerequisites: the existing QSYN runtime directory must be canonical,
+non-public, non-symlinked, not world-writable, writable by PHP and accessible
+through `QSYN_RUNTIME_DIR` or the application's private default runtime.
+When it cannot be safely written, the authorization action fails closed with
+`OWNER_PRIVATE_RUNTIME_NOT_WRITABLE`; do not write keys to `public_html`.
 
-**Operational caveat:** This mode protects chart access via a browser-held
-authorization; it must only be used for data you are entitled to display in
-this manner. Do not share or publicly redistribute licensed NSE/BSE data.
-The key must be provisioned on Cloudways separately from deployment.
+The following **explicit disables always win**:
+`QSYN_PERSONAL_INDEX_OWNER_VIEWER=0`, `QSYN_PERSONAL_INDEX_ENABLED=0`,
+`QSYN_PERSONAL_INDEX_OWNER_AUTH=legacy_ip`, trading enabled, or
+an unavailable HTTPS/same-origin administrator session. No automatic public
+feed, unlocked OMS route, new Rust worker, or independent licensed display
+right is created. Existing fixed-IP environments still function unless the
+administrator opts into browser-grant mode.
+
+Advanced Cloudways provisioning remains an option: configure
+`QSYN_PERSONAL_INDEX_OWNER_AUTH=browser_grant`,
+`QSYN_PERSONAL_INDEX_OWNER_VIEWER=1` and manually create the same private
+32-byte signing key if you cannot allow PHP to write the private runtime.
+The admin password and all broker credentials stay server-side.
 
 ## Configuration
 

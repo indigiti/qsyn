@@ -71,4 +71,63 @@ putenv('QSYN_PERSONAL_INDEX_OWNER_AUTH');
 putenv('QSYN_RUNTIME_DIR');
 unset($_COOKIE['QSYN_OWNER_INDEX']);
 
+// First-run personal-only setup: a protected admin click provisions its own
+// private signing key without PHP-FPM environment edits or fixed-IP settings.
+require_once __DIR__.'/../src/RustAdmin.php';
+use QSYN\Admin\RustAdmin;
+$setupRoot=sys_get_temp_dir().'/qsyn-oneclick-'.bin2hex(random_bytes(7));
+mkdir($setupRoot,0700);chmod($setupRoot,0700);
+putenv('QSYN_RUNTIME_DIR='.$setupRoot);
+putenv('QSYN_PERSONAL_INDEX_OWNER_AUTH'); // no manual mode setting
+putenv('QSYN_PERSONAL_INDEX_OWNER_VIEWER'); // no manual enable setting
+putenv('QSYN_CONTROL_ENABLED=1');
+putenv('QSYN_ADMIN_PASSWORD_HASH='.password_hash('ci-personal-owner-secret', PASSWORD_DEFAULT));
+unset($_COOKIE['QSYN_OWNER_INDEX']);
+$setupServer=['HTTP_HOST'=>'127.0.0.1:18080','HTTPS'=>'on',
+    'REMOTE_ADDR'=>'203.0.113.54','REQUEST_METHOD'=>'GET'];
+$_SERVER=$setupServer;
+checkOwner(PersonalIndexViewer::status($setupServer)[0]===403,'unprovisioned_guest_must_deny');
+checkOwner(PersonalIndexViewer::browserGrant($setupServer)[0]===401,'setup_requires_admin');
+checkOwner(!file_exists($setupRoot.'/owner-index-grant.key'),'anonymous_did_not_create_key');
+RustAdmin::boot();
+checkOwner(RustAdmin::attempt('ci-personal-owner-secret'),'setup_admin_login');
+$csrf=RustAdmin::csrf();
+[$readyCode,$ready]=PersonalIndexViewer::browserGrant($setupServer);
+checkOwner($readyCode===200 && $ready['grant_ready']===true
+    && $ready['key_provisioned']===false,'first_run_can_provision_key');
+$post=[...$setupServer,'REQUEST_METHOD'=>'POST','HTTP_X_CSRF_TOKEN'=>$csrf];
+checkOwner(PersonalIndexViewer::browserGrant([...$post,'HTTP_X_CSRF_TOKEN'=>'bad'])[0]===403,
+    'first_run_rejects_bad_csrf');
+checkOwner(!file_exists($setupRoot.'/owner-index-grant.key'),'bad_csrf_created_key');
+[$grantCode,$grant]=PersonalIndexViewer::browserGrant($post);
+checkOwner($grantCode===200 && $grant['browser_authorized']===true,
+    'first_run_authorized');
+$keyFile=$setupRoot.'/owner-index-grant.key';
+checkOwner(is_file($keyFile) && filesize($keyFile)===32,'first_run_generated_32_byte_key');
+checkOwner((fileperms($keyFile)&0077)===0,'first_run_key_not_private');
+$firstKey=file_get_contents($keyFile);
+checkOwner(PersonalIndexViewer::browserGrant($post)[0]===200
+    && file_get_contents($keyFile)===$firstKey,'repeat_setup_did_not_rotate_key');
+checkOwner(PersonalIndexViewer::status($setupServer)[0]===403,
+    'unapproved_browser_still_denied');
+$expiry=time()+600;
+$part=$expiry.'.'.bin2hex(random_bytes(16));
+$_COOKIE['QSYN_OWNER_INDEX']=$part.'.'.hash_hmac('sha256',
+    'QSYN-OWNER-INDEX-V1:'.$part,$firstKey);
+checkOwner(PersonalIndexViewer::status([...$setupServer,'REMOTE_ADDR'=>'203.0.113.99'])[0]===200,
+    'authorized_browser_survives_ip_change');
+putenv('QSYN_PERSONAL_INDEX_OWNER_VIEWER=0');
+checkOwner(PersonalIndexViewer::status($setupServer)[0]===403,'explicit_disable_overrides_browser_key');
+checkOwner(PersonalIndexViewer::browserGrant($post)[0]===503,'explicit_disable_blocks_setup');
+putenv('QSYN_PERSONAL_INDEX_OWNER_VIEWER');
+unlink($keyFile);
+putenv('QSYN_PERSONAL_INDEX_OWNER_AUTH=legacy_ip');
+checkOwner(PersonalIndexViewer::browserGrant($post)[0]===503,'legacy_mode_blocks_auto_setup');
+putenv('QSYN_PERSONAL_INDEX_OWNER_AUTH');
+@unlink($keyFile);rmdir($setupRoot);
+putenv('QSYN_RUNTIME_DIR');
+putenv('QSYN_CONTROL_ENABLED');
+putenv('QSYN_ADMIN_PASSWORD_HASH');
+unset($_COOKIE['QSYN_OWNER_INDEX']);
+
 echo "PASS owner-only index viewer, all 7 symbols, denied by default, no trading\n";
