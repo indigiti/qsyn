@@ -163,6 +163,7 @@ function HomepageChart({ theme, embedded = false,
   const firstSymbol=initialExchange===cryptoDefault.exchange+':'+cryptoDefault.market && initialSymbol===cryptoDefault.symbol ? savedSelection.symbol : initialSymbol;
   const [message,setMessage]=useState('Connecting public exchange candles…');
   const [blockedIndex,setBlockedIndex]=useState(null);
+  const [timeframeNotice,setTimeframeNotice]=useState('');
   const nativeWorkspaces=useMemo(()=>cryptoNativeWorkspaceStore(),[]);
   const nativeWatchlists=useMemo(()=>nativeCryptoWatchlists(),[]);
   useEffect(()=>{
@@ -172,6 +173,7 @@ function HomepageChart({ theme, embedded = false,
     // a refresh or changes interval; a known AbortError is not an app fault.
     const feed=new QsynMarketsFeed(s=>{if(active)setMessage(s);},{
       onBlockedIndex:index=>{if(active)setBlockedIndex(index);},
+      onUnsupportedCryptoSecond:()=>{if(active)setTimeframeNotice('Crypto 1-second candles are unsupported. Select 1m or higher.');},
       initialPriorSession:true,
     });
     const grid=createChartGrid(host.current,{
@@ -228,15 +230,18 @@ function HomepageChart({ theme, embedded = false,
           bindIndicatorLegendSettings(widget,mountIndicatorSettings));
       }
     };
-    let seenWidget=null,stopWick=()=>{},stopViewport=()=>{};
+    const observers=new Map();
     const syncWick=()=>{
       if(!active)return;
-      const widget=grid.active()?.widget;
-      if(widget===seenWidget)return;
-      stopWick();stopViewport();
-      seenWidget=widget;
-      stopWick=observeWickScienceBackfill(widget,feed);
-      stopViewport=observeIndexChartViewport(widget);
+      const widgets=new Set(grid.cells().map(cell=>cell.widget).filter(Boolean));
+      for(const [widget,stops] of observers){
+        if(!widgets.has(widget)){stops.forEach(stop=>stop());observers.delete(widget);}
+      }
+      for(const widget of widgets){
+        if(!observers.has(widget))observers.set(widget,[
+          observeWickScienceBackfill(widget,feed),observeIndexChartViewport(widget)
+        ]);
+      }
     };
     const updateGrid=()=>{syncToolbar();syncLegendSettings();syncWick();};
     const offActive=grid.on('active',updateGrid);
@@ -249,7 +254,9 @@ function HomepageChart({ theme, embedded = false,
     });
     updateGrid();
     return ()=>{
-      active=false;stopWick();stopViewport();
+      active=false;
+      for(const stops of observers.values())stops.forEach(stop=>stop());
+      observers.clear();
       for(const stop of legendStops.values())stop();legendStops.clear();
       observer.disconnect();offActive?.();offLayout?.();stopSelection();
       window.removeEventListener('resize',syncToolbar);
@@ -273,11 +280,12 @@ function HomepageChart({ theme, embedded = false,
     <div className="qsyn-home-chart">
       <div className="qsyn-crypto-grid" ref={host}/>
       <span className="qsyn-screenreader-status" role="status" aria-live="polite">{message}</span>
+      {timeframeNotice&&!blockedIndex&&<div className="qsyn-india-entitlement-note" role="status">{timeframeNotice}</div>}
       {blockedIndex && <div className="qsyn-india-entitlement-note" role="status">
         <div><strong>{blockedIndex.name}</strong><span>Index source unavailable</span></div>
         <p>The server did not authorize an owner-only index data session for this
-          browser. The homepage needs no QSYN login, but the owner IP, hostname,
-          HTTPS and private Upstox source must pass the server-side checks.
+          browser. The homepage needs no QSYN login, but an owner-browser grant or
+          configured legacy owner access and a private Upstox source are required.
           For the exact redacted failure code, open the protected
           <a href="/qsyn/terminal/diagnostics"> Diagnostics &amp; feed health</a>
           page and run the secure audit.</p>

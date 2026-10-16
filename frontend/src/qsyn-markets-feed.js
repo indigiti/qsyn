@@ -1,11 +1,21 @@
 import {QsynCryptoFeed} from './crypto-feed.js';
 import {findIndiaIndex,searchIndiaIndexes} from './india-index-catalog.js';
 import {PrivateIndexHistoryFeed,todayIst} from './personal-index-feed.js';
+import {findProviderGaps,mergeProviderGapBars,shouldAttemptGap} from './market-gap-recovery.js';
 
 const INTERVALS=new Set(['1s','1m','5m','15m','1h','1d']);
 const STEPS=Object.freeze({'1m':60,'5m':300,'15m':900,'1h':3600,'1d':86400});
 const IST_OFFSET=19800;
 const PROOF='/qsyn/api/v1/admin/upstox/index-history-proof';
+function indexBucketStart(time,interval){
+  const step=STEPS[interval];
+  const istDay=Math.floor((time+IST_OFFSET)/86400)*86400-IST_OFFSET;
+  const open=istDay+9*3600+15*60;
+  return interval==='1d'?istDay:interval==='1h'
+    ?open+Math.floor((time-open)/step)*step
+    :Math.floor((time+IST_OFFSET)/step)*step-IST_OFFSET;
+}
+
 
 export function validIndexBarTime(time,interval){
   if(!Number.isSafeInteger(time)||time<=0)return false;
@@ -49,10 +59,38 @@ export function aggregatePersonalIndexBars(bars,interval){
  * Analytics Token. No NSE/BSE OHLC endpoint is exposed to anonymous users.
  * The same Rust history and WSS adapter powers the private Markets chart.
  */
+export function latestPersonalIndexBar(bars,interval){
+  if(!INTERVALS.has(interval)||!Array.isArray(bars))
+    throw Error('INVALID_INDEX_INTERVAL');
+  if(!bars.length)return null;
+  const last=bars[bars.length-1];
+  if(interval==='1m'||interval==='1s')return last;
+  const time=indexBucketStart(last.time,interval);
+  let first=bars.length-1;
+  while(first>0&&indexBucketStart(bars[first-1].time,interval)===time)
+    first--;
+  let high=-Infinity,low=Infinity,volume=0;
+  for(let i=first;i<bars.length;i++){
+    const bar=bars[i];
+    high=Math.max(high,bar.high);
+    low=Math.min(low,bar.low);
+    volume+=bar.volume;
+  }
+  return {time,open:bars[first].open,high,low,close:last.close,volume};
+}
+
+/** Public cryptocurrencies remain public. India index candles require an
+ * existing QSYN administrator cookie plus the separately stored personal
+ * Analytics Token. No NSE/BSE OHLC endpoint is exposed to anonymous users.
+ * The same Rust history and WSS adapter powers the private Markets chart.
+ */
+
 export class QsynMarketsFeed extends QsynCryptoFeed {
-  constructor(onState=()=>{}, {onBlockedIndex=()=>{},initialPriorSession=false}={}){
+  constructor(onState=()=>{}, {onBlockedIndex=()=>{},onUnsupportedCryptoSecond=()=>{},initialPriorSession=false}={}){
     super(onState);
     this.onBlockedIndex=onBlockedIndex;
+    this.onUnsupportedCryptoSecond=onUnsupportedCryptoSecond;
+    this.indexGapAttempts=new Map();
     this.initialPriorSession=initialPriorSession;
     this.personalProof=null;
     this.personalFeeds=new Map();
@@ -129,6 +167,11 @@ export class QsynMarketsFeed extends QsynCryptoFeed {
         this.activeIndex=null;
         this.onBlockedIndex(null);
       }
+      if(req.interval==='1s'){
+        this.onUnsupportedCryptoSecond(req);
+        this.onState('Crypto 1-second candles unavailable; choose 1m or higher');
+        return [];
+      }
       return super.getBars(req);
     }
     if(this.closed||!INTERVALS.has(req.interval))return [];
@@ -178,6 +221,9 @@ export class QsynMarketsFeed extends QsynCryptoFeed {
       if(bars.length){
         // Cache the CURRENT date independently from any older candles, so
         // a later daily-page lookup cannot corrupt this day's OHLC.
+        const cached=this.indexHistoryDays.get(instrument.id+':'+day)||[];
+        bars=mergeProviderGapBars(bars,cached,60,{index:true});
+        bars=await this._repairIndexDay(instrument,day,bars,proof,req.signal);
         this._cacheIndexDay(instrument,day,bars);
         // OpenAlgo can initially request 1600 bars but the Upstox reader
         // serves only ONE trading day. Explicitly load the preceding weekday
@@ -271,9 +317,9 @@ export class QsynMarketsFeed extends QsynCryptoFeed {
     while(this.indexHistoryDays.size>64)
       this.indexHistoryDays.delete(this.indexHistoryDays.keys().next().value);
   }
-  async _historicalDay(instrument,day,csrf,signal,ownerViewer=false){
+  async _historicalDay(instrument,day,csrf,signal,ownerViewer=false,refresh=false){
     const key=instrument.id+':'+day;
-    if(this.indexHistoryDays.has(key))return this.indexHistoryDays.get(key);
+    if(!refresh&&this.indexHistoryDays.has(key))return this.indexHistoryDays.get(key);
     if((this.indexHistoryMisses.get(key)||0)>Date.now())return [];
     this.indexHistoryMisses.delete(key);
     const temp=new PrivateIndexHistoryFeed({symbol:instrument.symbol,day,csrf,ownerViewer,
@@ -295,6 +341,21 @@ export class QsynMarketsFeed extends QsynCryptoFeed {
       return bars;
     }finally{
       temp.destroy();
+    }
+  }
+  async _repairIndexDay(instrument,day,bars,proof,signal){
+    const gaps=findProviderGaps(bars,60,{index:true,limit:1});
+    if(!gaps.length)return bars;
+    const key=instrument.id+':'+day;
+    if(!shouldAttemptGap(this.indexGapAttempts,key))return bars;
+    try{
+      const fresh=await this._historicalDay(instrument,day,proof.csrf,signal,proof.ownerViewer===true,true);
+      const merged=mergeProviderGapBars(bars,fresh,60,{index:true});
+      this._cacheIndexDay(instrument,day,merged);
+      return merged;
+    }catch(error){
+      if(!signal?.aborted)this.onState(instrument.name+' · provider gap recovery unavailable');
+      return bars;
     }
   }
   /** Native OpenAlgo left-scroll cursor. One private Rust 1m trading-day
@@ -378,8 +439,8 @@ export class QsynMarketsFeed extends QsynCryptoFeed {
         prior.push(minuteBar);
       if(prior.length>400)prior.shift();
       this.personalBars.set(instrument.id,prior);
-      const bars=aggregatePersonalIndexBars(prior,req.interval);
-      if(bars.length)onBar(bars.at(-1),{provisional:true});
+      const latest=latestPersonalIndexBar(prior,req.interval);
+      if(latest)onBar(latest,{provisional:true});
     });
   }
   async searchSymbols({query}){
@@ -388,6 +449,7 @@ export class QsynMarketsFeed extends QsynCryptoFeed {
   }
   destroy(){
     for(const session of this.personalFeeds.values())session.destroy();
+    this.indexGapAttempts.clear();
     this.personalFeeds.clear();
     this.personalBars.clear();
     this.historyStatus.clear();
