@@ -202,7 +202,48 @@ try {
   }),{message:'PRIVATE_INDEX_ACCESS_DENIED'});
   assert.equal(parsedDeniedResponse,false,'deny before decoding non-JSON edge responses');
   privateFeed.destroy();
-  console.log('PASS: provider gap recovery and revoked private index isolation');
+
+  // A request that started while access was valid cannot repopulate the
+  // private day cache after an owner grant expires during network IO.
+  let finishHistory;
+  const late=new QsynMarketsFeed();
+  const lateInstrument=findIndiaIndex('NSE_INDEX:index','NIFTY');
+  globalThis.fetch=()=>new Promise(resolve=>{finishHistory=resolve;});
+  const oldRequest=late._historicalDay(lateInstrument,'2026-10-09',null,undefined,true);
+  late._invalidateIndexAccess(lateInstrument);
+  finishHistory({status:200,ok:true,json:async()=>({
+    schema:'QSYN-UPSTOX-RUST-INDEX-HISTORY/1',
+    source:'upstox_v3_rust_history',
+    symbol:'NIFTY',day_ist:'2026-10-09',interval:'1m',
+    trading_enabled:false,public_redistribution_allowed:false,
+    bars:[makeBar(fri)]
+  })});
+  assert.deepEqual(await oldRequest,[],'late approved response is discarded after revoke');
+  assert.equal(late.indexHistoryDays.size,0,'late response must not repopulate cache');
+  late.destroy();
+
+  // An in-flight gap replay must not republish private OHLC after access
+  // loss, even when the socket delivered the last valid candle first.
+  const race=new QsynMarketsFeed();
+  let liveHandler,finishReplay,lateResync=0;
+  race.personalFeeds.set(lateInstrument.id,{
+    day:'2026-10-09',destroy:()=>{},
+    subscribeBars:(_req,onBar)=>{liveHandler=onBar;return ()=>{};}
+  });
+  race.personalBars.set(lateInstrument.id,[makeBar(fri)]);
+  race._proof=async()=>({ownerViewer:true,csrf:null});
+  race._historicalDay=()=>new Promise(resolve=>{finishReplay=resolve;});
+  const stopRace=race.subscribeBars(req,()=>{}, {onResync:()=>{lateResync++;}});
+  liveHandler(makeBar(fri+180));
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(typeof finishReplay,'function');
+  race._invalidateIndexAccess(lateInstrument);
+  finishReplay([makeBar(fri),makeBar(fri+60),makeBar(fri+120),makeBar(fri+180)]);
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(lateResync,0,'late gap replay cannot resync after revoked access');
+  assert.equal(race.personalBars.has(lateInstrument.id),false);
+  stopRace();race.destroy();
+  console.log('PASS: provider gap recovery, revoked grants and in-flight isolation');
 } finally {
   globalThis.fetch=realFetch;
 }
