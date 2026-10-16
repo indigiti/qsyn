@@ -241,7 +241,7 @@ export class QsynMarketsFeed extends QsynCryptoFeed {
       if(!bars.length){
         const start=Math.floor(Date.parse(requestedDay+'T00:00:00+05:30')/1000);
         for(let d=1;d<=7 && !bars.length;d++){
-          if(this.closed||req.signal?.aborted)return [];
+          if(this.closed||req.signal?.aborted||invalid())return [];
           const local=new Date((start-d*86400+IST_OFFSET)*1000);
           if(local.getUTCDay()===0||local.getUTCDay()===6)continue;
           const olderDay=local.toISOString().slice(0,10);
@@ -253,7 +253,7 @@ export class QsynMarketsFeed extends QsynCryptoFeed {
           }
         }
       }
-      if(this.closed||req.signal?.aborted)return [];
+      if(this.closed||req.signal?.aborted||invalid())return [];
       let previousCoverage='';
       if(bars.length){
         // Cache the CURRENT date independently from any older candles, so
@@ -294,7 +294,7 @@ export class QsynMarketsFeed extends QsynCryptoFeed {
             try{
               const older=await this._historicalDay(
                 instrument,olderDay,proof.csrf,req.signal,proof.ownerViewer===true);
-              if(this.closed||req.signal?.aborted)return [];
+              if(this.closed||req.signal?.aborted||invalid())return [];
               if(older.length){
                 bars=[...older.filter(bar=>bar.time<bars[0].time),...bars];
               }else{
@@ -335,7 +335,7 @@ export class QsynMarketsFeed extends QsynCryptoFeed {
       this.onBlockedIndex(null);
       return result;
     }catch(error){
-      if(this.closed||req.signal?.aborted||error?.name==='AbortError')return [];
+      if(this.closed||req.signal?.aborted||invalid()||error?.name==='AbortError')return [];
       this.onState(['QSYN_ADMIN_LOGIN_REQUIRED','PRIVATE_INDEX_ACCESS_DENIED'].includes(error?.message)
         ?'Index source unavailable for this viewer'
         :error?.message==='UPSTOX_PERSONAL_TOKEN_UNAVAILABLE'
@@ -446,7 +446,7 @@ export class QsynMarketsFeed extends QsynCryptoFeed {
     try{
       const proof=await this._proof();
       for(let d=0;d<10 && collected.size<rawTarget;d++){
-        if(this.closed||req.signal?.aborted)return {bars:[],hasMore:false};
+        if(this.closed||req.signal?.aborted||invalid())return {bars:[],hasMore:false};
         const cursor=candidateStart-d*86400;
         if(cursor<minTime)break;
         const date=new Date(cursor*1000+IST_OFFSET*1000);
@@ -462,7 +462,7 @@ export class QsynMarketsFeed extends QsynCryptoFeed {
           if(bar.time<req.before)collected.set(bar.time,bar);
         }
       }
-      if(this.closed||req.signal?.aborted)return {bars:[],hasMore:false};
+      if(this.closed||req.signal?.aborted||invalid())return {bars:[],hasMore:false};
       const raw=[...collected.values()].sort((a,b)=>a.time-b.time);
       let bars=aggregatePersonalIndexBars(raw,req.interval)
         .filter(b=>b.time<req.before);
@@ -476,8 +476,18 @@ export class QsynMarketsFeed extends QsynCryptoFeed {
         (oldestSearched===null||oldestSearched>'2022-01-01'),
         ...(nextBefore===undefined?{}:{nextBefore})};
     }catch(error){
-      if(this.closed||req.signal?.aborted||error?.name==='AbortError')
+      if(this.closed||req.signal?.aborted||invalid()||error?.name==='AbortError')
         return {bars:[],hasMore:false};
+      if(error?.message==='PRIVATE_INDEX_ACCESS_DENIED'){
+        this._invalidateIndexAccess(instrument);
+        const blockedKey=instrument.id+':authorization';
+        if(this.lastBlockedKey!==blockedKey){
+          this.lastBlockedKey=blockedKey;
+          this.onBlockedIndex({exchange:instrument.exchange,symbol:instrument.symbol,
+            name:instrument.name,reason:'authorization'});
+        }
+        return {bars:[],hasMore:false};
+      }
       this.onState(instrument.name+' · older Rust history unavailable; retry later');
       throw error;
     }
@@ -490,7 +500,9 @@ export class QsynMarketsFeed extends QsynCryptoFeed {
     const scoped={...req,exchange:'UPSTOX_PERSONAL',symbol:instrument.symbol,
       interval:req.interval==='1s'?'1s':'1m'};
     let active=true;
+    const epoch=this._epoch(instrument),valid=()=>active&&!this.closed&&this._epoch(instrument)===epoch;
     const stop=session.subscribeBars(scoped,minuteBar=>{
+      if(!valid())return;
       if(req.interval==='1s'){
         onBar(minuteBar,{provisional:true});
         return;
@@ -507,16 +519,16 @@ export class QsynMarketsFeed extends QsynCryptoFeed {
       this.personalBars.set(instrument.id,prior);
       const latest=latestPersonalIndexBar(prior,req.interval);
       if(latest)onBar(latest,{provisional:true});
-      if(liveGap&&typeof opts.onResync==='function'&&active){
+      if(liveGap&&typeof opts.onResync==='function'&&valid()){
         const key=instrument.id+':'+session.day;
         if(!this.indexGapPending.has(key)){
           const pending=(async()=>{
             const proof=await this._proof();
-            if(!active||this.closed||req.signal?.aborted)return;
+            if(!valid()||req.signal?.aborted)return;
             const before=this.personalBars.get(instrument.id)||[];
             const fixed=await this._repairIndexDay(instrument,session.day,
               before,proof,req.signal);
-            if(!active||this.closed||req.signal?.aborted||
+            if(!valid()||req.signal?.aborted||
               fixed.length<=before.length)return;
             // Live ticks may have arrived while the day replay was in flight.
             // Merge into that NEWER live window and ask the chart to reload
@@ -525,7 +537,16 @@ export class QsynMarketsFeed extends QsynCryptoFeed {
             this.personalBars.set(instrument.id,
               mergeProviderGapBars(current,fixed,60,{index:true}));
             opts.onResync?.();
-          })().catch(()=>{}).finally(()=>{this.indexGapPending.delete(key);});
+          })().catch(error=>{
+            if(valid()&&error?.message==='PRIVATE_INDEX_ACCESS_DENIED'){
+              this._invalidateIndexAccess(instrument);
+              this.lastBlockedKey=instrument.id+':authorization';
+              this.onBlockedIndex({exchange:instrument.exchange,symbol:instrument.symbol,
+                name:instrument.name,reason:'authorization'});
+            }
+          }).finally(()=>{
+            if(this.indexGapPending.get(key)===pending)this.indexGapPending.delete(key);
+          });
           this.indexGapPending.set(key,pending);
         }
       }
