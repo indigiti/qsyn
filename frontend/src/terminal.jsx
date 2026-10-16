@@ -282,13 +282,19 @@ function HomepageChart({ theme, embedded = false,
       <span className="qsyn-screenreader-status" role="status" aria-live="polite">{message}</span>
       {timeframeNotice&&!blockedIndex&&<div className="qsyn-india-entitlement-note" role="status">{timeframeNotice}</div>}
       {blockedIndex && <div className="qsyn-india-entitlement-note" role="status">
-        <div><strong>{blockedIndex.name}</strong><span>Index source unavailable</span></div>
-        <p>The server did not authorize an owner-only index data session for this
-          browser. The homepage needs no QSYN login, but an owner-browser grant or
-          configured legacy owner access and a private Upstox source are required.
-          For the exact redacted failure code, open the protected
-          <a href="/qsyn/terminal/diagnostics"> Diagnostics &amp; feed health</a>
-          page and run the secure audit.</p>
+        <div><strong>{blockedIndex.name}</strong><span>{blockedIndex.reason==='history'
+          ? 'Index history temporarily unavailable' : 'Index source unavailable'}</span></div>
+        {blockedIndex.reason==='history'
+          ? <p>The private Rust Upstox historical source could not be refreshed.
+              Previously verified candles are preserved where available. Check
+              <a href="/qsyn/terminal/diagnostics"> Diagnostics &amp; feed health</a>
+              and retry the chart; missing bars are never estimated.</p>
+          : <p>The server did not authorize an owner-only index data session for this
+              browser, or the private token is unavailable. The homepage needs no QSYN login,
+              but a valid owner-browser grant or configured legacy owner access
+              and a private Upstox source are required. See
+              <a href="/qsyn/terminal/diagnostics"> Diagnostics &amp; feed health</a>
+              for the redacted failure code.</p>}
       </div>}
     </div>
   </main>;
