@@ -144,6 +144,21 @@ export class QsynMarketsFeed extends QsynCryptoFeed {
     }
     return this.personalProof;
   }
+  _invalidateIndexAccess(instrument){
+    const id=instrument.id,scope=id+':';
+    this.personalProof=null;
+    this.personalFeeds.get(id)?.destroy();
+    this.personalFeeds.delete(id);
+    this.personalBars.delete(id);
+    this.historyStatus.delete(id);
+    for(const key of this.indexHistoryDays.keys())
+      if(key.startsWith(scope))this.indexHistoryDays.delete(key);
+    for(const key of this.indexHistoryMisses.keys())
+      if(key.startsWith(scope))this.indexHistoryMisses.delete(key);
+    for(const key of this.indexGapAttempts.keys())
+      if(key.startsWith(scope))this.indexGapAttempts.delete(key);
+    this.indexGapPending.delete(id);
+  }
   _session(instrument,day,csrf,ownerViewer=false){
     const key=instrument.id;
     const old=this.personalFeeds.get(key);
@@ -155,7 +170,19 @@ export class QsynMarketsFeed extends QsynCryptoFeed {
       symbol:instrument.symbol,day,csrf,ownerViewer,
       onStatus:msg=>{if(!this.closed)this.onState(instrument.name+' · '+msg);},
       onLive:msg=>{
-        if(!this.closed)this.onState((this.historyStatus.get(key)||
+        if(this.closed)return;
+        if(msg==='PRIVATE_INDEX_ACCESS_DENIED'){
+          this._invalidateIndexAccess(instrument);
+          const blockedKey=key+':authorization';
+          if(this.lastBlockedKey!==blockedKey){
+            this.lastBlockedKey=blockedKey;
+            this.onBlockedIndex({exchange:instrument.exchange,
+              symbol:instrument.symbol,name:instrument.name,reason:'authorization'});
+          }
+          this.onState(instrument.name+' · private index access expired; reauthorize');
+          return;
+        }
+        this.onState((this.historyStatus.get(key)||
           instrument.name+' · awaiting private Rust history')+' · '+msg);
       }
     });
@@ -300,13 +327,15 @@ export class QsynMarketsFeed extends QsynCryptoFeed {
       return result;
     }catch(error){
       if(this.closed||req.signal?.aborted||error?.name==='AbortError')return [];
-      this.onState(error?.message==='QSYN_ADMIN_LOGIN_REQUIRED'
+      this.onState(['QSYN_ADMIN_LOGIN_REQUIRED','PRIVATE_INDEX_ACCESS_DENIED'].includes(error?.message)
         ?'Index source unavailable for this viewer'
         :error?.message==='UPSTOX_PERSONAL_TOKEN_UNAVAILABLE'
           ?'Private index · store or verify your Upstox Analytics Token'
           :'Private index · Rust 1-minute Upstox history unavailable; retry after checking your account');
-      const reason=error?.message==='QSYN_ADMIN_LOGIN_REQUIRED'?'authorization':
+      const reason=['QSYN_ADMIN_LOGIN_REQUIRED','PRIVATE_INDEX_ACCESS_DENIED'].includes(error?.message)?'authorization':
         error?.message==='UPSTOX_PERSONAL_TOKEN_UNAVAILABLE'?'token':'history';
+      const accessDenied=reason==='authorization'||reason==='token';
+      if(accessDenied)this._invalidateIndexAccess(instrument);
       const blockedKey=instrument.id+':'+reason;
       this.activeIndex=instrument.id;
       if(this.lastBlockedKey!==blockedKey){
@@ -318,7 +347,7 @@ export class QsynMarketsFeed extends QsynCryptoFeed {
       // failure occurs. Never synthesize a replacement candle or wipe the
       // previously displayed session simply because the replay failed.
       const retained=this.personalBars.get(instrument.id)||[];
-      if(retained.length && req.interval!=='1s' && req.noCache!==true){
+      if(!accessDenied && retained.length && req.interval!=='1s' && req.noCache!==true){
         this.onState(instrument.name+' · showing last verified candles; history source unavailable');
         return aggregatePersonalIndexBars(retained,req.interval);
       }
