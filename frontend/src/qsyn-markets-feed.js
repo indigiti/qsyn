@@ -1,11 +1,21 @@
 import {QsynCryptoFeed} from './crypto-feed.js';
 import {findIndiaIndex,searchIndiaIndexes} from './india-index-catalog.js';
 import {PrivateIndexHistoryFeed,todayIst} from './personal-index-feed.js';
+import {findProviderGaps,mergeProviderGapBars,shouldAttemptGap} from './market-gap-recovery.js';
 
 const INTERVALS=new Set(['1s','1m','5m','15m','1h','1d']);
 const STEPS=Object.freeze({'1m':60,'5m':300,'15m':900,'1h':3600,'1d':86400});
 const IST_OFFSET=19800;
 const PROOF='/qsyn/api/v1/admin/upstox/index-history-proof';
+function indexBucketStart(time,interval){
+  const step=STEPS[interval];
+  const istDay=Math.floor((time+IST_OFFSET)/86400)*86400-IST_OFFSET;
+  const open=istDay+9*3600+15*60;
+  return interval==='1d'?istDay:interval==='1h'
+    ?open+Math.floor((time-open)/step)*step
+    :Math.floor((time+IST_OFFSET)/step)*step-IST_OFFSET;
+}
+
 
 export function validIndexBarTime(time,interval){
   if(!Number.isSafeInteger(time)||time<=0)return false;
@@ -49,10 +59,39 @@ export function aggregatePersonalIndexBars(bars,interval){
  * Analytics Token. No NSE/BSE OHLC endpoint is exposed to anonymous users.
  * The same Rust history and WSS adapter powers the private Markets chart.
  */
+export function latestPersonalIndexBar(bars,interval){
+  if(!INTERVALS.has(interval)||!Array.isArray(bars))
+    throw Error('INVALID_INDEX_INTERVAL');
+  if(!bars.length)return null;
+  const last=bars[bars.length-1];
+  if(interval==='1m'||interval==='1s')return last;
+  const time=indexBucketStart(last.time,interval);
+  let first=bars.length-1;
+  while(first>0&&indexBucketStart(bars[first-1].time,interval)===time)
+    first--;
+  let high=-Infinity,low=Infinity,volume=0;
+  for(let i=first;i<bars.length;i++){
+    const bar=bars[i];
+    high=Math.max(high,bar.high);
+    low=Math.min(low,bar.low);
+    volume+=bar.volume;
+  }
+  return {time,open:bars[first].open,high,low,close:last.close,volume};
+}
+
+/** Public cryptocurrencies remain public. India index candles require an
+ * existing QSYN administrator cookie plus the separately stored personal
+ * Analytics Token. No NSE/BSE OHLC endpoint is exposed to anonymous users.
+ * The same Rust history and WSS adapter powers the private Markets chart.
+ */
+
 export class QsynMarketsFeed extends QsynCryptoFeed {
-  constructor(onState=()=>{}, {onBlockedIndex=()=>{},initialPriorSession=false}={}){
+  constructor(onState=()=>{}, {onBlockedIndex=()=>{},onUnsupportedCryptoSecond=()=>{},initialPriorSession=false}={}){
     super(onState);
     this.onBlockedIndex=onBlockedIndex;
+    this.onUnsupportedCryptoSecond=onUnsupportedCryptoSecond;
+    this.indexGapAttempts=new Map();
+    this.indexGapPending=new Map();
     this.initialPriorSession=initialPriorSession;
     this.personalProof=null;
     this.personalFeeds=new Map();
@@ -62,6 +101,7 @@ export class QsynMarketsFeed extends QsynCryptoFeed {
     // A genuinely empty provider response is retryable; never retain it forever.
     this.indexHistoryMisses=new Map();
     this.activeIndex=null;
+    this.lastBlockedKey=null;
   }
   async _proof(){
     if(!this.personalProof){
@@ -127,7 +167,13 @@ export class QsynMarketsFeed extends QsynCryptoFeed {
     if(!instrument){
       if(this.activeIndex!==null){
         this.activeIndex=null;
+        this.lastBlockedKey=null;
         this.onBlockedIndex(null);
+      }
+      if(req.interval==='1s'){
+        this.onUnsupportedCryptoSecond(req);
+        this.onState('Crypto 1-second candles unavailable; choose 1m or higher');
+        return [];
       }
       return super.getBars(req);
     }
@@ -136,8 +182,9 @@ export class QsynMarketsFeed extends QsynCryptoFeed {
       const proof=await this._proof();
       if(this.closed||req.signal?.aborted)return [];
       this.activeIndex=instrument.id;
-      this.onBlockedIndex(null);
       if(req.interval==='1s'){
+        this.lastBlockedKey=null;
+        this.onBlockedIndex(null);
         this._session(instrument,todayIst(),proof.csrf,proof.ownerViewer===true);
         this.onState(instrument.name+' · live 1-second bars only; no historical 1s available');
         return [];
@@ -178,6 +225,9 @@ export class QsynMarketsFeed extends QsynCryptoFeed {
       if(bars.length){
         // Cache the CURRENT date independently from any older candles, so
         // a later daily-page lookup cannot corrupt this day's OHLC.
+        const cached=this.indexHistoryDays.get(instrument.id+':'+day)||[];
+        bars=mergeProviderGapBars(bars,cached,60,{index:true});
+        bars=await this._repairIndexDay(instrument,day,bars,proof,req.signal);
         this._cacheIndexDay(instrument,day,bars);
         // OpenAlgo can initially request 1600 bars but the Upstox reader
         // serves only ONE trading day. Explicitly load the preceding weekday
@@ -245,6 +295,8 @@ export class QsynMarketsFeed extends QsynCryptoFeed {
         this.historyStatus.set(instrument.id,label);
         this.onState(label);
       }
+      this.lastBlockedKey=null;
+      this.onBlockedIndex(null);
       return result;
     }catch(error){
       if(this.closed||req.signal?.aborted||error?.name==='AbortError')return [];
@@ -253,10 +305,22 @@ export class QsynMarketsFeed extends QsynCryptoFeed {
         :error?.message==='UPSTOX_PERSONAL_TOKEN_UNAVAILABLE'
           ?'Private index · store or verify your Upstox Analytics Token'
           :'Private index · Rust 1-minute Upstox history unavailable; retry after checking your account');
-      if(this.activeIndex!==instrument.id){
-        this.activeIndex=instrument.id;
+      const reason=error?.message==='QSYN_ADMIN_LOGIN_REQUIRED'?'authorization':
+        error?.message==='UPSTOX_PERSONAL_TOKEN_UNAVAILABLE'?'token':'history';
+      const blockedKey=instrument.id+':'+reason;
+      this.activeIndex=instrument.id;
+      if(this.lastBlockedKey!==blockedKey){
+        this.lastBlockedKey=blockedKey;
         this.onBlockedIndex({exchange:instrument.exchange,
-          symbol:instrument.symbol,name:instrument.name});
+          symbol:instrument.symbol,name:instrument.name,reason});
+      }
+      // Preserve already verified history when a transient source or token
+      // failure occurs. Never synthesize a replacement candle or wipe the
+      // previously displayed session simply because the replay failed.
+      const retained=this.personalBars.get(instrument.id)||[];
+      if(retained.length && req.interval!=='1s' && req.noCache!==true){
+        this.onState(instrument.name+' · showing last verified candles; history source unavailable');
+        return aggregatePersonalIndexBars(retained,req.interval);
       }
       return [];
     }
@@ -271,9 +335,9 @@ export class QsynMarketsFeed extends QsynCryptoFeed {
     while(this.indexHistoryDays.size>64)
       this.indexHistoryDays.delete(this.indexHistoryDays.keys().next().value);
   }
-  async _historicalDay(instrument,day,csrf,signal,ownerViewer=false){
+  async _historicalDay(instrument,day,csrf,signal,ownerViewer=false,refresh=false){
     const key=instrument.id+':'+day;
-    if(this.indexHistoryDays.has(key))return this.indexHistoryDays.get(key);
+    if(!refresh&&this.indexHistoryDays.has(key))return this.indexHistoryDays.get(key);
     if((this.indexHistoryMisses.get(key)||0)>Date.now())return [];
     this.indexHistoryMisses.delete(key);
     const temp=new PrivateIndexHistoryFeed({symbol:instrument.symbol,day,csrf,ownerViewer,
@@ -295,6 +359,21 @@ export class QsynMarketsFeed extends QsynCryptoFeed {
       return bars;
     }finally{
       temp.destroy();
+    }
+  }
+  async _repairIndexDay(instrument,day,bars,proof,signal){
+    const gaps=findProviderGaps(bars,60,{index:true,limit:1});
+    if(!gaps.length)return bars;
+    const key=instrument.id+':'+day;
+    if(!shouldAttemptGap(this.indexGapAttempts,key))return bars;
+    try{
+      const fresh=await this._historicalDay(instrument,day,proof.csrf,signal,proof.ownerViewer===true,true);
+      const merged=mergeProviderGapBars(bars,fresh,60,{index:true});
+      this._cacheIndexDay(instrument,day,merged);
+      return merged;
+    }catch(error){
+      if(!signal?.aborted)this.onState(instrument.name+' · provider gap recovery unavailable');
+      return bars;
     }
   }
   /** Native OpenAlgo left-scroll cursor. One private Rust 1m trading-day
@@ -366,21 +445,48 @@ export class QsynMarketsFeed extends QsynCryptoFeed {
     if(!session||this.closed)return ()=>{};
     const scoped={...req,exchange:'UPSTOX_PERSONAL',symbol:instrument.symbol,
       interval:req.interval==='1s'?'1s':'1m'};
-    return session.subscribeBars(scoped,minuteBar=>{
+    let active=true;
+    const stop=session.subscribeBars(scoped,minuteBar=>{
       if(req.interval==='1s'){
         onBar(minuteBar,{provisional:true});
         return;
       }
       const prior=this.personalBars.get(instrument.id)||[];
+      const previous=prior.at(-1);
+      const liveGap=previous&&findProviderGaps([previous,minuteBar],60,
+        {index:true,limit:1}).length>0;
       if(prior.length&&prior.at(-1).time===minuteBar.time)
         prior[prior.length-1]=minuteBar;
       else if(!prior.length||prior.at(-1).time<minuteBar.time)
         prior.push(minuteBar);
       if(prior.length>400)prior.shift();
       this.personalBars.set(instrument.id,prior);
-      const bars=aggregatePersonalIndexBars(prior,req.interval);
-      if(bars.length)onBar(bars.at(-1),{provisional:true});
+      const latest=latestPersonalIndexBar(prior,req.interval);
+      if(latest)onBar(latest,{provisional:true});
+      if(liveGap&&typeof opts.onResync==='function'&&active){
+        const key=instrument.id+':'+session.day;
+        if(!this.indexGapPending.has(key)){
+          const pending=(async()=>{
+            const proof=await this._proof();
+            if(!active||this.closed||req.signal?.aborted)return;
+            const before=this.personalBars.get(instrument.id)||[];
+            const fixed=await this._repairIndexDay(instrument,session.day,
+              before,proof,req.signal);
+            if(!active||this.closed||req.signal?.aborted||
+              fixed.length<=before.length)return;
+            // Live ticks may have arrived while the day replay was in flight.
+            // Merge into that NEWER live window and ask the chart to reload
+            // its verified history, rather than publishing out-of-order bars.
+            const current=this.personalBars.get(instrument.id)||[];
+            this.personalBars.set(instrument.id,
+              mergeProviderGapBars(current,fixed,60,{index:true}));
+            opts.onResync?.();
+          })().catch(()=>{}).finally(()=>{this.indexGapPending.delete(key);});
+          this.indexGapPending.set(key,pending);
+        }
+      }
     });
+    return ()=>{active=false;stop();};
   }
   async searchSymbols({query}){
     const publicSymbols=await super.searchSymbols({query});
@@ -388,6 +494,8 @@ export class QsynMarketsFeed extends QsynCryptoFeed {
   }
   destroy(){
     for(const session of this.personalFeeds.values())session.destroy();
+    this.indexGapAttempts.clear();
+    this.indexGapPending.clear();
     this.personalFeeds.clear();
     this.personalBars.clear();
     this.historyStatus.clear();

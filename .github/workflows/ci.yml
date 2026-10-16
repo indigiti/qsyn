@@ -277,7 +277,9 @@ jobs:
           node --check ops/verify-stage-chart.mjs
           node --check ops/probe-stage-access.mjs
       - name: Verify provider-backed automatic max history, native paging and polling safety
-        run: node tests/crypto-backfill.test.mjs
+        run: |
+          node tests/crypto-backfill.test.mjs
+          node tests/market-gap-recovery.test.mjs
         working-directory: frontend
       - run: |
           test -s frontend/dist/chart.js
