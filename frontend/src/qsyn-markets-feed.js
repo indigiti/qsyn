@@ -101,6 +101,7 @@ export class QsynMarketsFeed extends QsynCryptoFeed {
     // A genuinely empty provider response is retryable; never retain it forever.
     this.indexHistoryMisses=new Map();
     this.activeIndex=null;
+    this.lastBlockedKey=null;
   }
   async _proof(){
     if(!this.personalProof){
@@ -166,6 +167,7 @@ export class QsynMarketsFeed extends QsynCryptoFeed {
     if(!instrument){
       if(this.activeIndex!==null){
         this.activeIndex=null;
+        this.lastBlockedKey=null;
         this.onBlockedIndex(null);
       }
       if(req.interval==='1s'){
@@ -180,8 +182,9 @@ export class QsynMarketsFeed extends QsynCryptoFeed {
       const proof=await this._proof();
       if(this.closed||req.signal?.aborted)return [];
       this.activeIndex=instrument.id;
-      this.onBlockedIndex(null);
       if(req.interval==='1s'){
+        this.lastBlockedKey=null;
+        this.onBlockedIndex(null);
         this._session(instrument,todayIst(),proof.csrf,proof.ownerViewer===true);
         this.onState(instrument.name+' · live 1-second bars only; no historical 1s available');
         return [];
@@ -292,6 +295,8 @@ export class QsynMarketsFeed extends QsynCryptoFeed {
         this.historyStatus.set(instrument.id,label);
         this.onState(label);
       }
+      this.lastBlockedKey=null;
+      this.onBlockedIndex(null);
       return result;
     }catch(error){
       if(this.closed||req.signal?.aborted||error?.name==='AbortError')return [];
@@ -300,10 +305,22 @@ export class QsynMarketsFeed extends QsynCryptoFeed {
         :error?.message==='UPSTOX_PERSONAL_TOKEN_UNAVAILABLE'
           ?'Private index · store or verify your Upstox Analytics Token'
           :'Private index · Rust 1-minute Upstox history unavailable; retry after checking your account');
-      if(this.activeIndex!==instrument.id){
-        this.activeIndex=instrument.id;
+      const reason=error?.message==='QSYN_ADMIN_LOGIN_REQUIRED'?'authorization':
+        error?.message==='UPSTOX_PERSONAL_TOKEN_UNAVAILABLE'?'token':'history';
+      const blockedKey=instrument.id+':'+reason;
+      this.activeIndex=instrument.id;
+      if(this.lastBlockedKey!==blockedKey){
+        this.lastBlockedKey=blockedKey;
         this.onBlockedIndex({exchange:instrument.exchange,
-          symbol:instrument.symbol,name:instrument.name});
+          symbol:instrument.symbol,name:instrument.name,reason});
+      }
+      // Preserve already verified history when a transient source or token
+      // failure occurs. Never synthesize a replacement candle or wipe the
+      // previously displayed session simply because the replay failed.
+      const retained=this.personalBars.get(instrument.id)||[];
+      if(retained.length && req.interval!=='1s'){
+        this.onState(instrument.name+' · showing last verified candles; history source unavailable');
+        return aggregatePersonalIndexBars(retained,req.interval);
       }
       return [];
     }
