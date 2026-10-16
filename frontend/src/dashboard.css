@@ -30,6 +30,17 @@
 .qd-state-icon{width:29px;height:29px;border-radius:8px;background:var(--q-hover);display:flex;align-items:center;justify-content:center;color:var(--q-muted)}
 .qd-state-icon.blue{color:var(--q-accent)}.qd-state-icon.amber{color:var(--qd-orange)}.qd-state-icon.purple{color:var(--qd-violet)}
 .qd-state-card>strong{font-size:22px;line-height:1.15;letter-spacing:-.04em}.qd-state-card>small{font-size:10px;color:var(--q-muted)}
+/* Browser-scoped data-feed switch: accessible pill with a moving knob. */
+.qd-feed-toggle-row{display:flex;align-items:center;justify-content:space-between;gap:8px;border-top:1px solid var(--q-line);margin-top:10px;padding-top:11px}
+.qd-feed-toggle-caption{font-size:11px;color:var(--q-muted);font-weight:650}
+.qd-feed-toggle{position:relative;flex:none;width:92px;height:34px;border:1px solid var(--q-line);border-radius:30px;background:var(--q-hover);color:var(--q-muted);display:flex;align-items:center;justify-content:space-around;padding:0 5px;cursor:pointer;transition:background .18s ease,border-color .18s ease}
+.qd-feed-toggle.is-on{background:color-mix(in srgb,var(--qd-green),var(--q-card) 78%);border-color:color-mix(in srgb,var(--qd-green),var(--q-line) 38%)}
+.qd-feed-toggle:focus-visible{outline:3px solid var(--q-accent);outline-offset:3px}
+.qd-feed-toggle-text{font-size:9px;font-weight:850;letter-spacing:.065em;z-index:1;width:50%;text-align:center;transition:color .18s ease}
+.qd-feed-toggle.is-on .qd-feed-toggle-text-on,.qd-feed-toggle.is-off .qd-feed-toggle-text-off{color:var(--q-bg)}
+.qd-feed-toggle-thumb{position:absolute;top:3px;bottom:3px;left:3px;width:calc(50% - 5px);border-radius:24px;background:var(--q-fg);box-shadow:0 2px 5px #0003;transition:transform .18s ease}
+.qd-feed-toggle.is-on .qd-feed-toggle-thumb{transform:translateX(calc(100% + 4px))}
+@media(prefers-reduced-motion:reduce){.qd-feed-toggle,.qd-feed-toggle-text,.qd-feed-toggle-thumb{transition:none}}
 .qd-main-grid{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(285px,.8fr);gap:14px;align-items:start;margin-bottom:14px}
 .qd-featured-chart,.qd-surface{padding:17px}.qd-section-header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:13px}.qd-section-header h2{font-size:15px;margin:3px 0 0;letter-spacing:-.018em}.qd-section-header>svg{color:var(--q-muted)}
 .qd-overline{font-size:9px;letter-spacing:.15em;color:var(--q-muted);font-weight:800}

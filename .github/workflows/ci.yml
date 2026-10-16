@@ -280,6 +280,7 @@ jobs:
         run: |
           node tests/crypto-backfill.test.mjs
           node tests/market-gap-recovery.test.mjs
+          node tests/live-market-feed-toggle.test.mjs
         working-directory: frontend
       - run: |
           test -s frontend/dist/chart.js

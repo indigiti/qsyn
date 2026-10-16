@@ -243,6 +243,21 @@ try {
   await page.waitForFunction(()=>document.querySelectorAll('.qd-chart-preview #qsyn-native-chart canvas').length>0);
   if(!(await page.getByRole('heading',{name:'Synthetic premium workspace'}).count()))
     throw new Error('Dashboard lost chart preview');
+  const liveSwitch=page.getByRole('switch',{name:'Live market data feed'});
+  if(await liveSwitch.getAttribute('aria-checked')!=='true')
+    throw Error('Browser live feed switch should initially be enabled');
+  await liveSwitch.click();
+  if(await liveSwitch.getAttribute('aria-checked')!=='false')
+    throw Error('Feed OFF switch did not update its accessible status');
+  if(await page.evaluate(()=>localStorage.getItem('qsyn.live-chart-feed.v1'))!=='0')
+    throw Error('OFF preference not persisted in this browser');
+  await page.reload({waitUntil:'domcontentloaded'});
+  await page.getByRole('heading',{name:'Command center'}).waitFor();
+  if(await page.getByRole('switch',{name:'Live market data feed'}).getAttribute('aria-checked')!=='false')
+    throw Error('Feed OFF state was not restored after reload');
+  await page.getByRole('switch',{name:'Live market data feed'}).click();
+  if(await page.evaluate(()=>localStorage.getItem('qsyn.live-chart-feed.v1'))!=='1')
+    throw Error('Feed ON preference not persisted');
   await page.reload({waitUntil:'domcontentloaded'});
   await page.getByRole('heading',{name:'Command center'}).waitFor();
   await page.waitForFunction(()=>document.querySelectorAll('.qd-chart-preview #qsyn-native-chart canvas').length>0);

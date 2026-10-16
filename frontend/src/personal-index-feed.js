@@ -1,4 +1,5 @@
 import {inRegularIndexSession} from './index-regular-session.js';
+import {subscribeLiveMarketFeed} from './live-market-feed-toggle.js';
 
 /** Match the PHP personal-index gateway for BOTH history and live tickets.
  * Owner-only viewers send a view-only marker; administrator sessions send
@@ -86,6 +87,11 @@ export class PrivateIndexHistoryFeed {
   // Tickets are issued by QSYN admin PHP; the one-year Analytics Token stays
   // in the private runtime and is never put in WS URLs or browser JS.
   subscribeBars(req,onBar){
+    if(this.closed||req.symbol!==this.symbol||req.exchange!=='UPSTOX_PERSONAL'||
+       !['1m','1s'].includes(req.interval)||this.day!==todayIst())return ()=>{};
+    return subscribeLiveMarketFeed(()=>this._subscribeBarsActive(req,onBar));
+  }
+  _subscribeBarsActive(req,onBar){
     if(this.closed||req.symbol!==this.symbol||req.exchange!=='UPSTOX_PERSONAL'||
        !['1m','1s'].includes(req.interval)||this.day!==todayIst())return ()=>{};
     const controller=new AbortController();

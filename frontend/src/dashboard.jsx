@@ -2,23 +2,24 @@
  * QSYN dashboard cockpit: a presentation layer over the existing simulated
  * OpenAlgo Charts widget. No new trading, broker or market-data endpoints.
  */
-import React, { useMemo } from 'react';
+import React, { useMemo, useEffect, useState } from 'react';
 import {
   Activity, ArrowRight, ArrowUpRight, CandlestickChart, CheckCircle2,
   Clock3, Compass, FileClock, FlaskConical, Layers3, LockKeyhole,
   Radio, ShieldCheck, SlidersHorizontal, Wallet, Workflow,
 } from 'lucide-react';
 import { loadBrowserWorkspace, instrumentFor } from './terminal-workspace.js';
+import {liveMarketFeedEnabled,setLiveMarketFeedEnabled,observeLiveMarketFeed} from './live-market-feed-toggle.js';
 import './dashboard.css';
 
 const PRIMARY_PANE = Object.freeze({ id: 'primary', symbol: 'QSYN-NIFTY-STRADDLE' });
 const NOOP = () => {};
 const DEST = '/qsyn/terminal';
 
-function StateCard({ icon: Icon, label, value, detail, tone = 'muted' }) {
+function StateCard({ icon: Icon, label, value, detail, tone = 'muted', children }) {
   return <section className="qd-state-card">
     <div className="qd-state-heading"><span className={'qd-state-icon ' + tone}><Icon size={16}/></span><span>{label}</span></div>
-    <strong>{value}</strong><small>{detail}</small>
+    <strong>{value}</strong><small>{detail}</small>{children}
   </section>;
 }
 function FlowStep({ number, title, description, tone = '' }) {
@@ -37,6 +38,9 @@ function LinkTile({ title, detail, icon: Icon, onClick, href, subtle = false }) 
 }
 
 export function DashboardCockpit({ capabilities, openView, theme, ChartPanel }) {
+  const [liveFeedOn,setLiveFeedOn]=useState(()=>liveMarketFeedEnabled());
+  useEffect(()=>observeLiveMarketFeed(setLiveFeedOn),[]);
+  const toggleFeed=()=>setLiveFeedOn(setLiveMarketFeedEnabled(!liveFeedOn));
   // Only unscoped, simulated watchlist/layout metadata belongs in this panel.
   // Private authenticated workspaces must never be loaded into this UI.
   const workspace = useMemo(() => {
@@ -47,9 +51,8 @@ export function DashboardCockpit({ capabilities, openView, theme, ChartPanel }) 
   const simulatedContract = capabilities?.market_data === 'simulated' &&
     capabilities?.execution_enabled === false &&
     capabilities?.live_trading_enabled === false;
-  const sourceDescription = simulatedContract
-    ? 'Demo capability contract confirmed'
-    : 'Feed capability not verified';
+  // Provider availability is never inferred from the browser feed toggle.
+  void simulatedContract;
   const previewWatchlist = workspace.watchlist.slice(0, 3);
 
   return <div className="terminal-page qd-dashboard">
@@ -83,7 +86,20 @@ export function DashboardCockpit({ capabilities, openView, theme, ChartPanel }) 
     </div>
 
     <div className="qd-states" aria-label="Workspace status">
-      <StateCard icon={Radio} label="Market data" value="Simulated" detail={sourceDescription} tone="blue"/>
+      <StateCard icon={Radio} label="Live chart feed" value={liveFeedOn?'Enabled':'Paused'}
+        detail="Browser only · provider connection checked separately" tone="blue">
+        <div className="qd-feed-toggle-row">
+          <span className="qd-feed-toggle-caption">Live updates</span>
+          <button type="button" role="switch" aria-label="Live market data feed"
+            aria-checked={liveFeedOn} title={liveFeedOn?'Pause live chart updates':'Resume live chart updates'}
+            className={'qd-feed-toggle'+(liveFeedOn?' is-on':' is-off')}
+            onClick={toggleFeed}>
+            <span aria-hidden="true" className="qd-feed-toggle-text qd-feed-toggle-text-off">OFF</span>
+            <span aria-hidden="true" className="qd-feed-toggle-text qd-feed-toggle-text-on">ON</span>
+            <span aria-hidden="true" className="qd-feed-toggle-thumb"/>
+          </button>
+        </div>
+      </StateCard>
       <StateCard icon={Wallet} label="Broker account" value="Not connected" detail="No active authorized session"/>
       <StateCard icon={LockKeyhole} label="Order execution" value="Disabled" detail="Trading approval required" tone="amber"/>
       <StateCard icon={Layers3} label="Saved workspaces" value={String(workspace.layouts.length)}
