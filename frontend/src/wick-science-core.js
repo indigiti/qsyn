@@ -39,9 +39,6 @@ function rollingReach(history, samples, reachRate) {
   const window = history.slice(-samples).sort((a,b) => a-b);
   return nearestRank(window, 100 - reachRate);
 }
-function emptyWithReason(bars, reason) {
-  return {values:nullResults(bars.length), reason};
-}
 
 /**
  * @param {Array<{time:number,open:number,high:number,low:number,close:number}>} bars
@@ -58,7 +55,11 @@ export function calculateWickScience(bars, settings = {}, context = {}) {
   const reachRate = Number(settings.reachRate ?? 80);
   const fraction = Number(settings.zoneFraction ?? 80) / 100;
   const buffer = Number(settings.slBuffer ?? 2);
-  const tickSize = Number(context.tickSize);
+  // Missing instrument metadata must not hide the entirely tick-independent
+  // selected-TF open, percentile MFE zones, or arm markers. Stop-loss and
+  // trade outcomes DO require a real, positive instrument tick.
+  const tickSize = context.tickSize;
+  const hasTickSize = typeof tickSize === 'number' && Number.isFinite(tickSize) && tickSize > 0;
   if (![1,3,5,15].includes(selectedMinutes) || !chartSeconds || chartSeconds >= setupSeconds
       || setupSeconds % chartSeconds !== 0) return {values,reason:'chart_timeframe_must_be_lower'};
   if (!Number.isInteger(samples) || samples < 20 || samples > 1000
@@ -66,9 +67,6 @@ export function calculateWickScience(bars, settings = {}, context = {}) {
       || !Number.isFinite(fraction) || fraction < 0.1 || fraction > 1
       || !Number.isInteger(buffer) || buffer < 0 || buffer > 100) {
     return {values,reason:'invalid_settings'};
-  }
-  if (!Number.isFinite(tickSize) || tickSize <= 0) {
-    return {values,reason:'instrument_tick_size_unavailable'};
   }
   const expected = setupSeconds / chartSeconds;
   const ups = [], downs = [];
@@ -84,12 +82,10 @@ export function calculateWickScience(bars, settings = {}, context = {}) {
         && group.unbroken) {
       ups.push(group.high - group.open);
       downs.push(group.open - group.low);
-    } else {
-      // Never use a rolling history window that silently bridges missing or
-      // partial higher-timeframe candles.
-      ups.length = 0;
-      downs.length = 0;
     }
+    // A partial candle has no sound MFE contribution. Do not erase older,
+    // genuinely completed higher-TF candles: Pine's rolling samples extend
+    // through market closures and do not start over after a provider gap.
   }
   for (let i = 0; i < bars.length; i++) {
     const bar = bars[i];
@@ -142,13 +138,19 @@ export function calculateWickScience(bars, settings = {}, context = {}) {
         }
       } else if (state === 1) {
         if (i > armIndex && bar.open >= setupOpen && bar.low <= setupOpen) {
-          activeStop = Math.max(wickExtreme,bar.open) + buffer*tickSize;
-          entryIndex = i; state = 3; values.shortEntry[i] = 1;
+          if (!hasTickSize) state = 6; // No invented stop or executable signal.
+          else {
+            activeStop = Math.max(wickExtreme,bar.open) + buffer*tickSize;
+            entryIndex = i; state = 3; values.shortEntry[i] = 1;
+          }
         } else wickExtreme = Math.max(wickExtreme,bar.high);
       } else if (state === 2) {
         if (i > armIndex && bar.open <= setupOpen && bar.high >= setupOpen) {
-          activeStop = Math.min(wickExtreme,bar.open) - buffer*tickSize;
-          entryIndex = i; state = 4; values.longEntry[i] = 1;
+          if (!hasTickSize) state = 6;
+          else {
+            activeStop = Math.min(wickExtreme,bar.open) - buffer*tickSize;
+            entryIndex = i; state = 4; values.longEntry[i] = 1;
+          }
         } else wickExtreme = Math.min(wickExtreme,bar.low);
       } else if (state === 3 && i > entryIndex) {
         if (bar.high >= activeStop) {state = 5; values.shortSL[i] = 1;}
@@ -161,7 +163,8 @@ export function calculateWickScience(bars, settings = {}, context = {}) {
     // Match Pine: no stop line on the candle that completed the trade.
     values.activeStop[i] = state === 3 || state === 4 ? activeStop : null;
   }
-  const reason = ups.length >= samples && downs.length >= samples
-    ? null : 'insufficient_completed_setup_history';
+  const reason = ups.length < samples || downs.length < samples
+    ? 'insufficient_completed_setup_history'
+    : !hasTickSize ? 'instrument_tick_size_unavailable' : null;
   return {values,reason};
 }
