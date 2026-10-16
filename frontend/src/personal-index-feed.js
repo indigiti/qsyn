@@ -33,6 +33,10 @@ export class PrivateIndexHistoryFeed {
         method:'POST',credentials:'same-origin',cache:'no-store',
         signal:ctl.signal,headers:personalIndexRequestHeaders(this.ownerViewer,this.csrf),body:JSON.stringify({symbol:this.symbol,day:this.day})
       });
+      // An edge/session denial may be HTML rather than JSON. Check status
+      // before parsing so lost access never looks like an ordinary outage.
+      if(response.status===401||response.status===403)
+        throw Error('PRIVATE_INDEX_ACCESS_DENIED');
       const json=await response.json();
       if(!response.ok)throw Error(json.error||'PRIVATE_INDEX_HISTORY_UNAVAILABLE');
       if(json.schema!=='QSYN-UPSTOX-RUST-INDEX-HISTORY/1'||
@@ -117,6 +121,13 @@ export class PrivateIndexHistoryFeed {
           headers:personalIndexRequestHeaders(this.ownerViewer,this.csrf),
           body:JSON.stringify({symbol:this.symbol})
         });
+        if(response.status===401||response.status===403){
+          // Revoked index access is terminal for this socket. Do not keep
+          // requesting owner/admin tickets after the server denies access.
+          this.onLive('PRIVATE_INDEX_ACCESS_DENIED');
+          stop();
+          return;
+        }
         const auth=await response.json();
         if(!response.ok)throw Error(auth.error||'RUST_PERSONAL_TICKET_UNAVAILABLE');
         if(auth.schema!=='QSYN-PERSONAL-INDEX-RUST-TICKET/1'||

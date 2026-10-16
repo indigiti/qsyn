@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import {QsynCryptoFeed,MAX_AUTO_BACKFILL_BARS} from '../src/crypto-feed.js';
+import {PrivateIndexHistoryFeed} from '../src/personal-index-feed.js';
 import {QsynMarketsFeed,aggregatePersonalIndexBars} from '../src/qsyn-markets-feed.js';
 import {findIndiaIndex} from '../src/india-index-catalog.js';
 import {findProviderGaps,mergeProviderGapBars,shouldAttemptGap,
@@ -130,6 +131,25 @@ try {
   idx._session=sessionBeforeOutage;
   assert.deepEqual(await idx.getBars(req),restored);
   assert.equal(errors.at(-1),null,'verified source recovery clears outage notice');
+  // Revoked access is different from an exchange timeout: no private
+  // cached OHLC, proof, history, or socket can remain accessible.
+  const id=findIndiaIndex('NSE_INDEX:index','NIFTY').id;
+  let destroyed=0;
+  idx.personalFeeds.set(id,{destroy:()=>{destroyed++;}});
+  idx.personalBars.set(id,restored);
+  idx.indexHistoryDays.set(id+':2026-10-09',restored);
+  idx.indexHistoryMisses.set(id+':2026-10-09',Date.now()+30_000);
+  idx.indexGapPending.set(id+':2026-10-09',Promise.resolve());
+  idx._session=()=>({getBars:async()=>{throw Error('PRIVATE_INDEX_ACCESS_DENIED');}});
+  assert.deepEqual(await idx.getBars(req),[],
+    'access-denied history must never reuse private cached OHLC');
+  assert.equal(errors.at(-1)?.reason,'authorization');
+  assert.equal(idx.personalBars.has(id),false);
+  assert.equal(idx.indexHistoryDays.has(id+':2026-10-09'),false);
+  assert.equal(idx.indexHistoryMisses.has(id+':2026-10-09'),false);
+  assert.equal(idx.indexGapPending.has(id+':2026-10-09'),false);
+  assert.equal(idx.personalProof,null,'stale privileged proof must be invalidated');
+  assert.equal(destroyed,1,'active private subscription must be stopped');
   idx.destroy();
 
   const unsupportedRequests=[];
@@ -166,7 +186,64 @@ try {
   assert.equal(resync,1,'native chart requested to reload recovered history');
   assert.equal(live.personalBars.get(instrument.id).length,4);
   stop();live.destroy();
-  console.log('PASS: provider-only automatic gap recovery on all 1m+ intervals');
+  // A 403 may be HTML from a perimeter challenge, not a JSON API error.
+  // Never classify it as an ordinary provider outage after parse failure.
+  const privateFeed=new PrivateIndexHistoryFeed({
+    symbol:'NIFTY',day:'2026-10-09',csrf:null,ownerViewer:true,onStatus:()=>{}
+  });
+  let parsedDeniedResponse=false;
+  globalThis.fetch=async()=>({
+    status:403,ok:false,
+    json:async()=>{parsedDeniedResponse=true;throw Error('HTML_NOT_JSON');}
+  });
+  await assert.rejects(privateFeed.getBars({
+    exchange:'UPSTOX_PERSONAL',symbol:'NIFTY',interval:'1m',
+    strictHistory:true
+  }),{message:'PRIVATE_INDEX_ACCESS_DENIED'});
+  assert.equal(parsedDeniedResponse,false,'deny before decoding non-JSON edge responses');
+  privateFeed.destroy();
+
+  // A request that started while access was valid cannot repopulate the
+  // private day cache after an owner grant expires during network IO.
+  let finishHistory;
+  const late=new QsynMarketsFeed();
+  const lateInstrument=findIndiaIndex('NSE_INDEX:index','NIFTY');
+  globalThis.fetch=()=>new Promise(resolve=>{finishHistory=resolve;});
+  const oldRequest=late._historicalDay(lateInstrument,'2026-10-09',null,undefined,true);
+  late._invalidateIndexAccess(lateInstrument);
+  finishHistory({status:200,ok:true,json:async()=>({
+    schema:'QSYN-UPSTOX-RUST-INDEX-HISTORY/1',
+    source:'upstox_v3_rust_history',
+    symbol:'NIFTY',day_ist:'2026-10-09',interval:'1m',
+    trading_enabled:false,public_redistribution_allowed:false,
+    bars:[makeBar(fri)]
+  })});
+  assert.deepEqual(await oldRequest,[],'late approved response is discarded after revoke');
+  assert.equal(late.indexHistoryDays.size,0,'late response must not repopulate cache');
+  late.destroy();
+
+  // An in-flight gap replay must not republish private OHLC after access
+  // loss, even when the socket delivered the last valid candle first.
+  const race=new QsynMarketsFeed();
+  let liveHandler,finishReplay,lateResync=0;
+  race.personalFeeds.set(lateInstrument.id,{
+    day:'2026-10-09',destroy:()=>{},
+    subscribeBars:(_req,onBar)=>{liveHandler=onBar;return ()=>{};}
+  });
+  race.personalBars.set(lateInstrument.id,[makeBar(fri)]);
+  race._proof=async()=>({ownerViewer:true,csrf:null});
+  race._historicalDay=()=>new Promise(resolve=>{finishReplay=resolve;});
+  const stopRace=race.subscribeBars(req,()=>{}, {onResync:()=>{lateResync++;}});
+  liveHandler(makeBar(fri+180));
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(typeof finishReplay,'function');
+  race._invalidateIndexAccess(lateInstrument);
+  finishReplay([makeBar(fri),makeBar(fri+60),makeBar(fri+120),makeBar(fri+180)]);
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(lateResync,0,'late gap replay cannot resync after revoked access');
+  assert.equal(race.personalBars.has(lateInstrument.id),false);
+  stopRace();race.destroy();
+  console.log('PASS: provider gap recovery, revoked grants and in-flight isolation');
 } finally {
   globalThis.fetch=realFetch;
 }
