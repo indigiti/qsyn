@@ -1,3 +1,4 @@
+import {subscribeLiveMarketFeed} from './live-market-feed-toggle.js';
 /**
  * Operator-private live chart bridge. Intentionally separate from the
  * simulated QSYN default feed: NEVER infer broker rights from cookies alone.
@@ -183,7 +184,12 @@ export class PrivateAuthorizedChartFeed {
       return [];
     }
   }
-  subscribeBars(request, onBar) {
+  subscribeBars(request,onBar){
+    if(this.ended || request.symbol !== this.instrument ||
+       request.exchange !== 'UPSTOX_PRIVATE' || request.interval !== '1m')return ()=>{};
+    return subscribeLiveMarketFeed(()=>this._subscribeBarsActive(request,onBar));
+  }
+  _subscribeBarsActive(request, onBar) {
     if (this.ended || request.symbol !== this.instrument ||
         request.exchange !== 'UPSTOX_PRIVATE' || request.interval !== '1m')
       return () => {};
