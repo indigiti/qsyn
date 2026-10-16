@@ -173,7 +173,24 @@ function HomepageChart({ theme, embedded = false,
     // a refresh or changes interval; a known AbortError is not an app fault.
     const feed=new QsynMarketsFeed(s=>{if(active)setMessage(s);},{
       onBlockedIndex:index=>{if(active)setBlockedIndex(index);},
-      onUnsupportedCryptoSecond:()=>{if(active)setTimeframeNotice('Crypto 1-second candles are unsupported. Select 1m or higher.');},
+      onUnsupportedCryptoSecond:req=>{
+        if(!active)return;
+        setTimeframeNotice('Crypto does not provide 1-second historical bars; using 1m.');
+        // Native OpenAlgo setInterval is the supported widget API. Defer
+        // until the grid exists; never leave crypto displaying empty 1s bars.
+        queueMicrotask(()=>{
+          if(!active)return;
+          for(const cell of grid.cells()){
+            const widget=cell.widget;
+            if(widget?.exchange?.()===req.exchange&&
+              widget?.symbol?.()===req.symbol&&widget?.interval?.()==='1s'&&
+              typeof widget.setInterval==='function'){
+              try{void Promise.resolve(widget.setInterval('1m')).catch(()=>{});}
+              catch{setTimeframeNotice('Select 1m or higher for crypto candles.');}
+            }
+          }
+        });
+      },
       initialPriorSession:true,
     });
     const grid=createChartGrid(host.current,{
