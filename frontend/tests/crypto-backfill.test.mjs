@@ -140,7 +140,48 @@ try{
   assert.equal(callbacks.size,0);
   assert.equal(subscribers.size,0);
   widget.isDestroyed=true;
-  console.log('QSYN provider historical paging, auto max, live tail and indicator demand: PASS');
+
+  // Private NSE/BSE starts with only one 375-minute trading session, so a
+  // default 5m x 100 setup needs true older-page loading (not crypto reload).
+  let indiaBars=Array.from({length:375},(_,i)=>({
+    time:now-(375-i)*60,open:22300,high:22302,low:22298,close:22300,volume:0
+  }));
+  let indiaPages=0,indiaFullReloads=0;
+  const indiaListeners=new Set();
+  const indiaRequest={exchange:'NSE_INDEX:index',symbol:'NIFTY',interval:'1m',
+    from:now-375*60,to:now};
+  const indiaController={
+    getState:()=>({status:'ready',request:indiaRequest,bars:indiaBars,hasMore:null}),
+    bars:()=>indiaBars,
+    subscribe:callback=>{indiaListeners.add(callback);return ()=>indiaListeners.delete(callback);},
+    load:()=>{indiaFullReloads++;return Promise.resolve([]);},
+    loadMore:()=>{
+      indiaPages++;
+      indiaBars=Array.from({length:675},(_,i)=>({
+        time:now-(675-i)*60,open:22300,high:22302,low:22298,close:22300,volume:0
+      }));
+      for(const callback of [...indiaListeners])callback();
+      return Promise.resolve(indiaBars);
+    },
+  };
+  const indiaWidget={
+    isDestroyed:false,chart:{
+      indicators:()=>[{indicatorId:WICK_SCIENCE_ID,
+        settings:()=>({setupTf:'5',samples:100})}],
+      on:()=>()=>{},
+    },
+    dataController:indiaController,
+    interval:()=>'1m',exchange:()=>'NSE_INDEX:index',symbol:()=>'NIFTY',
+  };
+  const stopIndia=observeWickScienceBackfill(indiaWidget,stub);
+  await Promise.resolve();
+  assert.equal(indiaPages,1,'private index MFE must warm by native older-history paging');
+  assert.equal(indiaFullReloads,0,'do not repeatedly reload the same 375-bar day');
+  assert.equal(indiaBars.length,675);
+  stopIndia();
+  assert.equal(indiaListeners.size,0);
+
+  console.log('QSYN provider historical paging, auto max, private index MFE warmup: PASS');
 }finally{
   globalThis.fetch=original;
 }

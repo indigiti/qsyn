@@ -37,7 +37,19 @@ assert.equal(unavailable.reason,'chart_timeframe_must_be_lower');
 assert.ok(unavailable.values.shortEntry.every(x=>x===null));
 const noTick=calculateWickScience(bars,opts,{interval:'1m'});
 assert.equal(noTick.reason,'instrument_tick_size_unavailable');
-assert.ok(noTick.values.shortEntry.every(x=>x===null));
+assert.ok(noTick.values.shortEntry.every(x=>x===null),
+  'no unsupported stop or entry signal without verified instrument tick');
+assert.equal(noTick.values.setupOpen[60],100,'MFE open is tick-independent');
+assert.ok(Math.abs(noTick.values.upperZone[60]-101.6)<1e-9,
+  'missing tick metadata must never hide upper MFE zone');
+assert.ok(Math.abs(noTick.values.lowerZone[60]-98.4)<1e-9);
+assert.equal(noTick.values.shortArmed[60],1,
+  'non-executable MFE touch marker does not require stop tick metadata');
+assert(noTick.values.activeStop.every(x=>x===null));
+const explicitTick=calculateWickScience(bars,opts,{interval:'1m',tickSize:0.01});
+assert.equal(explicitTick.reason,null);
+assert.equal(explicitTick.values.shortEntry[61],1,
+  'verified tick metadata or explicit positive override enables full trade states');
 
 // OHLC cannot order the two extrema inside one one-minute candle.
 const ambiguous=bars.map(x=>({...x}));
@@ -88,4 +100,49 @@ assert.ok(Math.abs(l.activeStop[61]-96.9)<1e-9);
 assert.equal(l.longTP[62],1);
 assert.equal(l.longSL[62],null);
 assert.equal(l.shortEntry[61],null);
-console.log('Wick Science MFE state machine: PASS');
+// BTC/ETH charts often have 1600+ 1m bars and a price scale whose
+// unconfigured minMove is 0. A provider gap or an incomplete 5m group must
+// not erase the last 100 genuinely completed 5m MFE samples.
+const btcBars=[];
+const fiveStart=Math.floor(1_790_000_000/300)*300;
+for(let setup=0;setup<110;setup++){
+  for(let sub=0;sub<5;sub++){
+    btcBars.push({time:fiveStart+setup*300+sub*60,
+      open:82000,high:82020,low:81980,close:82000});
+  }
+}
+// A partial setup group (only 3 recorded minutes) is NOT a completed MFE.
+for(let sub=0;sub<3;sub++)btcBars.push({
+  time:fiveStart+110*300+sub*60,open:82000,high:82020,low:81980,close:82000
+});
+const afterGap=fiveStart+112*300; // a completely missing 5m group
+for(let sub=0;sub<5;sub++)btcBars.push({
+  time:afterGap+sub*60,open:82000,high:82020,low:81980,close:82000
+});
+const gapResult=calculateWickScience(btcBars,{
+  setupTf:'5',samples:100,reachRate:80,zoneFraction:80,slBuffer:2
+},{interval:'1m'});
+assert.equal(gapResult.reason,'instrument_tick_size_unavailable');
+assert.ok(Number.isFinite(gapResult.values.upperZone.at(-1)),
+  'completed MFE history must survive a partial provider candle and market gap');
+assert.ok(Number.isFinite(gapResult.values.lowerZone.at(-1)));
+assert(gapResult.values.upperZone.at(-1)>gapResult.values.setupOpen.at(-1));
+assert(gapResult.values.lowerZone.at(-1)<gapResult.values.setupOpen.at(-1));
+
+// Indian index 1m history is 375 bars per session: the 5m/100 sample window
+// must warm across consecutive genuine sessions, not at every market open.
+const sessionBars=[];
+for(const day of ['2026-10-08','2026-10-09','2026-10-12']){
+  const start=Math.floor(Date.parse(day+'T09:15:00+05:30')/1000);
+  for(let i=0;i<375;i++)sessionBars.push({
+    time:start+i*60,open:22300,high:22305,low:22295,close:22300
+  });
+}
+const sessionResult=calculateWickScience(sessionBars,{
+  setupTf:'5',samples:100,reachRate:80,zoneFraction:80,slBuffer:2
+},{interval:'1m'});
+assert.ok(Number.isFinite(sessionResult.values.upperZone.at(-1)),
+  'NIFTY MFE history must span exchange trading sessions');
+assert.ok(Number.isFinite(sessionResult.values.lowerZone.at(-1)));
+
+console.log('Wick Science MFE state machine, crypto gaps and NSE sessions: PASS');
