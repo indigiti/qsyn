@@ -116,7 +116,32 @@ try {
       interval+' derived entirely from verified 1m candles');
   }
   assert.equal(dayFetches,6,'following intervals reuse recovered day without extra replay');
+  // If the next history refresh fails AFTER successful authorization, keep
+  // verified candles visible and surface an actionable history outage.
+  const errors=[];
+  idx.onBlockedIndex=error=>errors.push(error);
+  const sessionBeforeOutage=idx._session;
+  idx._session=()=>({getBars:async()=>{throw Error('UPSTOX_PROVIDER_TIMEOUT');}});
+  const retained=await idx.getBars(req);
+  assert.deepEqual(retained,restored,'transient source failure preserves real OHLC');
+  assert.equal(errors[0]?.reason,'history');
+  await idx.getBars(req);
+  assert.equal(errors.length,1,'repeat source failures do not flood chart overlays');
+  idx._session=sessionBeforeOutage;
+  assert.deepEqual(await idx.getBars(req),restored);
+  assert.equal(errors.at(-1),null,'verified source recovery clears outage notice');
   idx.destroy();
+
+  const unsupportedRequests=[];
+  const secondsFeed=new QsynMarketsFeed(()=>{},{
+    onUnsupportedCryptoSecond:req=>unsupportedRequests.push(req)
+  });
+  assert.deepEqual(await secondsFeed.getBars({
+    exchange:'BINANCE:spot',symbol:'BTCUSDT',interval:'1s'
+  }),[]);
+  assert.equal(unsupportedRequests.length,1,
+    'crypto 1s is explicitly rejected instead of silently presenting empty history');
+  secondsFeed.destroy();
 
   // Live index socket: a minute jump may trigger ONE day replay and native
   // history resync; all real streamed OHLC still goes straight to onBar.
