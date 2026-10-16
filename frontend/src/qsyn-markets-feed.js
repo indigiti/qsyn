@@ -318,7 +318,7 @@ export class QsynMarketsFeed extends QsynCryptoFeed {
       // failure occurs. Never synthesize a replacement candle or wipe the
       // previously displayed session simply because the replay failed.
       const retained=this.personalBars.get(instrument.id)||[];
-      if(retained.length && req.interval!=='1s'){
+      if(retained.length && req.interval!=='1s' && req.noCache!==true){
         this.onState(instrument.name+' · showing last verified candles; history source unavailable');
         return aggregatePersonalIndexBars(retained,req.interval);
       }
