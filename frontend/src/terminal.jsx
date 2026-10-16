@@ -93,6 +93,7 @@ function ChartPanel({ pane, theme, savedState, revision, onMount, hideBranding =
         ...(hideBranding ? { branding: false } : {}),
         ...(nativeWorkspaces ? { workspaces: nativeWorkspaces, ...(nativeLayouts ? {} : { layouts: false }) } : {}),
         navigation: { defaultVisibleBars: 95, mousePan: 'horizontal' },
+        zoomAnchor: 'cursor',
       });
       stopLegendSettings=bindIndicatorLegendSettings(widget,mountIndicatorSettings);
       onMount(pane.id, widget);
@@ -186,6 +187,7 @@ function HomepageChart({ theme, embedded = false,
       loading:{pageSize:300,maxBars:MAX_AUTO_BACKFILL_BARS,timeoutMs:120000},
       ...(nativeWatchlists?{watchlist:{store:nativeWatchlists,quotes:noSyntheticQuotes}}:{}),
       links:{crosshair:true},navigation:{defaultVisibleBars:120,mousePan:'horizontal'},
+      zoomAnchor:'cursor',
     });
     // Keep OpenAlgo's buttons inside their OWN grid bar; reparenting them
     // into a chart intercepts the grid's outside-click menu handling.
@@ -535,6 +537,9 @@ function PrivateMarketPanel({ account, instrument, label, authMode = 'private_te
       widget = createWidget(host, {
         feed, symbol:instrument, exchange:'UPSTOX_PRIVATE', interval:'1m',
         intervals:['1m'], theme:'dark', persist:false, panels:true,
+        // Prior to 2.6.3, this unconfigured widget allowed time + price dragging.
+        navigation:{mousePan:'both'},
+        zoomAnchor:'cursor',
       });
       stopLegendSettings=bindIndicatorLegendSettings(widget,mountIndicatorSettings);
       widget.ready.catch(() => setStatus('Private chart widget unavailable. No demo data substituted.'));

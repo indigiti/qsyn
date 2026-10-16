@@ -26,6 +26,9 @@ if (root) {
     // One-time namespace bump avoids stale Phase-0 viewport/scale state.
     persist: 'qsyn-dev-demo-v2',
     navigation: { defaultVisibleBars: 100, mousePan: 'horizontal' },
+    // 2.6.3 switched the widget wheel-zoom anchor to the right edge.
+    // Retain QSYN's established cursor-anchored navigation during validation.
+    zoomAnchor: 'cursor',
   });
   if (connectButton) {
     connectButton.addEventListener('click', () => {

@@ -41,6 +41,7 @@ function StrategyChart({series,interval,theme}) {
         symbol,exchange:'QSYN',interval,intervals:INTERVALS,theme,
         branding:false,persist:false,panels:true,
         navigation:{defaultVisibleBars:90,mousePan:'horizontal'},
+        zoomAnchor:'cursor',
       });
       void widget.ready.catch(()=>{if(live)setError('Strategy chart not available');});
     }catch{setError('OpenAlgo chart could not mount');}

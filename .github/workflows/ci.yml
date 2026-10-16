@@ -250,6 +250,9 @@ jobs:
         working-directory: frontend
       - run: npm run build
         working-directory: frontend
+      - name: Guard OpenAlgo Charts candidate zoom behavior and native pin
+        run: node tests/openalgo-charts-upgrade.test.mjs
+        working-directory: frontend
       - name: Verify shared pretty URL registry
         run: node tests/terminal-routes-contract.mjs
         working-directory: frontend
