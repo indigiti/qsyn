@@ -157,7 +157,8 @@ export class QsynMarketsFeed extends QsynCryptoFeed {
       if(key.startsWith(scope))this.indexHistoryMisses.delete(key);
     for(const key of this.indexGapAttempts.keys())
       if(key.startsWith(scope))this.indexGapAttempts.delete(key);
-    this.indexGapPending.delete(id);
+    for(const key of this.indexGapPending.keys())
+      if(key.startsWith(scope))this.indexGapPending.delete(key);
   }
   _session(instrument,day,csrf,ownerViewer=false){
     const key=instrument.id;
