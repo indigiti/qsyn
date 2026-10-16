@@ -91,6 +91,7 @@ export class QsynMarketsFeed extends QsynCryptoFeed {
     this.onBlockedIndex=onBlockedIndex;
     this.onUnsupportedCryptoSecond=onUnsupportedCryptoSecond;
     this.indexGapAttempts=new Map();
+    this.indexGapPending=new Map();
     this.initialPriorSession=initialPriorSession;
     this.personalProof=null;
     this.personalFeeds=new Map();
@@ -427,12 +428,16 @@ export class QsynMarketsFeed extends QsynCryptoFeed {
     if(!session||this.closed)return ()=>{};
     const scoped={...req,exchange:'UPSTOX_PERSONAL',symbol:instrument.symbol,
       interval:req.interval==='1s'?'1s':'1m'};
-    return session.subscribeBars(scoped,minuteBar=>{
+    let active=true;
+    const stop=session.subscribeBars(scoped,minuteBar=>{
       if(req.interval==='1s'){
         onBar(minuteBar,{provisional:true});
         return;
       }
       const prior=this.personalBars.get(instrument.id)||[];
+      const previous=prior.at(-1);
+      const liveGap=previous&&findProviderGaps([previous,minuteBar],60,
+        {index:true,limit:1}).length>0;
       if(prior.length&&prior.at(-1).time===minuteBar.time)
         prior[prior.length-1]=minuteBar;
       else if(!prior.length||prior.at(-1).time<minuteBar.time)
@@ -441,7 +446,30 @@ export class QsynMarketsFeed extends QsynCryptoFeed {
       this.personalBars.set(instrument.id,prior);
       const latest=latestPersonalIndexBar(prior,req.interval);
       if(latest)onBar(latest,{provisional:true});
+      if(liveGap&&typeof opts.onResync==='function'&&active){
+        const key=instrument.id+':'+session.day;
+        if(!this.indexGapPending.has(key)){
+          const pending=(async()=>{
+            const proof=await this._proof();
+            if(!active||this.closed||req.signal?.aborted)return;
+            const before=this.personalBars.get(instrument.id)||[];
+            const fixed=await this._repairIndexDay(instrument,session.day,
+              before,proof,req.signal);
+            if(!active||this.closed||req.signal?.aborted||
+              fixed.length<=before.length)return;
+            // Live ticks may have arrived while the day replay was in flight.
+            // Merge into that NEWER live window and ask the chart to reload
+            // its verified history, rather than publishing out-of-order bars.
+            const current=this.personalBars.get(instrument.id)||[];
+            this.personalBars.set(instrument.id,
+              mergeProviderGapBars(current,fixed,60,{index:true}));
+            opts.onResync?.();
+          })().catch(()=>{}).finally(()=>{this.indexGapPending.delete(key);});
+          this.indexGapPending.set(key,pending);
+        }
+      }
     });
+    return ()=>{active=false;stop();};
   }
   async searchSymbols({query}){
     const publicSymbols=await super.searchSymbols({query});
@@ -450,6 +478,7 @@ export class QsynMarketsFeed extends QsynCryptoFeed {
   destroy(){
     for(const session of this.personalFeeds.values())session.destroy();
     this.indexGapAttempts.clear();
+    this.indexGapPending.clear();
     this.personalFeeds.clear();
     this.personalBars.clear();
     this.historyStatus.clear();
