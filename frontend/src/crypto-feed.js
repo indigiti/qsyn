@@ -1,4 +1,5 @@
 import {CRYPTO_MARKETS,findCrypto} from './crypto-catalog.js';
+import {subscribeLiveMarketFeed} from './live-market-feed-toggle.js';
 import {findProviderGaps,mergeProviderGapBars,shouldAttemptGap} from './market-gap-recovery.js';
 
 /**
@@ -200,7 +201,10 @@ export class QsynCryptoFeed {
       this.controllers.delete(controller);
     }
   }
-  subscribeBars(req,onBar,opts={}) {
+  subscribeBars(req,onBar,opts={}){
+    return subscribeLiveMarketFeed(()=>this._subscribeBarsActive(req,onBar,opts));
+  }
+  _subscribeBarsActive(req,onBar,opts={}) {
     let live=true,pending=false,current=opts.seedFrom?.time||0,last=opts.seedFrom||null;
     const controller=new AbortController();
     this.controllers.add(controller);
