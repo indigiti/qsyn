@@ -102,7 +102,9 @@ export class QsynMarketsFeed extends QsynCryptoFeed {
     this.indexHistoryMisses=new Map();
     this.activeIndex=null;
     this.lastBlockedKey=null;
+    this.indexAccessEpoch=new Map();
   }
+  _epoch(instrument){return this.indexAccessEpoch.get(instrument.id)||0;}
   async _proof(){
     if(!this.personalProof){
       this.personalProof=(async()=>{
@@ -146,6 +148,7 @@ export class QsynMarketsFeed extends QsynCryptoFeed {
   }
   _invalidateIndexAccess(instrument){
     const id=instrument.id,scope=id+':';
+    this.indexAccessEpoch.set(id,this._epoch(instrument)+1);
     this.personalProof=null;
     this.personalFeeds.get(id)?.destroy();
     this.personalFeeds.delete(id);
@@ -206,9 +209,10 @@ export class QsynMarketsFeed extends QsynCryptoFeed {
       return super.getBars(req);
     }
     if(this.closed||!INTERVALS.has(req.interval))return [];
+    const epoch=this._epoch(instrument),invalid=()=>this._epoch(instrument)!==epoch;
     try{
       const proof=await this._proof();
-      if(this.closed||req.signal?.aborted)return [];
+      if(this.closed||req.signal?.aborted||invalid())return [];
       this.activeIndex=instrument.id;
       if(req.interval==='1s'){
         this.lastBlockedKey=null;
@@ -232,6 +236,7 @@ export class QsynMarketsFeed extends QsynCryptoFeed {
       const scoped={...req,exchange:'UPSTOX_PERSONAL',
         symbol:instrument.symbol,interval:'1m',strictHistory:true};
       let bars=await feed.getBars(scoped);
+      if(invalid())return [];
       let day=requestedDay;
       if(!bars.length){
         const start=Math.floor(Date.parse(requestedDay+'T00:00:00+05:30')/1000);
@@ -256,6 +261,7 @@ export class QsynMarketsFeed extends QsynCryptoFeed {
         const cached=this.indexHistoryDays.get(instrument.id+':'+day)||[];
         bars=mergeProviderGapBars(bars,cached,60,{index:true});
         bars=await this._repairIndexDay(instrument,day,bars,proof,req.signal);
+        if(invalid())return [];
         this._cacheIndexDay(instrument,day,bars);
         // OpenAlgo can initially request 1600 bars but the Upstox reader
         // serves only ONE trading day. Explicitly load the preceding weekday
@@ -312,8 +318,10 @@ export class QsynMarketsFeed extends QsynCryptoFeed {
             break; // At most one additional history request per initial load.
           }
         }
+        if(invalid())return [];
         this.personalBars.set(instrument.id,bars);
       }
+      if(invalid())return [];
       const result=aggregatePersonalIndexBars(bars,req.interval);
       if(bars.length){
         const label=instrument.name+' · '+bars.length+
@@ -366,6 +374,7 @@ export class QsynMarketsFeed extends QsynCryptoFeed {
       this.indexHistoryDays.delete(this.indexHistoryDays.keys().next().value);
   }
   async _historicalDay(instrument,day,csrf,signal,ownerViewer=false,refresh=false){
+    const epoch=this._epoch(instrument);
     const key=instrument.id+':'+day;
     if(!refresh&&this.indexHistoryDays.has(key))return this.indexHistoryDays.get(key);
     if((this.indexHistoryMisses.get(key)||0)>Date.now())return [];
@@ -375,7 +384,7 @@ export class QsynMarketsFeed extends QsynCryptoFeed {
     try{
       const bars=await temp.getBars({symbol:instrument.symbol,
         exchange:'UPSTOX_PERSONAL',interval:'1m',signal,strictHistory:true});
-      if(this.closed||signal?.aborted)return [];
+      if(this.closed||signal?.aborted||this._epoch(instrument)!==epoch)return [];
       if(bars.length){
         this.indexHistoryMisses.delete(key);
         this._cacheIndexDay(instrument,day,bars);
@@ -392,16 +401,19 @@ export class QsynMarketsFeed extends QsynCryptoFeed {
     }
   }
   async _repairIndexDay(instrument,day,bars,proof,signal){
+    const epoch=this._epoch(instrument);
     const gaps=findProviderGaps(bars,60,{index:true,limit:1});
     if(!gaps.length)return bars;
     const key=instrument.id+':'+day;
     if(!shouldAttemptGap(this.indexGapAttempts,key))return bars;
     try{
       const fresh=await this._historicalDay(instrument,day,proof.csrf,signal,proof.ownerViewer===true,true);
+      if(this._epoch(instrument)!==epoch||this.closed||signal?.aborted)return [];
       const merged=mergeProviderGapBars(bars,fresh,60,{index:true});
       this._cacheIndexDay(instrument,day,merged);
       return merged;
     }catch(error){
+      if(error?.message==='PRIVATE_INDEX_ACCESS_DENIED')throw error;
       if(!signal?.aborted)this.onState(instrument.name+' · provider gap recovery unavailable');
       return bars;
     }
@@ -429,6 +441,7 @@ export class QsynMarketsFeed extends QsynCryptoFeed {
         req.interval==='1h'?60:375));
     const candidateStart=req.before-1;
     const collected=new Map();
+    const epoch=this._epoch(instrument),invalid=()=>this._epoch(instrument)!==epoch;
     let searched=0,oldestSearched=null;
     try{
       const proof=await this._proof();
@@ -443,6 +456,7 @@ export class QsynMarketsFeed extends QsynCryptoFeed {
         if(day<'2022-01-01')break;
         oldestSearched=day;
         const bars=await this._historicalDay(instrument,day,proof.csrf,req.signal,proof.ownerViewer===true);
+        if(invalid())return {bars:[],hasMore:false};
         searched++;
         for(const bar of bars){
           if(bar.time<req.before)collected.set(bar.time,bar);
@@ -526,6 +540,7 @@ export class QsynMarketsFeed extends QsynCryptoFeed {
     for(const session of this.personalFeeds.values())session.destroy();
     this.indexGapAttempts.clear();
     this.indexGapPending.clear();
+    this.indexAccessEpoch.clear();
     this.personalFeeds.clear();
     this.personalBars.clear();
     this.historyStatus.clear();
