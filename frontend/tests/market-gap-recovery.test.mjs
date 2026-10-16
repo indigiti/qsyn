@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import {QsynCryptoFeed,MAX_AUTO_BACKFILL_BARS} from '../src/crypto-feed.js';
+import {PrivateIndexHistoryFeed} from '../src/personal-index-feed.js';
 import {QsynMarketsFeed,aggregatePersonalIndexBars} from '../src/qsyn-markets-feed.js';
 import {findIndiaIndex} from '../src/india-index-catalog.js';
 import {findProviderGaps,mergeProviderGapBars,shouldAttemptGap,
@@ -130,6 +131,25 @@ try {
   idx._session=sessionBeforeOutage;
   assert.deepEqual(await idx.getBars(req),restored);
   assert.equal(errors.at(-1),null,'verified source recovery clears outage notice');
+  // Revoked access is different from an exchange timeout: no private
+  // cached OHLC, proof, history, or socket can remain accessible.
+  const id=findIndiaIndex('NSE_INDEX:index','NIFTY').id;
+  let destroyed=0;
+  idx.personalFeeds.set(id,{destroy:()=>{destroyed++;}});
+  idx.personalBars.set(id,restored);
+  idx.indexHistoryDays.set(id+':2026-10-09',restored);
+  idx.indexHistoryMisses.set(id+':2026-10-09',Date.now()+30_000);
+  idx.indexGapPending.set(id+':2026-10-09',Promise.resolve());
+  idx._session=()=>({getBars:async()=>{throw Error('PRIVATE_INDEX_ACCESS_DENIED');}});
+  assert.deepEqual(await idx.getBars(req),[],
+    'access-denied history must never reuse private cached OHLC');
+  assert.equal(errors.at(-1)?.reason,'authorization');
+  assert.equal(idx.personalBars.has(id),false);
+  assert.equal(idx.indexHistoryDays.has(id+':2026-10-09'),false);
+  assert.equal(idx.indexHistoryMisses.has(id+':2026-10-09'),false);
+  assert.equal(idx.indexGapPending.has(id+':2026-10-09'),false);
+  assert.equal(idx.personalProof,null,'stale privileged proof must be invalidated');
+  assert.equal(destroyed,1,'active private subscription must be stopped');
   idx.destroy();
 
   const unsupportedRequests=[];
@@ -166,7 +186,23 @@ try {
   assert.equal(resync,1,'native chart requested to reload recovered history');
   assert.equal(live.personalBars.get(instrument.id).length,4);
   stop();live.destroy();
-  console.log('PASS: provider-only automatic gap recovery on all 1m+ intervals');
+  // A 403 may be HTML from a perimeter challenge, not a JSON API error.
+  // Never classify it as an ordinary provider outage after parse failure.
+  const privateFeed=new PrivateIndexHistoryFeed({
+    symbol:'NIFTY',day:'2026-10-09',csrf:null,ownerViewer:true,onStatus:()=>{}
+  });
+  let parsedDeniedResponse=false;
+  globalThis.fetch=async()=>({
+    status:403,ok:false,
+    json:async()=>{parsedDeniedResponse=true;throw Error('HTML_NOT_JSON');}
+  });
+  await assert.rejects(privateFeed.getBars({
+    exchange:'UPSTOX_PERSONAL',symbol:'NIFTY',interval:'1m',
+    strictHistory:true
+  }),{message:'PRIVATE_INDEX_ACCESS_DENIED'});
+  assert.equal(parsedDeniedResponse,false,'deny before decoding non-JSON edge responses');
+  privateFeed.destroy();
+  console.log('PASS: provider gap recovery and revoked private index isolation');
 } finally {
   globalThis.fetch=realFetch;
 }
