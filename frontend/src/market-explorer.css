@@ -29,3 +29,39 @@
 .qt-market-explorer .qt-private-history-chart .qt-index-proof-actions{display:flex;gap:12px;flex-wrap:wrap}
 .qt-market-explorer .qt-private-history-chart .qt-index-proof-actions label{font-size:12px;display:flex;flex-direction:column;gap:5px}
 .qt-market-explorer .qt-private-history-chart input[type=date]{padding:8px;border-radius:7px;border:1px solid var(--q-line);color:var(--q-fg);background:var(--q-bg)}
+
+/* Compact market-first selector bar: instrument, browser feed, source check. */
+.terminal-shell .qt-market-explorer{gap:10px}
+.terminal-shell .qt-market-explorer .terminal-title{margin-bottom:12px}
+.terminal-shell .qt-market-source-panel{padding:13px 15px;gap:9px}
+.terminal-shell .qt-market-control-row{display:flex;align-items:flex-end;gap:16px}
+.terminal-shell .qt-market-control-row .qt-market-source-selects{flex:1;min-width:0;display:grid;
+  grid-template-columns:repeat(3,minmax(145px,1fr));align-items:end;gap:9px}
+.terminal-shell .qt-market-control-row .qt-market-source-selects label{min-width:0;max-width:none}
+.terminal-shell .qt-market-feed-actions{display:flex;align-items:center;gap:10px;flex:none}
+.terminal-shell .qt-market-feed-actions .qsyn-feed-control{gap:8px}
+.terminal-shell .qt-market-feed-actions .qsyn-feed-control-copy small{max-width:132px}
+.terminal-shell .qt-market-feed-actions .terminal-action{white-space:nowrap;min-height:35px}
+.terminal-shell .qt-market-status-grid{gap:10px;padding-top:10px;margin-top:0}
+.terminal-shell .qt-market-status-grid>div{border-radius:7px;background:var(--q-hover);padding:9px}
+.terminal-shell .qt-market-status-grid small{font-size:10px}
+.terminal-shell .qt-market-status-grid strong{font-size:11px}
+.terminal-shell .qt-market-source-panel .qt-actions{margin:0;gap:8px}
+.terminal-shell .qt-market-source-panel .qt-actions .terminal-action{min-height:30px;padding:6px 9px;font-size:11px}
+.terminal-shell .qt-market-evidence-note{margin:0;line-height:1.5}
+.terminal-shell .qt-market-feed-paused{display:flex;gap:9px;align-items:center;padding:9px 12px;
+  background:color-mix(in srgb,#f4ba79,var(--q-card) 92%);
+  border:1px solid color-mix(in srgb,#f4ba79,var(--q-line) 54%);
+  border-radius:9px;font-size:11px;color:var(--q-fg)}
+.terminal-shell .qt-market-chart-hint{margin:3px 0;font-size:11px}
+@media(max-width:1450px){
+  .terminal-shell .qt-market-control-row{flex-direction:column;align-items:stretch}
+  .terminal-shell .qt-market-control-row .qt-market-source-selects{width:100%}
+  .terminal-shell .qt-market-feed-actions{justify-content:space-between}
+}
+@media(max-width:760px){
+  .terminal-shell .qt-market-control-row .qt-market-source-selects{grid-template-columns:1fr}
+  .terminal-shell .qt-market-feed-actions{flex-wrap:wrap;gap:9px}
+  .terminal-shell .qt-market-status-grid{gap:6px}
+  .terminal-shell .qt-market-status-grid>div{padding:8px}
+}

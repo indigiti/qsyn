@@ -84,6 +84,19 @@ try {
   if(new URL(page.url()).pathname==='/qsyn/terminal/login')
     throw new Error('Administrator unlock returned login instead of terminal: '+(await page.locator('body').innerText()).slice(0,420));
   await page.getByRole('heading',{name:'Market explorer'}).waitFor();
+  await page.locator('.terminal-sidebar').getByRole('button',{name:'Dashboard'}).waitFor();
+  const headerFeed=page.getByRole('switch',{name:'Header live market feed'});
+  const marketsFeed=page.getByRole('switch',{name:'Markets live market feed'});
+  if(await headerFeed.getAttribute('aria-checked')!=='true'||
+     await marketsFeed.getAttribute('aria-checked')!=='true')
+    throw Error('Live feed switch missing from global header or Markets');
+  await marketsFeed.click();
+  if(await headerFeed.getAttribute('aria-checked')!=='false')
+    throw Error('Markets OFF did not synchronize header switch');
+  await page.getByText(/Live updates paused in this browser; historical candles/).first().waitFor();
+  await marketsFeed.click();
+  if(await headerFeed.getAttribute('aria-checked')!=='true')
+    throw Error('Markets ON did not synchronize header switch');
   // Transient admin API 503 must not forcibly log out a valid administrator.
   await page.route('**/qsyn/api/v1/admin/rust/state',async route=>{
     await route.fulfill({status:503,contentType:'application/json',
@@ -244,6 +257,8 @@ try {
   if(!(await page.getByRole('heading',{name:'Synthetic premium workspace'}).count()))
     throw new Error('Dashboard lost chart preview');
   const liveSwitch=page.getByRole('switch',{name:'Live market data feed'});
+  if(await page.getByRole('switch',{name:'Header live market feed'}).count()!==1)
+    throw Error('Global feed switch disappeared on Dashboard');
   if(await liveSwitch.getAttribute('aria-checked')!=='true')
     throw Error('Browser live feed switch should initially be enabled');
   await liveSwitch.click();
@@ -261,6 +276,19 @@ try {
   await page.reload({waitUntil:'domcontentloaded'});
   await page.getByRole('heading',{name:'Command center'}).waitFor();
   await page.waitForFunction(()=>document.querySelectorAll('.qd-chart-preview #qsyn-native-chart canvas').length>0);
+  // Markets must obey its selected instrument, not the independent public
+  // homepage's saved NIFTY alias from a previous session.
+  await page.evaluate(()=>localStorage.setItem('qsyn-public-chart-selection-v1',
+    JSON.stringify({schema:'QSYN-PUBLIC-CHART-SELECTION/1',
+      exchange:'NSE_INDEX:index',symbol:'NIFTY'})));
+  await page.goto(origin+'/qsyn/terminal/markets',{waitUntil:'domcontentloaded'});
+  await page.getByRole('heading',{name:'Market explorer'}).waitFor();
+  await page.waitForFunction(()=>{
+    try{
+      const selection=JSON.parse(localStorage.getItem('qsyn-public-chart-selection-v1'));
+      return selection?.symbol==='BTCUSDT'&&selection?.exchange==='BINANCE:spot';
+    }catch{return false;}
+  },{timeout:9000});
   await page.goto(origin+'/qsyn/terminal/tools',{waitUntil:'domcontentloaded'});
   await page.getByRole('heading',{name:'Tools'}).waitFor();
   if(!(await page.getByRole('button',{name:/Strategy Studio/}).count()>0))

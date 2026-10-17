@@ -1,0 +1,30 @@
+/* QSYN shared, browser-scoped live subscription switch. */
+.qsyn-feed-control{display:flex;align-items:center;justify-content:space-between;gap:12px;min-width:0}
+.qsyn-feed-control-copy{display:flex;flex-direction:column;gap:3px;min-width:0}
+.qsyn-feed-control-copy strong{font-size:12px;font-weight:730;color:var(--q-fg)}
+.qsyn-feed-control-copy small{font-size:10px;color:var(--q-muted);line-height:1.35}
+.qsyn-feed-control.is-compact{gap:8px}
+.qsyn-feed-control.is-compact .qsyn-feed-control-copy strong{font-size:11px;white-space:nowrap}
+.qsyn-feed-pill{position:relative;display:flex;align-items:center;flex:none;
+  width:94px;height:34px;padding:3px;border-radius:22px;
+  border:1px solid var(--q-line);background:var(--q-hover);color:var(--q-muted);
+  cursor:pointer;isolation:isolate;transition:background .2s ease,border-color .2s ease}
+.qsyn-feed-pill.is-on{background:color-mix(in srgb,var(--q-card),#4fe6b2 19%);
+  border-color:color-mix(in srgb,var(--q-line),#65e9b5 52%)}
+.qsyn-feed-pill::after{content:'';position:absolute;inset:-2px;border-radius:inherit;
+  background:conic-gradient(from 45deg,#74e5bb,#74b9ef,#ac9bfa,#f5b47a,#74e5bb);
+  opacity:0;filter:blur(11px);z-index:-2;transition:opacity .25s ease}
+.qsyn-feed-pill:is(:hover,:focus-visible)::after{opacity:.35}
+.qsyn-feed-pill>span:not(.qsyn-feed-pill-knob){position:relative;z-index:1;flex:1;
+  text-align:center;font-weight:800;letter-spacing:.055em;font-size:10px}
+.qsyn-feed-pill.is-on>span:nth-child(2),.qsyn-feed-pill.is-off>span:first-child{
+  color:var(--q-bg)}
+.qsyn-feed-pill-knob{position:absolute;top:3px;left:3px;bottom:3px;width:calc(50% - 5px);
+  border-radius:20px;background:var(--q-fg);box-shadow:0 2px 7px #0002;
+  transition:transform .2s ease}
+.qsyn-feed-pill.is-on .qsyn-feed-pill-knob{transform:translateX(calc(100% + 4px))}
+.qsyn-feed-pill:focus-visible{outline:2px solid var(--q-accent);outline-offset:3px}
+@media(max-width:700px){.terminal-topbar .qsyn-feed-control-copy{display:none}
+  .terminal-topbar .qsyn-feed-pill{width:74px;height:30px}
+  .terminal-topbar .qsyn-feed-pill>span:not(.qsyn-feed-pill-knob){font-size:9px}}
+@media(prefers-reduced-motion:reduce){.qsyn-feed-pill,.qsyn-feed-pill::after,.qsyn-feed-pill-knob{transition:none}}
