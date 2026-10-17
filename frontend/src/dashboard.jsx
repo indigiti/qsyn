@@ -1,177 +1,131 @@
 /**
- * QSYN dashboard cockpit: a presentation layer over the existing simulated
- * OpenAlgo Charts widget. No new trading, broker or market-data endpoints.
+ * Compact operational overview for QSYN's protected terminal. A browser
+ * toggle is not proof of a connected or licensed provider. Trading is off.
  */
-import React, { useMemo, useEffect, useState } from 'react';
-import {
-  Activity, ArrowRight, ArrowUpRight, CandlestickChart, CheckCircle2,
-  Clock3, Compass, FileClock, FlaskConical, Layers3, LockKeyhole,
-  Radio, ShieldCheck, SlidersHorizontal, Wallet, Workflow,
-} from 'lucide-react';
-import { loadBrowserWorkspace, instrumentFor } from './terminal-workspace.js';
-import {liveMarketFeedEnabled,setLiveMarketFeedEnabled,observeLiveMarketFeed} from './live-market-feed-toggle.js';
+import React,{useMemo} from 'react';
+import {Activity,ArrowRight,ArrowUpRight,CandlestickChart,Clock3,
+  Database,Layers3,LockKeyhole,Radio,ShieldCheck,Wallet,Workflow} from 'lucide-react';
+import {loadBrowserWorkspace} from './terminal-workspace.js';
+import {LiveFeedSwitch,useLiveFeedPreference} from './live-feed-switch.jsx';
 import './dashboard.css';
 
-const PRIMARY_PANE = Object.freeze({ id: 'primary', symbol: 'QSYN-NIFTY-STRADDLE' });
-const NOOP = () => {};
-const DEST = '/qsyn/terminal';
+const PRIMARY_PANE=Object.freeze({id:'primary',symbol:'QSYN-NIFTY-STRADDLE'});
+const NOOP=()=>{};
 
-function StateCard({ icon: Icon, label, value, detail, tone = 'muted', children }) {
-  return <section className="qd-state-card">
-    <div className="qd-state-heading"><span className={'qd-state-icon ' + tone}><Icon size={16}/></span><span>{label}</span></div>
-    <strong>{value}</strong><small>{detail}</small>{children}
+function OverviewCard({icon:Icon,title,value,detail,children}){
+  return <section className="qd-overview-card">
+    <div className="qd-overview-label"><Icon size={16}/><span>{title}</span></div>
+    {value&&<strong>{value}</strong>}
+    {detail&&<small>{detail}</small>}
+    {children}
   </section>;
 }
-function FlowStep({ number, title, description, tone = '' }) {
-  return <div className={'qd-flow-step ' + tone}>
-    <span className="qd-flow-number">{number}</span><div><b>{title}</b><small>{description}</small></div>
-  </div>;
-}
-function LinkTile({ title, detail, icon: Icon, onClick, href, subtle = false }) {
-  const content = <><span className="qd-tile-icon"><Icon size={19}/></span>
-    <span className="qd-tile-text"><strong>{title}</strong><small>{detail}</small></span>
-    <ArrowUpRight size={17} className="qd-tile-arrow" /></>;
-  const name = 'qd-link-tile' + (subtle ? ' subdued' : '');
-  return href
-    ? <a href={href} className={name}>{content}</a>
-    : <button type="button" className={name} onClick={onClick}>{content}</button>;
+function QuickAction({icon:Icon,title,detail,onClick}){
+  return <button type="button" className="qd-quick-action" onClick={onClick}>
+    <Icon size={19}/><span><strong>{title}</strong><small>{detail}</small></span>
+    <ArrowRight size={16}/>
+  </button>;
 }
 
-export function DashboardCockpit({ capabilities, openView, theme, ChartPanel }) {
-  const [liveFeedOn,setLiveFeedOn]=useState(()=>liveMarketFeedEnabled());
-  useEffect(()=>observeLiveMarketFeed(setLiveFeedOn),[]);
-  const toggleFeed=()=>setLiveFeedOn(setLiveMarketFeedEnabled(!liveFeedOn));
-  // Only unscoped, simulated watchlist/layout metadata belongs in this panel.
-  // Private authenticated workspaces must never be loaded into this UI.
-  const workspace = useMemo(() => {
-    let local = null;
-    try { local = window.localStorage; } catch {}
+export function DashboardCockpit({capabilities,openView,theme,ChartPanel}){
+  const workspace=useMemo(()=>{
+    let local=null;
+    try{local=window.localStorage;}catch{}
     return loadBrowserWorkspace(local);
-  }, []);
-  const simulatedContract = capabilities?.market_data === 'simulated' &&
-    capabilities?.execution_enabled === false &&
-    capabilities?.live_trading_enabled === false;
-  // Provider availability is never inferred from the browser feed toggle.
-  void simulatedContract;
-  const previewWatchlist = workspace.watchlist.slice(0, 3);
-
+  },[]);
+  const liveEnabled=useLiveFeedPreference();
+  const simulationSafe=capabilities?.market_data==='simulated'&&
+    capabilities?.execution_enabled===false&&capabilities?.live_trading_enabled===false;
   return <div className="terminal-page qd-dashboard">
     <header className="qd-page-heading">
       <div>
-        <p className="terminal-eyebrow">QSYN / WORKSPACE OVERVIEW</p>
-        <h1>Command center<span className="qd-heading-dot">.</span></h1>
-        <p>Charts, strategy research, and system readiness in one workspace.</p>
+        <p className="terminal-eyebrow">TERMINAL / OVERVIEW</p>
+        <h1>Command center</h1>
+        <p>Market-data controls, source verification and chart access in one place.</p>
       </div>
-      <span className="qd-mode-indicator"><span className="qd-mode-circle"/> SIMULATION ONLY</span>
+      <span className="qd-readonly"><ShieldCheck size={15}/> READ ONLY · ORDERS DISABLED</span>
     </header>
 
-    <div className="qd-hero">
-      <div className="qd-hero-copy">
-        <div className="qd-hero-kicker"><Activity size={15}/> YOUR TRADING WORKSPACE</div>
-        <h2>Everything in view.<br/><span>Nothing left to guess.</span></h2>
-        <p>Explore synthetic CE/PE strategies using simulated data. Broker authorization and live execution remain separately gated.</p>
-        <div className="qd-hero-actions">
-          <button type="button" className="qd-primary-button" onClick={() => openView('trading')}>
-            Open chart terminal <ArrowRight size={16}/>
-          </button>
-          <button type="button" className="qd-ghost-button" onClick={()=>openView('strategy')}>Explore strategy lab <ArrowUpRight size={16}/></button>
+    <div className="qd-overview" aria-label="Terminal operational overview">
+      <OverviewCard icon={Radio} title="Live chart feed">
+        <LiveFeedSwitch ariaLabel="Live market data feed"/>
+      </OverviewCard>
+      <OverviewCard icon={Activity} title="Source health" value="Check provider"
+        detail="Enabled updates do not confirm connectivity.">
+        <button type="button" className="qd-inline-link"
+          onClick={()=>openView('diagnostics')}>View diagnostics <ArrowUpRight size={14}/></button>
+      </OverviewCard>
+      <OverviewCard icon={Database} title="Historical candles" value="Per instrument"
+        detail="Verify actual provider coverage in Markets.">
+        <button type="button" className="qd-inline-link"
+          onClick={()=>openView('markets')}>Open data charts <ArrowUpRight size={14}/></button>
+      </OverviewCard>
+      <OverviewCard icon={LockKeyhole} title="Order execution" value="Disabled"
+        detail="Live market-data controls cannot enable trading."/>
+    </div>
+
+    {!liveEnabled&&<div className="qd-paused-banner" role="status">
+      <Radio size={16}/> Live chart subscriptions are paused in this browser.
+      Historical candles and saved workspaces remain available.
+    </div>}
+
+    <div className="qd-dashboard-grid">
+      <section className="qd-surface qd-quick-links" aria-label="Quick terminal actions">
+        <div className="qd-section-heading"><div><p className="qd-eyebrow">QUICK ACTIONS</p>
+          <h2>Open workspace</h2></div><Layers3 size={18}/></div>
+        <div className="qd-action-list">
+          <QuickAction icon={CandlestickChart} title="Markets"
+            detail="Live crypto, licensed indices and native charts"
+            onClick={()=>openView('markets')}/>
+          <QuickAction icon={Wallet} title="Data providers"
+            detail="Upstox credentials and source connections"
+            onClick={()=>openView('brokers')}/>
+          <QuickAction icon={Activity} title="Diagnostics"
+            detail="Read-only source health and secure audit"
+            onClick={()=>openView('diagnostics')}/>
+          <QuickAction icon={Workflow} title="Strategy Studio"
+            detail="Simulated CE/PE research only"
+            onClick={()=>openView('strategy')}/>
         </div>
+      </section>
+
+      <section className="qd-surface qd-feed-operations" aria-label="Feed operation guidance">
+        <div className="qd-section-heading"><div><p className="qd-eyebrow">MARKET DATA</p>
+          <h2>Feed & source overview</h2></div><Clock3 size={18}/></div>
+        <div className="qd-fact-row"><span>Browser subscriptions</span>
+          <strong>{liveEnabled?'Enabled':'Paused'}</strong></div>
+        <div className="qd-fact-row"><span>Provider connection</span>
+          <strong>Verify in Markets</strong></div>
+        <div className="qd-fact-row"><span>Index authorization</span>
+          <strong>Owner access required</strong></div>
+        <div className="qd-fact-row"><span>Previous-session history</span>
+          <strong>Per chart</strong></div>
+        <p className="qd-assurance"><ShieldCheck size={15}/>
+          The switch stops this browser's live subscriptions, not the shared Rust service,
+          stored candles or authorization controls.</p>
+        <button type="button" className="qd-section-link" onClick={()=>openView('markets')}>
+          Verify a market source <ArrowRight size={16}/></button>
+      </section>
+    </div>
+
+    <section className="qd-surface qd-chart-preview" aria-label="Synthetic market chart preview">
+      <div className="qd-section-heading"><div>
+        <p className="qd-eyebrow">CHART STUDIO · SIMULATION ONLY</p>
+        <h2>Synthetic premium workspace</h2>
+        <p>Illustrative research candles, not licensed NSE/BSE quotes.</p>
       </div>
-      <div className="qd-hero-graphic" aria-hidden="true">
-        <div className="qd-orbit qd-orbit-one"/><div className="qd-orbit qd-orbit-two"/>
-        <span className="qd-graphic-label top">CE LEG <span>+</span></span>
-        <span className="qd-graphic-letter">Q</span>
-        <span className="qd-graphic-label bottom">PE LEG <span>+</span></span>
+        <button type="button" className="qd-inline-link" onClick={()=>openView('markets')}>
+          Open Markets <ArrowUpRight size={16}/></button>
       </div>
+      <div className="qd-chart-preview-inner">
+        <ChartPanel pane={PRIMARY_PANE} theme={theme} savedState={null}
+          revision={0} onMount={NOOP}/>
+      </div>
+    </section>
+    <div className="qd-dashboard-footer">
+      <span><Layers3 size={14}/> {workspace.layouts.length} browser-local layouts</span>
+      <span><ShieldCheck size={14}/>
+        {simulationSafe?'Demo capability verified':'Simulation availability not verified'} · No orders</span>
     </div>
-
-    <div className="qd-states" aria-label="Workspace status">
-      <StateCard icon={Radio} label="Live chart feed" value={liveFeedOn?'Enabled':'Paused'}
-        detail="Browser only · provider connection checked separately" tone="blue">
-        <div className="qd-feed-toggle-row">
-          <span className="qd-feed-toggle-caption">Live updates</span>
-          <button type="button" role="switch" aria-label="Live market data feed"
-            aria-checked={liveFeedOn} title={liveFeedOn?'Pause live chart updates':'Resume live chart updates'}
-            className={'qd-feed-toggle'+(liveFeedOn?' is-on':' is-off')}
-            onClick={toggleFeed}>
-            <span aria-hidden="true" className="qd-feed-toggle-text qd-feed-toggle-text-off">OFF</span>
-            <span aria-hidden="true" className="qd-feed-toggle-text qd-feed-toggle-text-on">ON</span>
-            <span aria-hidden="true" className="qd-feed-toggle-thumb"/>
-          </button>
-        </div>
-      </StateCard>
-      <StateCard icon={Wallet} label="Broker account" value="Not connected" detail="No active authorized session"/>
-      <StateCard icon={LockKeyhole} label="Order execution" value="Disabled" detail="Trading approval required" tone="amber"/>
-      <StateCard icon={Layers3} label="Saved workspaces" value={String(workspace.layouts.length)}
-        detail="Browser-local chart layouts" tone="purple"/>
-    </div>
-
-    <div className="qd-main-grid">
-      <section className="qd-featured-chart" aria-label="Synthetic market chart preview">
-        <div className="qd-section-header">
-          <div><div className="qd-overline">CHART STUDIO / PREVIEW</div><h2>Synthetic premium workspace</h2></div>
-          <button type="button" className="qd-text-action" onClick={() => openView('trading')}>
-            Full charts <ArrowUpRight size={16}/>
-          </button>
-        </div>
-        <div className="qd-chart-preview">
-          <ChartPanel pane={PRIMARY_PANE} theme={theme} savedState={null} revision={0} onMount={NOOP}/>
-        </div>
-      </section>
-
-      <aside className="qd-right-column">
-        <section className="qd-surface qd-workflow" aria-label="CE PE strategy workflow">
-          <div className="qd-section-header">
-            <div><div className="qd-overline">STRATEGY BUILDER</div><h2>From legs to insight</h2></div>
-            <Workflow size={18}/>
-          </div>
-          <p className="qd-soft-copy">A connected research flow, inspired by the workflow reference. Values are illustrative, not exchange quotes.</p>
-          <div className="qd-flow">
-            <FlowStep number="01" title="Select CE + PE legs" description="NIFTY / BANKNIFTY / FINNIFTY"/>
-            <FlowStep number="02" title="Compose synthetic premium" description="Aligned simulated candles"/>
-            <FlowStep number="03" title="Explore payoff and risk" description="Greeks, scenarios, and replay" tone="last"/>
-          </div>
-          <button type="button" className="qd-wide-link" onClick={()=>openView('strategy')}>Launch Strategy Studio <ArrowRight size={16}/></button>
-        </section>
-
-        <section className="qd-surface qd-security" aria-label="Safety and execution readiness">
-          <div className="qd-section-header"><div><div className="qd-overline">OPERATIONS</div><h2>Execution safeguards</h2></div><ShieldCheck size={19}/></div>
-          <div className="qd-safety-row"><span><CheckCircle2 size={16}/> Simulated analytics</span><b>Available</b></div>
-          <div className="qd-safety-row"><span><Clock3 size={16}/> Private CE/PE authorization</span><b>Gated</b></div>
-          <div className="qd-safety-row"><span><LockKeyhole size={16}/> Real-money order routing</span><b>Locked</b></div>
-          <button type="button" className="qd-text-action" onClick={() => openView('private-live')}>
-            View restricted charts <ArrowUpRight size={16}/>
-          </button>
-        </section>
-      </aside>
-    </div>
-
-    <div className="qd-bottom-grid">
-      <section className="qd-surface qd-shortcuts">
-        <div className="qd-section-header"><div><div className="qd-overline">NAVIGATION</div><h2>Go to workspace</h2></div><Compass size={18}/></div>
-        <div className="qd-links-grid">
-          <LinkTile title="OpenAlgo Charts" detail="Candles, studies, drawings" icon={CandlestickChart} onClick={() => openView('trading')}/>
-          <LinkTile title="Strategy Studio" detail="Simulated CE/PE and payoff" icon={FlaskConical} onClick={()=>openView('strategy')}/>
-          <LinkTile title="Analytics tools" detail="Explore available features" icon={SlidersHorizontal} onClick={() => openView('tools')}/>
-          <LinkTile title="Private market view" detail="Requires authorized access" icon={LockKeyhole} onClick={() => openView('private-live')} subtle/>
-        </div>
-      </section>
-      <section className="qd-surface qd-watchlist" aria-label="Browser watchlist preview">
-        <div className="qd-section-header"><div><div className="qd-overline">LOCAL WORKSPACE</div><h2>Watchlist</h2></div><span className="qd-small-count">{workspace.watchlist.length} saved</span></div>
-        <p className="qd-soft-copy">Only simulated instruments saved in this browser.</p>
-        {previewWatchlist.length
-          ? previewWatchlist.map(id => <div className="qd-watch-row" key={id}>
-              <span className="qd-symbol-icon"><Activity size={15}/></span>
-              <span><strong>{instrumentFor(id)?.underlying || 'QSYN DEMO'}</strong><small>{id}</small></span>
-              <span className="qd-watch-badge">SIM</span>
-            </div>)
-          : <p className="qd-empty-watchlist">No simulated instruments saved.</p>}
-        <button type="button" className="qd-text-action" onClick={() => openView('trading')}>Manage chart watchlist <ArrowRight size={15}/></button>
-      </section>
-    </div>
-
-    <footer className="qd-footer"><FileClock size={15}/>
-      Dashboard is a simulated research workspace. No account balances, market P&amp;L, live ticks, or executable orders are presented.
-    </footer>
   </div>;
 }
