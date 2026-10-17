@@ -318,3 +318,19 @@ button:focus-visible,a:focus-visible{outline:2px solid var(--q-accent);outline-o
 }
 
 
+
+/* Global feed control: navigation never hides the pause/resume action. */
+.terminal-topbar .terminal-top-right{gap:10px}
+.terminal-topbar .qsyn-feed-control{flex:none}
+.terminal-topbar .qsyn-feed-pill{width:76px;height:30px}
+.terminal-topbar .qsyn-feed-pill>span:not(.qsyn-feed-pill-knob){font-size:9px}
+.terminal-market-embedded .qsyn-home-chart{position:relative}
+.terminal-market-embedded .qsyn-chart-feed-paused{position:absolute;z-index:7;
+  top:51px;right:12px;max-width:min(370px,calc(100% - 24px));
+  margin:0;padding:9px 12px;border-radius:8px;
+  background:var(--q-card);border:1px solid var(--q-line);
+  color:var(--q-muted);font-size:11px;pointer-events:none;box-shadow:0 5px 20px #0001}
+@media(max-width:1280px){.terminal-topbar .terminal-environment{display:none}}
+@media(max-width:700px){.terminal-topbar .terminal-top-right{gap:5px}
+  .terminal-topbar .qsyn-feed-pill{width:70px;height:28px}
+  .terminal-market-embedded .qsyn-chart-feed-paused{top:45px;left:12px;right:auto}}
