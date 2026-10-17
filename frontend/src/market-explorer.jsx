@@ -1,15 +1,17 @@
 import React,{useEffect,useMemo,useState} from 'react';
-import {Activity,ArrowRight,CheckCircle2,LockKeyhole,RefreshCw,ShieldCheck} from 'lucide-react';
+import {Activity,ArrowRight,CheckCircle2,LockKeyhole,Radio,RefreshCw,ShieldCheck} from 'lucide-react';
 import {MARKET_FAMILIES,MARKET_PROVIDERS,DEFAULT_MARKET,catalogFor,
   marketFamily,providerFor,isValidCryptoHealth,providerEvidence} from './market-model.js';
 import {consumeIndexIntent,indexIntentFor} from './private-index-intent.js';
 import {PrivateIndexHistoryChart} from './private-index-history-chart.jsx';
+import {LiveFeedSwitch,useLiveFeedPreference} from './live-feed-switch.jsx';
 import './market-explorer.css';
 
 const healthRequest = source=>'/qsyn/api/v1/crypto/health?'+new URLSearchParams({
   exchange:source.exchange,market:source.market,symbol:source.symbol,interval:'1m',limit:'5'
 });
 export function MarketExplorer({theme,openView,CryptoChart,PrivateCharts}){
+  const liveFeedEnabled=useLiveFeedPreference();
   // Same-tab handoff through the administrator sign-in preserves only the
   // public index alias. No private account, ticket, token or quote is stored.
   const [arrival]=useState(()=>consumeIndexIntent());
@@ -81,9 +83,7 @@ export function MarketExplorer({theme,openView,CryptoChart,PrivateCharts}){
         <p>Choose a market, exchange and provider. Market status reflects verified
           source evidence, not a broker login or simulated chart.</p>
       </div>
-      <button type="button" className="terminal-action terminal-secondary-action"
-        onClick={()=>setCheckSeq(x=>x+1)} disabled={checking}>
-        <RefreshCw size={15}/> {checking?'Checking…':'Check source'}</button>
+
     </header>
     <div className="qt-market-families" role="group" aria-label="Market categories">
       {MARKET_FAMILIES.map(m=><button key={m.id} type="button"
@@ -93,7 +93,8 @@ export function MarketExplorer({theme,openView,CryptoChart,PrivateCharts}){
         {m.label}</button>)}
     </div>
     <section className="terminal-surface qt-market-source-panel">
-      <div className="qt-market-source-selects">
+      <div className="qt-market-control-row">
+        <div className="qt-market-source-selects">
         <label>Exchange / venue
           <select aria-label="Exchange venue" value={currentVenue||''}
             disabled={!family.venues.length}
@@ -113,6 +114,14 @@ export function MarketExplorer({theme,openView,CryptoChart,PrivateCharts}){
             {venueInstruments.map(row=><option key={row.id} value={row.id}>
               {row.label||row.name||row.symbol}</option>)}
           </select></label>}
+        </div>
+        <div className="qt-market-feed-actions">
+          <LiveFeedSwitch ariaLabel="Markets live market feed"/>
+          <button type="button" className="terminal-action terminal-secondary-action"
+            onClick={()=>setCheckSeq(x=>x+1)} disabled={checking}>
+            <RefreshCw size={15}/> {checking?'Checking…':'Check source'}
+          </button>
+        </div>
       </div>
       <div className="qt-market-status-grid" role="status" aria-label="Selected provider status">
         <div><small>Provider connection</small><strong>{market==='indices'
@@ -129,7 +138,7 @@ export function MarketExplorer({theme,openView,CryptoChart,PrivateCharts}){
           ? 'Public source':evidence.display==='simulation_only'
           ? 'Simulation only':'Not verified'}</strong></div>}
       </div>
-      <p className="terminal-footnote">
+      <p className="terminal-footnote qt-market-evidence-note">
         {market==='crypto'&&cryptoCheck
           ? activeVenueName+' public health API responded. This alone does not confirm current candles or a continuously streaming socket.'
           : market==='crypto'?'Public exchange status not verified. No demo fallback is permitted.'
@@ -147,6 +156,10 @@ export function MarketExplorer({theme,openView,CryptoChart,PrivateCharts}){
           onClick={()=>openView('diagnostics')}>Source diagnostics <Activity size={15}/></button>
       </div>
     </section>
+    {(market==='crypto'||market==='indices')&&!liveFeedEnabled&&<div
+      className="qt-market-feed-paused" role="status">
+      <Radio size={15}/> Live updates paused in this browser; historical candles remain accessible.
+    </div>}
     {market==='crypto'&&<>
       <p className="qt-market-chart-hint">Public crypto chart · {providerFor(provider).label} ·
         {currentInstrument?.symbol||'No instrument'}.
