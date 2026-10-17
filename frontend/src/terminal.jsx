@@ -39,6 +39,7 @@ import {
 } from './terminal-workspace.js';
 import './terminal.css';
 import { DashboardCockpit } from './dashboard.jsx';
+import {LiveFeedSwitch,useLiveFeedPreference} from './live-feed-switch.jsx';
 import {DiagnosticsWorkspace,BrokersWorkspace,OperationsWorkspace} from './terminal-unified.jsx';
 import {StrategyWorkspace} from './terminal-strategy.jsx';
 import {MarketExplorer} from './market-explorer.jsx';
@@ -51,6 +52,7 @@ const VIEWS = new Set(terminalRoutes.map(route=>route.view));
 // QSYN Core: market data, provider setup, and read-only diagnostics are primary.
 // Retired research/admin screens remain available at their old deep links.
 const sections = [
+  { label:'Dashboard',view:'dashboard',icon:LayoutDashboard },
   { label:'Markets',view:'markets',icon:CandlestickChart },
   { label:'Data Providers & Connections',view:'brokers',icon:Wallet },
   { label:'Diagnostics & feed health',view:'diagnostics',icon:Activity },
@@ -159,11 +161,12 @@ function HomepageChart({ theme, embedded = false,
   const host=useRef(null);
   const [savedSelection]=useState(()=>loadPublicChartSelection(browserStorage()));
   // Browser preference is loaded once; it must not reset on a theme change.
-  const firstExchange=initialExchange===cryptoDefault.exchange+':'+cryptoDefault.market && initialSymbol===cryptoDefault.symbol ? savedSelection.exchange : initialExchange;
-  const firstSymbol=initialExchange===cryptoDefault.exchange+':'+cryptoDefault.market && initialSymbol===cryptoDefault.symbol ? savedSelection.symbol : initialSymbol;
+  const firstExchange=!embedded && initialExchange===cryptoDefault.exchange+':'+cryptoDefault.market && initialSymbol===cryptoDefault.symbol ? savedSelection.exchange : initialExchange;
+  const firstSymbol=!embedded && initialExchange===cryptoDefault.exchange+':'+cryptoDefault.market && initialSymbol===cryptoDefault.symbol ? savedSelection.symbol : initialSymbol;
   const [message,setMessage]=useState('Connecting public exchange candles…');
   const [blockedIndex,setBlockedIndex]=useState(null);
   const [timeframeNotice,setTimeframeNotice]=useState('');
+  const liveFeedEnabled=useLiveFeedPreference();
   const nativeWorkspaces=useMemo(()=>cryptoNativeWorkspaceStore(),[]);
   const nativeWatchlists=useMemo(()=>nativeCryptoWatchlists(),[]);
   useEffect(()=>{
@@ -296,6 +299,9 @@ function HomepageChart({ theme, embedded = false,
   return <main className={embedded ? 'qsyn-homepage terminal-market-embedded' : 'qsyn-homepage'} aria-label="QSYN crypto and India index charts">
     <div className="qsyn-home-chart">
       <div className="qsyn-crypto-grid" ref={host}/>
+      {embedded&&!liveFeedEnabled&&<p className="qsyn-chart-feed-paused" role="status">
+        Live updates paused in this browser · historical candles remain available
+      </p>}
       <span className="qsyn-screenreader-status" role="status" aria-live="polite">{message}</span>
       {timeframeNotice&&!blockedIndex&&<div className="qsyn-india-entitlement-note" role="status">{timeframeNotice}</div>}
       {blockedIndex && <div className="qsyn-india-entitlement-note" role="status">
@@ -866,6 +872,7 @@ function App() {
         <span className="terminal-current"><current.icon size={16}/>{current.label}</span>
       </div>
       <div className="terminal-top-right">
+        <LiveFeedSwitch compact ariaLabel="Header live market feed"/>
         <span className="terminal-environment">● ADMIN TERMINAL · {['private-live','brokers','operations'].includes(view)?'RESTRICTED':view==='markets'||view==='diagnostics'?'MARKET DATA · READ ONLY':'RESEARCH ONLY'}</span>
         <button type="button" className="terminal-icon" aria-label="Toggle theme"
           onClick={toggleTheme}>
