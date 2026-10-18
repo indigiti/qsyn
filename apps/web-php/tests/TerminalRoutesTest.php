@@ -8,8 +8,8 @@ function check(bool $value,string $message): void {
 }
 $registry=new TerminalRoutes(dirname(__DIR__) . '/public/terminal-routes.json');
 $expected=[
-    'dashboard','markets','trading','strategy','workspaces','brokers',
-    'diagnostics','operations','tools','private-live','routes',
+    'dashboard','markets','strategy','workspaces','brokers',
+    'diagnostics','operations','private-live',
 ];
 $paths=$registry->paths();
 check(count($paths)===count($expected),'route_count');
@@ -20,13 +20,16 @@ foreach ($expected as $view) {
     check($registry->target('/qsyn/terminal/'.$view.'/')==='/qsyn/terminal/'.$view,
         'canonical_slash_'.$view);
 }
-check($registry->target('/qsyn/terminal')==='/qsyn/terminal/markets','root_alias');
+check($registry->target('/qsyn/terminal')==='/qsyn/terminal/dashboard','root_alias');
 check($registry->target('/qsyn/terminal/','strategy')==='/qsyn/terminal/strategy','old_query_bookmark');
-check($registry->target('/qsyn/terminal','../../secret')==='/qsyn/terminal/markets','invalid_query');
+check($registry->target('/qsyn/terminal','../../secret')==='/qsyn/terminal/dashboard','invalid_query');
 foreach ([
     '/qsyn/studio'=>'strategy',
     '/qsyn/admin/rust'=>'operations',
     '/qsyn/legacy-chart'=>'diagnostics',
+    '/qsyn/terminal/trading'=>'workspaces',
+    '/qsyn/terminal/tools'=>'markets',
+    '/qsyn/terminal/routes'=>'diagnostics',
 ] as $legacy=>$view){
     check($registry->isAlias($legacy),'legacy_detected_'.$view);
     check($registry->isAlias($legacy.'/'),'legacy_slash_'.$view);

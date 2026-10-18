@@ -43,7 +43,6 @@ import {LiveFeedSwitch,useLiveFeedPreference} from './live-feed-switch.jsx';
 import {DiagnosticsWorkspace,BrokersWorkspace,OperationsWorkspace} from './terminal-unified.jsx';
 import {StrategyWorkspace} from './terminal-strategy.jsx';
 import {MarketExplorer} from './market-explorer.jsx';
-import {RouteManagementWorkspace} from './terminal-route-management.jsx';
 import {terminalHref,terminalViewForLocation,defaultTerminalView,terminalRoutes} from './terminal-routes.js';
 
 const VIEWS = new Set(terminalRoutes.map(route=>route.view));
@@ -57,7 +56,7 @@ const sections = [
   { label:'Data Providers & Connections',view:'brokers',icon:Wallet },
   { label:'Diagnostics & feed health',view:'diagnostics',icon:Activity },
 ];
-const mobileSections=sections.filter(s=>['markets','workspaces','strategy','brokers'].includes(s.view));
+const mobileSections=sections;
 function routeView() {
   return terminalViewForLocation(window.location.pathname,window.location.search) ?? defaultTerminalView;
 }
@@ -679,27 +678,11 @@ function PrivateMarketWorkspace({embedded=false,onlyIndex=false,selectedIndex=nu
     </div>}
   </div>;
 }
-function Tools({openView}) {
-  return (
-    <div className="terminal-page">
-      <header className="terminal-title"><div><p className="terminal-eyebrow">ANALYTICS</p>
-        <h1>Tools</h1><p>Tools are enabled only when their QSYN backend contracts exist.</p>
-      </div></header>
-      <div className="terminal-tool-grid">
-        <button type="button" className="terminal-tool" onClick={()=>openView('strategy')}><Layers /><h2>Strategy Studio</h2><p>Simulated CE/PE legs, combined premiums, option chain, expiry payoff and saved research setups.</p><span>Open workspace →</span></button>
-        <button type="button" className="terminal-tool" onClick={()=>openView('markets')}><CandlestickChart /><h2>Public market charts</h2><p>Live crypto charts, licensed India index discovery, native indicators and drawings.</p><span>Open markets →</span></button>
-        <div className="terminal-tool unavailable"><LockKeyhole /><h2>Live option chain</h2><p>Requires a licensed, authenticated account-scoped feed.</p><span>Unavailable</span></div>
-        <div className="terminal-tool unavailable"><Gauge /><h2>Order management</h2><p>Requires production permissions and execution risk approval.</p><span>Unavailable</span></div>
-      </div>
-    </div>
-  );
-}
 function App() {
   const [view, setView] = useState(routeView);
   const [theme, setTheme] = useState(currentTheme);
   const [sidebar, setSidebar] = useState(false);
   const [sessionWarning, setSessionWarning] = useState('');
-  const [capabilities, setCapabilities] = useState(null);
   useEffect(() => {
     if (['/', '/qsyn', '/qsyn/'].includes(window.location.pathname)) return;
     let active = true;
@@ -754,17 +737,9 @@ function App() {
     setTheme(next);
     try { localStorage.setItem('qsyn-terminal-theme', next); } catch {}
   }
-  useEffect(() => {
-    let active = true;
-    const controller = new AbortController();
-    fetch('/qsyn/api/v1/studio/capabilities', {
-      method: 'GET', credentials: 'same-origin', cache: 'no-store', signal: controller.signal,
-    }).then(response => { if (!response.ok) throw Error('capabilities unavailable'); return response.json(); })
-      .then(data => { if (active) setCapabilities(data); })
-      .catch(() => { if (active) setCapabilities(null); });
-    return () => { active = false; controller.abort(); };
-  }, []);
-  const current = useMemo(() => sections.find(s => s.view === view) || sections[1], [view]);
+  const current = useMemo(() => sections.find(s => s.view === view) || {
+    label:terminalRoutes.find(route=>route.view===view)?.label||'Terminal',icon:Settings
+  }, [view]);
   function openView(next) {
     if (!VIEWS.has(next)) return;
     const target=terminalHref(next);
@@ -798,7 +773,7 @@ function App() {
   }
   function Navigation({ mobile = false }) {
     return <nav aria-label={mobile ? 'Mobile terminal' : 'Terminal'}>
-      <p className="terminal-nav-label">RESEARCH & DATA</p>
+      <p className="terminal-nav-label">CORE</p>
       {sections.map(s => <button key={s.view} type="button"
         aria-current={view === s.view ? 'page' : undefined}
         className={'terminal-nav-item' + (view === s.view ? ' active' : '')}
@@ -821,7 +796,6 @@ function App() {
       </div>
       <div className="terminal-top-right">
         <LiveFeedSwitch compact ariaLabel="Header live market feed"/>
-        <span className="terminal-environment">● ADMIN TERMINAL · {['private-live','brokers','operations'].includes(view)?'RESTRICTED':view==='markets'||view==='diagnostics'?'MARKET DATA · READ ONLY':'RESEARCH ONLY'}</span>
         <button type="button" className="terminal-icon" aria-label="Toggle theme"
           onClick={toggleTheme}>
           {theme === 'dark' ? <Sun size={18}/> : <Moon size={18}/>}</button>
@@ -846,13 +820,7 @@ function App() {
         <button type="button" className="terminal-action terminal-secondary-action"
           onClick={()=>openView('diagnostics')}>Diagnostics</button>
       </div>}
-      <div className="terminal-alert" role="note"><ShieldAlert size={17}/>
-        <span>{view==='private-live'||view==='brokers'||view==='operations'
-          ? <><b>Restricted source management.</b> Authentication, display rights and worker activation are independent. Orders disabled.</>
-          : view==='markets'||view==='diagnostics'
-          ? <><b>Source-aware markets.</b> Public crypto is separate from licensed India feeds. Provider health and chart availability are verified independently. Orders disabled.</>
-          : <><b>Research-only workspace.</b> Simulated data is never treated as exchange prices. Orders disabled.</>}</span></div>
-      {view === 'dashboard' && <DashboardCockpit capabilities={capabilities} openView={openView} theme={theme} ChartPanel={ChartPanel}/>}
+      {view === 'dashboard' && <DashboardCockpit openView={openView}/>}
       {view === 'markets' && <MarketExplorer theme={theme} openView={openView}
         CryptoChart={HomepageChart} PrivateCharts={PrivateMarketWorkspace}/>} 
       {view === 'strategy' && <StrategyWorkspace theme={theme}/>}
@@ -863,19 +831,12 @@ function App() {
       {view === 'brokers' && <BrokersWorkspace openView={openView}/>}
       {view === 'diagnostics' && <DiagnosticsWorkspace/>}
       {view === 'operations' && <OperationsWorkspace/>}
-      {view === 'routes' && <RouteManagementWorkspace openView={openView}/>} 
-      {view === 'trading' && <div className="terminal-page">
-        <header className="terminal-title"><div><p className="terminal-eyebrow">COMPATIBILITY · SIMULATION ONLY</p><h1>Legacy Chart Lab</h1>
-          <p>This legacy route remains available for existing saved simulated layouts. No order execution or live market source is connected.</p></div></header>
-        <ChartWorkspace theme={theme}/></div>}
-      {view === 'tools' && <Tools openView={openView}/>}
       {view === 'private-live' && <PrivateMarketWorkspace/>}
     </main>
     <nav className="terminal-bottom-nav" aria-label="Mobile quick navigation">
       {mobileSections.map(s=><button type="button" key={s.view}
         className={view === s.view ? 'active':''} aria-current={view === s.view ? 'page':undefined}
         onClick={()=>openView(s.view)}><s.icon size={18}/><span>{s.label}</span></button>)}
-      <button type="button" onClick={()=>openView('diagnostics')}><Activity size={18}/><span>Health</span></button>
     </nav>
   </div>;
 }

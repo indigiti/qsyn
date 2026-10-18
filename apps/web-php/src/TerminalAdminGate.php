@@ -14,7 +14,7 @@ use QSYN\Admin\RustAdminBootstrap;
 final class TerminalAdminGate
 {
     private const LOGIN = '/qsyn/terminal/login';
-    private const DEFAULT = '/qsyn/terminal/markets';
+    private const DEFAULT = '/qsyn/terminal/dashboard';
 
     public static function enforce(string $route, array $server, string $loginTemplatePath): void
     {
