@@ -13,6 +13,44 @@ use QSYN\Admin\RustAdmin;
 final class UpstoxInstrumentSearch
 {
     private const ENDPOINT='https://api.upstox.com/v2/instruments/search';
+    /**
+     * Authenticated search result -> short-lived, session-bound instrument.
+     * Neither the broker token nor arbitrary client-supplied keys are accepted.
+     */
+    public static function validHistoryKey(string $key): bool
+    {
+        return preg_match(
+            '/\\A(?:NSE_EQ|BSE_EQ|NSE_INDEX|BSE_INDEX|NSE_FO|BSE_FO|NCD_FO|BCD_FO|MCX_FO|NSE_COM)\\|[A-Za-z0-9 ._-]{1,100}\\z/D',
+            $key
+        )===1;
+    }
+    public static function signScope(string $key,string $token,string $csrf,int $now): ?string
+    {
+        if(!self::validHistoryKey($key)||$csrf===''||$token==='')return null;
+        $payload=json_encode(['key'=>$key,'exp'=>$now+600],JSON_THROW_ON_ERROR);
+        $data=rtrim(strtr(base64_encode($payload),'+/','-_'),'=');
+        return $data.'.'.hash_hmac('sha256',$data.'.'.$csrf,$token);
+    }
+    public static function verifyScope(string $scope,string $token,string $csrf,int $now): ?string
+    {
+        if(strlen($scope)>512||$csrf===''||$token===''||!str_contains($scope,'.'))return null;
+        [$data,$signature]=explode('.',$scope,2);
+        if(strlen($data)>300||strlen($signature)!==64||
+            preg_match('/\\A[A-Za-z0-9_-]+\\z/D',$data)!==1||
+            preg_match('/\\A[a-f0-9]{64}\\z/D',$signature)!==1||
+            !hash_equals(hash_hmac('sha256',$data.'.'.$csrf,$token),$signature))
+            return null;
+        $json=base64_decode(strtr($data,'-_','+/'),true);
+        if(!is_string($json))return null;
+        try{$scopeData=json_decode($json,true,5,JSON_THROW_ON_ERROR);}
+        catch(\Throwable){return null;}
+        if(!is_array($scopeData)||array_keys($scopeData)!==['key','exp']||
+            !is_string($scopeData['key'])||!is_int($scopeData['exp'])||
+            $scopeData['exp']<=$now||$scopeData['exp']>$now+600||
+            !self::validHistoryKey($scopeData['key']))return null;
+        return $scopeData['key'];
+    }
+
     private const ALLOWED=[
         'query','exchanges','segments','instrument_types','expiry','atm_offset',
         'page_number','records'
@@ -175,8 +213,13 @@ final class UpstoxInstrumentSearch
                     $response['http_status']:0]];
         $normalized=is_array($response['body']??null)
             ?self::normalize($response['body'],$params):null;
-        return $normalized===null
-            ?[502,['error'=>'upstox_instrument_search_invalid_response']]
-            :[200,$normalized];
+        if($normalized===null)return [502,['error'=>'upstox_instrument_search_invalid_response']];
+        $csrf=RustAdmin::csrf();
+        foreach($normalized['instruments'] as &$instrument){
+            $instrument['selection_scope']=self::signScope(
+                $instrument['instrument_key'],$token,$csrf,time());
+        }
+        unset($instrument);
+        return [200,$normalized];
     }
 }

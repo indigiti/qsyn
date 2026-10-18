@@ -45,6 +45,18 @@ ensureInstrument(count($data['instruments'])===1,'instrument_lost');
 ensureInstrument($data['instruments'][0]['instrument_key']==='NSE_FO|157318',
     'stable_instrument_key_not_returned');
 ensureInstrument(!str_contains(json_encode($data),'SHOULD_NOT_LEAK'),'upstream_sensitive_fields_leaked');
+$scope=Search::signScope('NSE_FO|157318','unit-broker-token','unit-session',1000);
+ensureInstrument(is_string($scope),'signed_scope_missing');
+ensureInstrument(Search::verifyScope($scope,'unit-broker-token','unit-session',1100)
+    ==='NSE_FO|157318','scope_verification_failed');
+ensureInstrument(Search::verifyScope($scope,'unit-broker-token','unit-session',1600)
+    ===null,'expired_scope_accepted');
+ensureInstrument(Search::verifyScope($scope,'different-token','unit-session',1100)
+    ===null,'cross_account_scope_accepted');
+ensureInstrument(Search::verifyScope($scope,'unit-broker-token','different-session',1100)
+    ===null,'cross_session_scope_accepted');
+ensureInstrument(Search::signScope('NSE_EQ|../../private','unit-broker-token','unit-session',1000)
+    ===null,'unsafe_path_scope_signed');
 ensureInstrument(Search::normalize(['status'=>'success','data'=>array_fill(0,31,$body['data'][0])],$params)===null,
     'unbounded_search_accepted');
 ensureInstrument(Search::normalize(['status'=>'error','data'=>[]],$params)===null,

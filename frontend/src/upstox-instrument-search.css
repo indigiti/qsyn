@@ -22,3 +22,11 @@
 @media(max-width:1000px){.terminal-shell .qs-upstox-search-filters{grid-template-columns:repeat(2,minmax(0,1fr))}
 .terminal-shell .qs-upstox-search-filters label:first-child{grid-column:1/-1}}
 @media(max-width:620px){.terminal-shell .qs-upstox-search-results{grid-template-columns:1fr}}
+
+.terminal-shell .qs-upstox-history{display:flex;flex-wrap:wrap;align-items:center;gap:10px;
+ padding:12px 0;border-top:1px solid var(--q-line)}
+.terminal-shell .qs-upstox-history label{display:flex;flex-direction:column;gap:5px;font-size:11px}
+.terminal-shell .qs-upstox-history input{padding:8px;background:var(--q-bg);color:var(--q-fg);
+ border:1px solid var(--q-line);border-radius:6px}
+.terminal-shell .qs-upstox-history .qt-private-history-host{flex-basis:100%;height:450px;min-height:400px}
+.terminal-shell .qs-upstox-history p{flex-basis:100%;font-size:11px;color:var(--q-muted)}

@@ -24,6 +24,27 @@ pub(crate) fn main() {
                 Err(_) => Err(std::io::Error::other("runtime_unavailable")),
             }
         }
+        [operation, instrument, day, runtime] if operation == "instrument-history" => {
+            let rt = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build();
+            match rt {
+                Ok(rt) => match rt.block_on(qsyn_stream::upstox_instrument_history::history(
+                    instrument,
+                    day,
+                    Path::new(runtime),
+                )) {
+                    Ok(json) => {
+                        println!("{json}");
+                        Ok(())
+                    }
+                    Err(_) => Err(std::io::Error::other(
+                        "private_instrument_history_unavailable",
+                    )),
+                },
+                Err(_) => Err(std::io::Error::other("runtime_unavailable")),
+            }
+        }
         [operation, path] if operation == "check" || operation == "run" => {
             let settings = IndexWorkerSettings::from_private_file(Path::new(path));
             match (operation.as_str(), settings) {

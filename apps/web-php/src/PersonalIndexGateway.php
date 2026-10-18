@@ -75,7 +75,7 @@ final class PersonalIndexGateway
         ]];
     }
     /** Fixed Rust subprocess, never a client-selected command/path/secret. */
-    private static function invoke(array $command):?array
+    private static function invoke(array $command,int $maxBytes=110000):?array
     {
         if (!function_exists('proc_open')||!function_exists('proc_get_status')
             ||!function_exists('proc_terminate')||!function_exists('proc_close'))
@@ -95,20 +95,20 @@ final class PersonalIndexGateway
                 $out.=(string)stream_get_contents($pipes[1],8192);
                 // Never return stderr: it may contain provider details.
                 stream_get_contents($pipes[2],4096);
-                if(strlen($out)>110000){proc_terminate($proc);break;}
+                if(strlen($out)>$maxBytes){proc_terminate($proc);break;}
                 $state=proc_get_status($proc);
                 if(!$state['running']){
                     // A normal full-session payload easily exceeds one 8 KiB
                     // read. The child may exit after writing its final bytes;
                     // always drain the remaining pipe before JSON decoding.
                     // Otherwise genuine Rust history is silently truncated.
-                    $remaining=110001-strlen($out);
+                    $remaining=$maxBytes+1-strlen($out);
                     if($remaining>0) {
                         $tail=stream_get_contents($pipes[1],$remaining);
                         if(is_string($tail))$out.=$tail;
                     }
                     stream_get_contents($pipes[2],4096);
-                    $success=$state['exitcode']===0 && strlen($out)<=110000;
+                    $success=$state['exitcode']===0 && strlen($out)<=$maxBytes;
                     break;
                 }
                 usleep(30000);
@@ -118,11 +118,24 @@ final class PersonalIndexGateway
             foreach([1,2] as $n)fclose($pipes[$n]);
             @proc_close($proc);
         }
-        if(!$success||strlen($out)<20||strlen($out)>110000)return null;
+        if(!$success||strlen($out)<20||strlen($out)>$maxBytes)return null;
         try{$data=json_decode($out,true,12,JSON_THROW_ON_ERROR);}
         catch(\Throwable){return null;}
         return is_array($data)?$data:null;
     }
+    /** Same existing qsyn-stream ELF, separately authorized instrument scope. */
+    public static function instrumentHistory(string $instrument,string $day): ?array
+    {
+        $runtime=self::runtime();
+        $binary=dirname(__DIR__).'/bin/qsyn-stream';
+        if($runtime===null||!is_file($binary)||!is_executable($binary)||
+            is_link($binary))return null;
+        return self::invoke([
+            $binary,'mode','qsyn-upstox-index-worker','instrument-history',
+            $instrument,$day,$runtime
+        ],512000);
+    }
+
     public static function history(array $server,bool $ownerViewer=false):array
     {
         [$status,$body]=self::readRequest($server,$ownerViewer);

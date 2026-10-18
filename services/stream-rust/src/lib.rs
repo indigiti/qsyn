@@ -21,6 +21,7 @@ pub mod runtime_cli;
 pub mod upstox_history;
 pub mod upstox_index_history;
 pub mod upstox_index_worker;
+pub mod upstox_instrument_history;
 pub mod upstox_v3;
 pub mod upstox_worker;
 
