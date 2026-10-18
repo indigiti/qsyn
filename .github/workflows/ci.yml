@@ -81,6 +81,8 @@ jobs:
           php -l apps/web-php/src/NativeUpstoxProfileVerifier.php
           php apps/web-php/tests/NativeUpstoxProfileVerifierTest.php
           php -l apps/web-php/src/UpstoxInstrumentSearch.php
+          php -l apps/web-php/src/UpstoxInstrumentHistoryApi.php
+          php apps/web-php/tests/UpstoxInstrumentHistoryApiTest.php
           php apps/web-php/tests/UpstoxInstrumentSearchTest.php
           php -l apps/web-php/src/IndexHistoricalProof.php
           php apps/web-php/tests/IndexHistoricalProofTest.php
@@ -262,6 +264,7 @@ jobs:
           node tests/upstox-readiness-contract.mjs
           node tests/upstox-index-volume-contract.mjs
           node tests/upstox-instrument-search.test.mjs
+          node tests/upstox-instrument-history.test.mjs
         working-directory: frontend
       - name: Verify India index native discovery and strict license gates
         run: node tests/india-index-contract.mjs

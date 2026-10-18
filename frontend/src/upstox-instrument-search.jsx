@@ -1,5 +1,6 @@
 import React,{useEffect,useState} from 'react';
 import {searchUpstoxInstruments} from './upstox-instrument-search.js';
+import {UpstoxInstrumentHistoryChart} from './upstox-instrument-history-chart.jsx';
 import './upstox-instrument-search.css';
 
 const EXCHANGES=['ALL','NSE','BSE','MCX'];
@@ -86,9 +87,11 @@ export function UpstoxInstrumentSearch(){
       <span>{selected.expiry?'Expiry '+selected.expiry+' · ':''}
         {selected.strike_price!==null?'Strike '+selected.strike_price+' · ':''}
         {selected.lot_size?'Lot '+selected.lot_size:''}</span>
-      <p>Instrument identified. Historical candles and live subscriptions for this
-        instrument require separate Rust adapter verification. No price or volume
-        is inferred from instrument search.</p>
+      <p>This instrument was resolved by Upstox. Historical candles are fetched
+        by Rust using a short-lived signed selection. Live ticks remain unverified.</p>
+      {selected.selection_scope
+        ? <UpstoxInstrumentHistoryChart instrument={selected}/>
+        : <p>Historical data unavailable for this instrument key.</p>}
     </div>}
   </section>;
 }

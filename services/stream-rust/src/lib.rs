@@ -19,6 +19,7 @@ pub mod private_index_history_http;
 pub mod private_live_pipeline;
 pub mod runtime_cli;
 pub mod upstox_history;
+pub mod upstox_instrument_history;
 pub mod upstox_index_history;
 pub mod upstox_index_worker;
 pub mod upstox_v3;
