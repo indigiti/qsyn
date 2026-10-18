@@ -43,7 +43,7 @@ final class UpstoxInstrumentSearch
         $json=base64_decode(strtr($data,'-_','+/'),true);
         if(!is_string($json))return null;
         try{$scopeData=json_decode($json,true,5,JSON_THROW_ON_ERROR);}
-        catch(\\Throwable){return null;}
+        catch(\Throwable){return null;}
         if(!is_array($scopeData)||array_keys($scopeData)!==['key','exp']||
             !is_string($scopeData['key'])||!is_int($scopeData['exp'])||
             $scopeData['exp']<=$now||$scopeData['exp']>$now+600||

@@ -38,7 +38,9 @@ pub(crate) fn main() {
                         println!("{json}");
                         Ok(())
                     }
-                    Err(_) => Err(std::io::Error::other("private_instrument_history_unavailable")),
+                    Err(_) => Err(std::io::Error::other(
+                        "private_instrument_history_unavailable",
+                    )),
                 },
                 Err(_) => Err(std::io::Error::other("runtime_unavailable")),
             }
