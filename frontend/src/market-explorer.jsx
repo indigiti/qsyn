@@ -4,6 +4,7 @@ import {MARKET_FAMILIES,MARKET_PROVIDERS,DEFAULT_MARKET,catalogFor,
   marketFamily,providerFor,isValidCryptoHealth,providerEvidence} from './market-model.js';
 import {consumeIndexIntent,indexIntentFor} from './private-index-intent.js';
 import {PrivateIndexHistoryChart} from './private-index-history-chart.jsx';
+import {UpstoxInstrumentSearch} from './upstox-instrument-search.jsx';
 import {LiveFeedSwitch,useLiveFeedPreference} from './live-feed-switch.jsx';
 import './market-explorer.css';
 
@@ -182,6 +183,7 @@ export function MarketExplorer({theme,openView,CryptoChart,PrivateCharts}){
       {currentInstrument&&<PrivateIndexHistoryChart key={currentInstrument.id}
         symbol={currentInstrument.symbol}/>}
     </>}
+    {market!=='crypto'&&<UpstoxInstrumentSearch/>}
     {market==='stocks'&&<section className="terminal-surface">
       <div className="terminal-card-head"><h2>NSE / BSE equities</h2><LockKeyhole size={16}/></div>
       <p>A general cash-equity data provider has not been verified end to end.

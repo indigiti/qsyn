@@ -317,6 +317,27 @@ if (preg_match('#^/qsyn/api/v1/owner-index/(status|history|ticket|browser-grant)
     respond($payload,$status);
 }
 
+
+// Account-scoped, read-only Upstox instrument search; never ships token or
+// account metadata to the browser and never authorizes data subscriptions.
+if ($route === '/qsyn/api/v1/admin/upstox/instruments/search') {
+    $src=dirname(__DIR__).'/src';
+    if (!is_file($src.'/UpstoxInstrumentSearch.php'))
+        $src=dirname(__DIR__,2).'/private_html/qsyn/app/src';
+    foreach (['RustAdmin','IndexHistoricalProof','UpstoxInstrumentSearch'] as $unit) {
+        if (!is_file($src.'/'.$unit.'.php'))
+            respond(['error'=>'upstox_instrument_search_unavailable'],503);
+        require_once $src.'/'.$unit.'.php';
+    }
+    header('Cache-Control: private, no-store');
+    header('Pragma: no-cache');
+    header('X-Robots-Tag: noindex, nofollow');
+    header('X-QSYN-Request-ID: '.bin2hex(random_bytes(8)));
+    [$status,$payload]=\QSYN\MarketData\UpstoxInstrumentSearch::dispatch($_SERVER,$_GET);
+    if($status===405)header('Allow: GET');
+    respond($payload,$status);
+}
+
 // Browser-admin to single Rust market-data ELF. No OAuth, plans or HTTP
 // bearer transmission. WS upgrade is forwarded separately by the HTTPS host.
 if (preg_match('#^/qsyn/api/v1/admin/upstox/personal-index/(history|ticket)$#',

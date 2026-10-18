@@ -1,0 +1,24 @@
+.terminal-shell .qs-upstox-instruments{display:flex;flex-direction:column;gap:10px}
+.terminal-shell .qs-upstox-instruments h2{font-size:17px;margin:0}
+.terminal-shell .qs-upstox-instruments p{margin:0}
+.terminal-shell .qs-upstox-search-filters{display:grid;grid-template-columns:2fr repeat(4,minmax(90px,1fr));gap:8px}
+.terminal-shell .qs-upstox-search-filters label{display:flex;flex-direction:column;gap:5px;
+  font-size:11px;font-weight:600;color:var(--q-muted);min-width:0}
+.terminal-shell .qs-upstox-search-filters select,
+.terminal-shell .qs-upstox-search-filters input{width:100%;min-width:0;border:1px solid var(--q-line);
+  background:var(--q-bg);color:var(--q-fg);border-radius:7px;padding:9px;font:inherit;font-size:12px}
+.terminal-shell .qs-upstox-search-results{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;max-height:350px;overflow:auto}
+.terminal-shell .qs-upstox-instrument{border:1px solid var(--q-line);border-radius:7px;background:var(--q-hover);
+ color:var(--q-fg);text-align:left;padding:9px;display:flex;flex-direction:column;gap:4px;cursor:pointer;min-width:0}
+.terminal-shell .qs-upstox-instrument:hover,.terminal-shell .qs-upstox-instrument.selected{border-color:var(--q-accent)}
+.terminal-shell .qs-upstox-instrument strong{font-size:12px;overflow-wrap:anywhere}
+.terminal-shell .qs-upstox-instrument span{font-size:11px;color:var(--q-muted)}
+.terminal-shell .qs-upstox-search-pagination{display:flex;align-items:center;gap:12px;justify-content:flex-end;font-size:11px}
+.terminal-shell .qs-upstox-search-pagination button{border:1px solid var(--q-line);border-radius:6px;background:var(--q-hover);
+ color:var(--q-fg);padding:5px 9px;cursor:pointer}
+.terminal-shell .qs-upstox-search-pagination button:disabled{opacity:.4;cursor:default}
+.terminal-shell .qs-upstox-instrument-detail{border:1px solid var(--q-line);border-radius:8px;
+ display:flex;flex-direction:column;gap:6px;padding:12px;font-size:12px;overflow-wrap:anywhere}
+@media(max-width:1000px){.terminal-shell .qs-upstox-search-filters{grid-template-columns:repeat(2,minmax(0,1fr))}
+.terminal-shell .qs-upstox-search-filters label:first-child{grid-column:1/-1}}
+@media(max-width:620px){.terminal-shell .qs-upstox-search-results{grid-template-columns:1fr}}
