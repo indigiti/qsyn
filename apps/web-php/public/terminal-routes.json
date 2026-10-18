@@ -1,7 +1,7 @@
 {
   "schema": "QSYN-TERMINAL-ROUTES/1",
   "base": "/qsyn/terminal",
-  "defaultView": "markets",
+  "defaultView": "dashboard",
   "routes": [
     {
       "view": "dashboard",
@@ -14,12 +14,6 @@
       "slug": "markets",
       "label": "Markets",
       "access": "public-readonly"
-    },
-    {
-      "view": "trading",
-      "slug": "trading",
-      "label": "Legacy Chart Lab",
-      "access": "simulation-only"
     },
     {
       "view": "strategy",
@@ -52,18 +46,6 @@
       "access": "admin-gated"
     },
     {
-      "view": "routes",
-      "slug": "routes",
-      "label": "Route Management",
-      "access": "public-readonly"
-    },
-    {
-      "view": "tools",
-      "slug": "tools",
-      "label": "Tools",
-      "access": "public-demo"
-    },
-    {
       "view": "private-live",
       "slug": "private-live",
       "label": "Private Market Access",
@@ -81,6 +63,18 @@
     },
     {
       "path": "/qsyn/legacy-chart",
+      "view": "diagnostics"
+    },
+    {
+      "path": "/qsyn/terminal/trading",
+      "view": "workspaces"
+    },
+    {
+      "path": "/qsyn/terminal/tools",
+      "view": "markets"
+    },
+    {
+      "path": "/qsyn/terminal/routes",
       "view": "diagnostics"
     }
   ]

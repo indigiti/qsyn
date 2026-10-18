@@ -83,8 +83,12 @@ try {
   await page.getByRole('button',{name:'Unlock terminal'}).click();
   if(new URL(page.url()).pathname==='/qsyn/terminal/login')
     throw new Error('Administrator unlock returned login instead of terminal: '+(await page.locator('body').innerText()).slice(0,420));
-  await page.getByRole('heading',{name:'Market explorer'}).waitFor();
+  await page.getByRole('heading',{name:'Dashboard'}).waitFor();
   await page.locator('.terminal-sidebar').getByRole('button',{name:'Dashboard'}).waitFor();
+  if(await page.locator('nav[aria-label="Terminal"] .terminal-nav-item').count()!==4)
+    throw Error('Terminal should expose four core sections only');
+  await page.locator('.terminal-sidebar').getByRole('button',{name:'Markets'}).click();
+  await page.getByRole('heading',{name:'Market explorer'}).waitFor();
   const headerFeed=page.getByRole('switch',{name:'Header live market feed'});
   const marketsFeed=page.getByRole('switch',{name:'Markets live market feed'});
   if(await headerFeed.getAttribute('aria-checked')!=='true'||
@@ -207,12 +211,14 @@ try {
   // The /qsyn/terminal route retains existing chart compare, watchlist,
   // private-workspace and broker-safety behavior.
   await page.goto(origin+'/qsyn/terminal/trading',{waitUntil:'domcontentloaded'});
-  await page.getByRole('heading',{name:'Legacy Chart Lab'}).waitFor();
+  await page.getByRole('heading',{name:'Chart workspaces'}).waitFor();
   await page.waitForFunction(()=>document.querySelectorAll('#qsyn-native-chart canvas').length>0,
     null,{timeout:12000});
-  const source = await page.locator('.terminal-alert').innerText();
-  if(!source.includes('Research-only workspace')||!source.includes('Simulated data'))
-    throw new Error('Missing unambiguous simulation provenance label');
+  if(new URL(page.url()).pathname!=='/qsyn/terminal/workspaces')
+    throw new Error('Legacy chart did not redirect to saved workspaces');
+  const source = await page.locator('.terminal-workspace').innerText();
+  if(!source.includes('No real NSE/BSE symbol lookup')||!source.includes('No live quotes'))
+    throw new Error('Saved workspace simulation provenance is missing');
   if(await page.locator('.terminal-nav-item.locked:disabled').count()!==0)
     throw new Error('Retired broker/order navigation is still displayed');
   // Chart compare and AT-MONEY synthetic demos use only whitelisted public simulations.
@@ -249,13 +255,14 @@ try {
   if(await page.locator('html').getAttribute('data-qsyn-theme')!=='light')
     throw new Error('Light theme did not activate');
   await page.goto(origin+'/qsyn/terminal/dashboard',{waitUntil:'domcontentloaded'});
-  await page.getByRole('heading',{name:'Command center'}).waitFor();
+  await page.getByRole('heading',{name:'Dashboard'}).waitFor();
   if(new URL(page.url()).pathname!=='/qsyn/terminal/dashboard')throw new Error('Dashboard deep link failed');
-  if(!(await page.getByText('SIMULATION ONLY').count()))
-    throw new Error('Dashboard simulation provenance label missing');
-  await page.waitForFunction(()=>document.querySelectorAll('.qd-chart-preview #qsyn-native-chart canvas').length>0);
-  if(!(await page.getByRole('heading',{name:'Synthetic premium workspace'}).count()))
-    throw new Error('Dashboard lost chart preview');
+  if(await page.locator('.qd-dashboard canvas').count())
+    throw new Error('Dashboard still renders a redundant demo chart');
+  if(await page.getByText('READ ONLY · ORDERS DISABLED').count()!==1)
+    throw new Error('Dashboard read-only label missing');
+  if(await page.getByRole('button',{name:'Saved chart workspaces'}).count()!==1)
+    throw new Error('Saved workspaces must remain available');
   const liveSwitch=page.getByRole('switch',{name:'Live market data feed'});
   if(await page.getByRole('switch',{name:'Header live market feed'}).count()!==1)
     throw Error('Global feed switch disappeared on Dashboard');
@@ -267,15 +274,15 @@ try {
   if(await page.evaluate(()=>localStorage.getItem('qsyn.live-chart-feed.v1'))!=='0')
     throw Error('OFF preference not persisted in this browser');
   await page.reload({waitUntil:'domcontentloaded'});
-  await page.getByRole('heading',{name:'Command center'}).waitFor();
+  await page.getByRole('heading',{name:'Dashboard'}).waitFor();
   if(await page.getByRole('switch',{name:'Live market data feed'}).getAttribute('aria-checked')!=='false')
     throw Error('Feed OFF state was not restored after reload');
   await page.getByRole('switch',{name:'Live market data feed'}).click();
   if(await page.evaluate(()=>localStorage.getItem('qsyn.live-chart-feed.v1'))!=='1')
     throw Error('Feed ON preference not persisted');
   await page.reload({waitUntil:'domcontentloaded'});
-  await page.getByRole('heading',{name:'Command center'}).waitFor();
-  await page.waitForFunction(()=>document.querySelectorAll('.qd-chart-preview #qsyn-native-chart canvas').length>0);
+  await page.getByRole('heading',{name:'Dashboard'}).waitFor();
+  if(await page.locator('.qd-dashboard canvas').count())throw Error('Dashboard mounted a redundant chart');
   // Markets must obey its selected instrument, not the independent public
   // homepage's saved NIFTY alias from a previous session.
   await page.evaluate(()=>localStorage.setItem('qsyn-public-chart-selection-v1',
@@ -289,13 +296,16 @@ try {
       return selection?.symbol==='BTCUSDT'&&selection?.exchange==='BINANCE:spot';
     }catch{return false;}
   },{timeout:9000});
+  const retiredTools=await page.request.get(origin+'/qsyn/terminal/tools',{maxRedirects:0});
+  if(retiredTools.status()!==302||retiredTools.headers().location!=='/qsyn/terminal/markets')
+    throw new Error('Retired Tools route not consolidated');
   await page.goto(origin+'/qsyn/terminal/tools',{waitUntil:'domcontentloaded'});
-  await page.getByRole('heading',{name:'Tools'}).waitFor();
-  if(!(await page.getByRole('button',{name:/Strategy Studio/}).count()>0))
-    throw new Error('Unified Strategy Studio tool missing');
+  await page.getByRole('heading',{name:'Market explorer'}).waitFor();
+  if(new URL(page.url()).pathname!=='/qsyn/terminal/markets')
+    throw new Error('Tools compatibility link did not land on Markets');
   // Public terminal stays browser-only without opt-in identity/private storage.
   await page.goto(origin+'/qsyn/terminal/trading',{waitUntil:'domcontentloaded'});
-  await page.getByRole('heading',{name:'Legacy Chart Lab'}).waitFor();
+  await page.getByRole('heading',{name:'Chart workspaces'}).waitFor();
   if(await page.getByRole('button',{name:'Load private file'}).count()!==0)
     throw new Error('Private workspace controls unexpectedly available without authentication');
 
@@ -332,7 +342,7 @@ try {
     }
   });
   await privatePage.goto(origin+'/qsyn/terminal/trading',{waitUntil:'domcontentloaded'});
-  await privatePage.getByRole('heading',{name:'Legacy Chart Lab'}).waitFor();
+  await privatePage.getByRole('heading',{name:'Chart workspaces'}).waitFor();
   if(privateReads!==0)
     throw new Error('Private development workspace was probed without operator opt-in');
   await privatePage.getByRole('button',{name:'Refresh private file status'}).click();
@@ -518,11 +528,10 @@ try {
   await page.goto(origin+'/qsyn/terminal/workspaces',{waitUntil:'domcontentloaded'});
   await page.getByRole('heading',{name:'Chart workspaces'}).waitFor();
   await page.goto(origin+'/qsyn/terminal/routes',{waitUntil:'domcontentloaded'});
-  await page.getByRole('heading',{name:'Route management'}).waitFor();
-  if(new URL(page.url()).pathname!=='/qsyn/terminal/routes'||
-     await page.locator('.qt-table tbody tr').count()<11)
-    throw new Error('Pretty route directory not mounted');
-  await page.goBack({waitUntil:'domcontentloaded'});
+  await page.getByRole('heading',{name:'Diagnostics & feed health'}).waitFor();
+  if(new URL(page.url()).pathname!=='/qsyn/terminal/diagnostics')
+    throw new Error('Obsolete route directory not redirected to Diagnostics');
+  await page.goto(origin+'/qsyn/terminal/workspaces',{waitUntil:'domcontentloaded'});
   await page.getByRole('heading',{name:'Chart workspaces'}).waitFor();
   await page.getByRole('button',{name:'Markets',exact:true}).first().click();
   await page.getByRole('heading',{name:'Market explorer'}).waitFor();
@@ -674,7 +683,7 @@ try {
     throw new Error('Mobile homepage footnotes are visible');
   if(await mobile.evaluate(()=>document.documentElement.scrollWidth>innerWidth+2))
     throw new Error('Full-width homepage overflows on mobile');
-  await mobile.goto(origin+'/qsyn/terminal?view=tools',{waitUntil:'domcontentloaded'});
+  await mobile.goto(origin+'/qsyn/terminal?view=markets',{waitUntil:'domcontentloaded'});
   await mobile.getByRole('button',{name:'Open menu'}).click();
   if(!(await mobile.locator('.terminal-sidebar').getAttribute('class')).includes('show'))
     throw new Error('Mobile menu did not open');

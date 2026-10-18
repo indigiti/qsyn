@@ -107,9 +107,9 @@ def run():
             assert code==401 and "Invalid administrator password" in body
             code,body,headers=page(guest,origin,"/qsyn/terminal/login","POST",
                                    {"csrf":csrf,"password":PASSWORD})
-            assert code==303 and headers.get("Location")=="/qsyn/terminal/markets"
+            assert code==303 and headers.get("Location")=="/qsyn/terminal/dashboard"
             for path in ["/qsyn/terminal/brokers","/qsyn/terminal/operations",
-                         "/qsyn/terminal/private-live","/qsyn/terminal/trading"]:
+                         "/qsyn/terminal/private-live"]:
                 code,body,headers=page(guest,origin,path)
                 assert code==200 and "/qsyn/assets/terminal.js" in body, (path,code)
                 assert "no-store" in headers.get("Cache-Control", ""), path
@@ -120,7 +120,9 @@ def run():
             code,_,headers=page(guest,origin,"/qsyn/studio")
             assert code==302 and headers.get("Location")=="/qsyn/terminal/strategy"
             code,_,headers=page(guest,origin,"/qsyn/terminal")
-            assert code==302 and headers.get("Location")=="/qsyn/terminal/markets"
+            assert code==302 and headers.get("Location")=="/qsyn/terminal/dashboard"
+            redirect=page(guest,origin,"/qsyn/terminal/trading")
+            assert redirect[0]==302 and redirect[2].get("Location")=="/qsyn/terminal/workspaces"
             code,_,_=page(guest,origin,"/qsyn/terminal/brokers","POST",{"x":"y"})
             assert code==405
             code,_,_=page(guest,origin,"/qsyn/terminal/unknown")
