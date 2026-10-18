@@ -425,7 +425,7 @@ function NativeUpstoxPanel({refreshTick=0}){
     </section>}
     <div className="qt-summary">
       <div><strong>Upstox personal market data</strong><p>{analytics?.token_stored
-        ? 'Analytics Token stored · read-only historical and 1m OHLC available'
+        ? 'Analytics Token stored · historical candles and live ticks not yet verified'
         : 'Store your one-year Analytics Token below'}</p></div>
       <div><strong>QSYN trading</strong><p>Disabled · no OAuth required for market-data charts</p></div>
     </div>
@@ -439,7 +439,7 @@ function NativeUpstoxPanel({refreshTick=0}){
         worker Supervisor or additional approval wizard is involved.</p>
       {analytics ? <>
         <p role="status">{analytics.token_stored
-          ? 'Analytics Token stored securely. Personal chart data is ready; live updates require fresh provider OHLC during trading hours.'
+          ? 'Analytics Token stored securely. Verify authorization, then open an index chart to check Rust historical candles. Live ticks require a working Upstox V3 connection during market hours.'
           : 'No Analytics Token stored. Import your Upstox Analytics Token to start.'}</p>
         <form className="qt-form qt-openalgo-setup" autoComplete="off"
           onSubmit={e=>{e.preventDefault();void analyticsAction('import');}}>
@@ -564,9 +564,9 @@ export function BrokersWorkspace({openView}){
         <div className="qt-setup-art" aria-hidden="true"><ShieldCheck size={42}/></div>
         <p className="terminal-eyebrow">SECURE BY DESIGN</p>
         <h2>One token. Your personal charts.</h2>
-        <p>Store your Upstox Analytics Token once. QSYN privately retrieves
-          exchange candles and current-day 1-minute OHLC without OAuth or
-          manually prepared worker plans.</p>
+        <p>Store your Upstox Analytics Token once. QSYN can request private historical
+          candles and current-session ticks through its Rust integration.
+          Verify the actual provider response in Markets.</p>
         <div className="qt-setup-assurances">
           <div><ShieldCheck size={16}/><span>Single read-only Analytics Token · one-year validity</span></div>
           <div><LockKeyhole size={16}/><span>Private token storage and administrator session</span></div>
