@@ -42,6 +42,8 @@ export class PrivateIndexHistoryFeed {
       if(!response.ok)throw Error(json.error||'PRIVATE_INDEX_HISTORY_UNAVAILABLE');
       if(json.schema!=='QSYN-UPSTOX-RUST-INDEX-HISTORY/1'||
         json.source!=='upstox_v3_rust_history'||
+        json.volume_available===true||
+        (json.volume_status!==undefined&&json.volume_status!=='not_applicable_index')||
         json.public_redistribution_allowed!==false||
         json.trading_enabled!==false||
         json.symbol!==this.symbol||json.day_ist!==this.day||json.interval!=='1m'||
@@ -51,7 +53,7 @@ export class PrivateIndexHistoryFeed {
       for(const bar of json.bars){
         if(!Number.isSafeInteger(bar?.time)||bar.time%60!==0||bar.time<=previous||
           !['open','high','low','close','volume'].every(k=>Number.isFinite(bar[k]))||
-          bar.open<=0||bar.low<=0||bar.close<=0||bar.volume<0||
+          bar.open<=0||bar.low<=0||bar.close<=0||bar.volume!==0||
           bar.high<Math.max(bar.open,bar.close)||bar.low>Math.min(bar.open,bar.close))
           throw Error('PRIVATE_INDEX_CANDLE_INVALID');
         previous=bar.time;
@@ -156,7 +158,9 @@ export class PrivateIndexHistoryFeed {
           const bar=req.interval==='1s'?data?.bar_1s:data?.bar;
           if(data?.schema!=='QSYN-RUST-PERSONAL-INDEX-TICK/1'||
              data?.source!=='upstox_v3_websocket'||data?.symbol!==this.symbol||
-             data?.trading_enabled!==false||!Number.isSafeInteger(data.time_ms)||
+             data?.trading_enabled!==false||data?.volume_available===true||
+             (data?.volume_status!==undefined&&data.volume_status!=='not_applicable_index')||
+             bar?.volume!==0||!Number.isSafeInteger(data.time_ms)||
              data.time_ms<lastTimestamp||!Number.isFinite(data.price)||data.price<=0||
              !Number.isSafeInteger(bar?.time)||bar.time!==Math.floor(data.time_ms/(req.interval==='1s'?1000:60000))*(req.interval==='1s'?1:60)||
              !['open','high','low','close'].every(k=>Number.isFinite(bar[k]))||

@@ -160,6 +160,8 @@ fn http_client() -> io::Result<reqwest::Client> {
         .build()
         .map_err(|_| denied())
 }
+// Volume=0 in index OHLCV is an OpenAlgo compatibility placeholder, not
+// observed traded index volume. Response metadata explicitly marks N/A.
 fn as_utc_bar(c: &crate::market_pipeline::Candle) -> Value {
     json!({"time":c.open_time_ms/1000,"open":c.open,"high":c.high,
         "low":c.low,"close":c.close,"volume":0})
@@ -211,6 +213,7 @@ pub async fn history(symbol: &str, date: &str, runtime: &Path) -> io::Result<Val
     Ok(json!({"schema":"QSYN-UPSTOX-RUST-INDEX-HISTORY/1",
         "symbol":symbol,"day_ist":date,"interval":"1m",
         "source":"upstox_v3_rust_history","bars":candles.iter().map(as_utc_bar).collect::<Vec<_>>(),
+        "volume_available":false,"volume_status":"not_applicable_index",
         "trading_enabled":false,"public_redistribution_allowed":false}))
 }
 #[derive(Deserialize)]
@@ -519,7 +522,9 @@ mod tests {
         };
         let a = b.on_tick(&t).unwrap();
         assert_eq!(a.open, a.close);
-        assert_eq!(a.volume, 0);
+        assert_eq!(a.volume, 0); // no inferred trade size
+        assert_eq!(as_utc_bar(&crate::market_pipeline::Candle::from_observation(
+            t.time_ms / 60_000 * 60_000, t.price).unwrap())["volume"], 0);
         assert!(b.on_tick(&t).is_none());
         let mut t2 = t.clone();
         t2.time_ms += 1000;

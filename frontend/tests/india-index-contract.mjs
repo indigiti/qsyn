@@ -96,6 +96,7 @@ try {
         schema:'QSYN-UPSTOX-RUST-INDEX-HISTORY/1',
         source:'upstox_v3_rust_history',symbol:payload.symbol,
         day_ist:payload.day,interval:'1m',
+        volume_available:false,volume_status:'not_applicable_index',
         public_redistribution_allowed:false,trading_enabled:false,
         bars:[{time:epoch(payload.day+'T09:15:00+05:30'),
           open:25000,high:25002,low:24998,close:25001,volume:0}]
@@ -146,7 +147,8 @@ try {
         schema:'QSYN-UPSTOX-RUST-INDEX-HISTORY/1',
         source:'upstox_v3_rust_history',
         symbol:body.symbol,day_ist:body.day,interval:'1m',
-        bars,public_redistribution_allowed:false,trading_enabled:false
+        bars,volume_available:false,volume_status:'not_applicable_index',
+        public_redistribution_allowed:false,trading_enabled:false
       })};
     }
     throw Error('UNEXPECTED_ENDPOINT_'+url);
