@@ -171,10 +171,10 @@ export function MarketExplorer({theme,openView,CryptoChart,PrivateCharts}){
     {market==='indices'&&<>
       <section className="terminal-surface">
         <div className="terminal-card-head"><h2>Upstox personal index charts</h2><LockKeyhole size={17}/></div>
-        <p>Your stored one-year Analytics Token powers these private read-only charts.
-          Select a trading date for Rust 1-minute historical candles, or Today
-          for genuine Upstox V3 ticks streamed and aggregated through the
-          existing Rust WebSocket. No OAuth or index-worker plan is required.</p>
+        <p>These seven index symbols come from QSYN's local catalog, not a live Upstox lookup.
+          A stored Analytics Token does not confirm available candles. Open a chart
+          to check genuine Rust historical data; Today uses an authenticated Upstox
+          V3 WebSocket during market hours. No synthetic prices are substituted.</p>
       </section>
       {currentInstrument&&<PrivateIndexHistoryChart key={currentInstrument.id}
         symbol={currentInstrument.symbol}/>}

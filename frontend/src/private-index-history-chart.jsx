@@ -22,13 +22,25 @@ export function PrivateIndexHistoryChart({symbol}){
       credentials:'same-origin',cache:'no-store',signal:c.signal,
       headers:{Accept:'application/json'}
     }).then(async r=>{
-      const data=await r.json();
-      if(!r.ok||data.schema!=='QSYN-INDEX-HISTORICAL-PROOF/1'||
-        !data.token_present||typeof data.csrf!=='string')
-        throw Error('PRIVATE_ACCOUNT_NOT_READY');
+      // Keep access failures and absent tokens distinct from chart/market issues.
+      // The response may be an HTML edge denial; never display its body.
+      if(r.status===401)throw Error('QSYN_ADMIN_LOGIN_REQUIRED');
+      if(r.status===403)throw Error('UPSTOX_CHART_ACCESS_DENIED');
+      const data=await r.json().catch(()=>null);
+      if(!r.ok||data?.schema!=='QSYN-INDEX-HISTORICAL-PROOF/1')
+        throw Error('UPSTOX_HISTORY_PROOF_UNAVAILABLE');
+      if(data.token_present!==true)throw Error('UPSTOX_ANALYTICS_TOKEN_NOT_READY');
+      if(typeof data.csrf!=='string')throw Error('QSYN_CHART_SESSION_NOT_READY');
       if(!c.signal.aborted){setAuth(data.csrf);setDate(data.suggested_day_ist);
         setStatus('Upstox token available · Rust historical-data check on chart open.');}
-    }).catch(()=>{if(!c.signal.aborted)setStatus('Private Upstox account access unavailable.');});
+    }).catch(error=>{
+      if(c.signal.aborted)return;
+      const code=['QSYN_ADMIN_LOGIN_REQUIRED','UPSTOX_CHART_ACCESS_DENIED',
+        'UPSTOX_HISTORY_PROOF_UNAVAILABLE','UPSTOX_ANALYTICS_TOKEN_NOT_READY',
+        'QSYN_CHART_SESSION_NOT_READY'].includes(error?.message)
+        ? error.message : 'UPSTOX_HISTORY_PROOF_UNAVAILABLE';
+      setStatus('Upstox chart unavailable · '+code+'. Check Data Providers → Upstox Token.');
+    });
     return()=>c.abort();
   },[symbol]);
   useEffect(()=>{
