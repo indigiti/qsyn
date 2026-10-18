@@ -80,6 +80,8 @@ jobs:
           python3 apps/web-php/tests/NativeUpstoxAnalyticsHttpSmoke.py
           php -l apps/web-php/src/NativeUpstoxProfileVerifier.php
           php apps/web-php/tests/NativeUpstoxProfileVerifierTest.php
+          php -l apps/web-php/src/UpstoxInstrumentSearch.php
+          php apps/web-php/tests/UpstoxInstrumentSearchTest.php
           php -l apps/web-php/src/IndexHistoricalProof.php
           php apps/web-php/tests/IndexHistoricalProofTest.php
           php -l apps/web-php/src/PersonalIndexGateway.php
@@ -259,6 +261,7 @@ jobs:
           node tests/market-provider-contract.mjs
           node tests/upstox-readiness-contract.mjs
           node tests/upstox-index-volume-contract.mjs
+          node tests/upstox-instrument-search.test.mjs
         working-directory: frontend
       - name: Verify India index native discovery and strict license gates
         run: node tests/india-index-contract.mjs
