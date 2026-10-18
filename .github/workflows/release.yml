@@ -235,11 +235,6 @@ jobs:
           cp apps/web-php/public/assets/account-dashboard.js staging/public/assets/account-dashboard.js
           cp apps/web-php/public/assets/account-dashboard.css staging/public/assets/account-dashboard.css
           cp apps/web-php/public/account-dashboard.php staging/public/account-dashboard.php
-          cp apps/web-php/public/assets/rust-diagnostics.js staging/public/assets/rust-diagnostics.js
-          cp apps/web-php/public/assets/chart-diagnostics.js staging/public/assets/chart-diagnostics.js
-          cp apps/web-php/public/assets/rust-stream-test.js staging/public/assets/rust-stream-test.js
-          cp apps/web-php/public/assets/rust-admin.js staging/public/assets/rust-admin.js
-          cp apps/web-php/public/assets/rust-activation-readiness.js staging/public/assets/rust-activation-readiness.js
           cp frontend/node_modules/openalgo-charts/LICENSE staging/public/licenses/openalgo-charts-LICENSE.txt
           if [ -f frontend/node_modules/openalgo-charts/NOTICE ]; then
             cp frontend/node_modules/openalgo-charts/NOTICE staging/public/licenses/openalgo-charts-NOTICE.txt
@@ -350,12 +345,12 @@ jobs:
           test -s staging/private/app/tools/openalgo-local-probe.php
           test -s staging/private/app/tools/upstox-instrument-inspect.py
           test ! -e staging/private/runtime/openalgo-key.txt
-          test -s staging/public/assets/chart-diagnostics.js
-          test -s staging/public/assets/rust-diagnostics.js
-          test -s staging/public/assets/rust-stream-test.js
+          test ! -e staging/public/assets/chart-diagnostics.js
+          test ! -e staging/public/assets/rust-diagnostics.js
+          test ! -e staging/public/assets/rust-stream-test.js
           test -s staging/private/app/src/RustStreamProbe.php
-          test -s staging/public/assets/rust-admin.js
-          test -s staging/public/assets/rust-activation-readiness.js
+          test ! -e staging/public/assets/rust-admin.js
+          test ! -e staging/public/assets/rust-activation-readiness.js
           test -s staging/public/admin-rust.php
           test -s staging/public/terminal-routes.json
           test -s staging/public/market-provider-registry.json
@@ -525,12 +520,12 @@ jobs:
           test -s verified-release/private/app/tools/openalgo-local-probe.php
           test -s verified-release/private/app/tools/upstox-instrument-inspect.py
           test ! -e verified-release/private/runtime/openalgo-key.txt
-          test -s verified-release/public/assets/chart-diagnostics.js
-          test -s verified-release/public/assets/rust-diagnostics.js
-          test -s verified-release/public/assets/rust-stream-test.js
+          test ! -e verified-release/public/assets/chart-diagnostics.js
+          test ! -e verified-release/public/assets/rust-diagnostics.js
+          test ! -e verified-release/public/assets/rust-stream-test.js
           test -s verified-release/private/app/src/RustStreamProbe.php
-          test -s verified-release/public/assets/rust-admin.js
-          test -s verified-release/public/assets/rust-activation-readiness.js
+          test ! -e verified-release/public/assets/rust-admin.js
+          test ! -e verified-release/public/assets/rust-activation-readiness.js
           test -s verified-release/public/admin-rust.php
           test -s verified-release/public/terminal-routes.json
           test -s verified-release/public/market-provider-registry.json

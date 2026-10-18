@@ -10,10 +10,10 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import {
-  Activity, BookOpen, CandlestickChart, ChartColumnIncreasing, ChevronDown,
-  ClipboardList, Compass, FlaskConical, Gauge, Layers, LayoutDashboard,
+  Activity, BookOpen, CandlestickChart, ChevronDown,
+  FlaskConical, Gauge, Layers, LayoutDashboard,
   LockKeyhole, LogOut, Menu, Moon, PanelLeftClose, PanelLeftOpen, Search,
-  Settings, ShieldAlert, Sun, Wallet, Wrench, X, Plus, Save, Columns2, Trash2, Route,
+  Settings, ShieldAlert, Sun, Wallet, X, Plus, Save, Columns2, Trash2, Route,
 } from 'lucide-react';
 import { createWidget, createChartGrid, mountIndicatorSettings } from 'openalgo-charts/widget';
 import {bindIndicatorLegendSettings} from './indicator-legend-settings.js';
@@ -58,11 +58,6 @@ const sections = [
   { label:'Diagnostics & feed health',view:'diagnostics',icon:Activity },
 ];
 const mobileSections=sections.filter(s=>['markets','workspaces','strategy','brokers'].includes(s.view));
-const unavailable = [
-  { label: 'Orderbook', icon: ClipboardList },
-  { label: 'Positions', icon: ChartColumnIncreasing },
-  { label: 'Broker accounts', icon: Wallet },
-];
 function routeView() {
   return terminalViewForLocation(window.location.pathname,window.location.search) ?? defaultTerminalView;
 }
@@ -137,8 +132,6 @@ function ChartPanel({ pane, theme, savedState, revision, onMount, hideBranding =
     </section>
   );
 }
-const HOME_PANE = Object.freeze({ id: 'primary', symbol: 'QSYN-NIFTY-STRADDLE' });
-const ignoreHomepageWidget = () => {};
 
 /**
  * The /qsyn/ landing page mirrors the supplied edge-to-edge OpenAlgo Charts
@@ -685,51 +678,6 @@ function PrivateMarketWorkspace({embedded=false,onlyIndex=false,selectedIndex=nu
       </>}
     </div>}
   </div>;
-}
-function StatusBox({ capabilities }) {
-  const simulated = !capabilities || capabilities.market_data !== 'simulated' ||
-    capabilities.execution_enabled !== false || capabilities.live_trading_enabled !== false;
-  return (
-    <section className="terminal-surface terminal-status" aria-label="Market source and execution status">
-      <div className="terminal-card-head"><h2>Connection overview</h2><Activity size={17} /></div>
-      <dl>
-        <div><dt>Data source</dt><dd>SIMULATED</dd></div>
-        <div><dt>Broker session</dt><dd>Not connected</dd></div>
-        <div><dt>Execution</dt><dd>Disabled</dd></div>
-        <div><dt>Persistence</dt><dd>QSYN file-based design</dd></div>
-      </dl>
-      <p className="terminal-footnote">{simulated
-        ? 'Live capabilities have not been verified; all trading is blocked.'
-        : 'Simulation only. No exchange quote redistribution or real orders.'}</p>
-    </section>
-  );
-}
-function Dashboard({ capabilities, openView }) {
-  return (
-    <div className="terminal-page">
-      <header className="terminal-title"><div><p className="terminal-eyebrow">WORKSPACE OVERVIEW</p>
-        <h1>Dashboard</h1><p>OpenAlgo-inspired navigation with QSYN-owned, database-free services.</p>
-      </div><button className="terminal-action" onClick={() => openView('trading')}>Open charts <CandlestickChart size={16}/></button></header>
-      <div className="terminal-overview">
-        <StatusBox capabilities={capabilities} />
-        <section className="terminal-surface"><div className="terminal-card-head"><h2>Quick access</h2><Compass size={17}/></div>
-          <a className="terminal-quick" href={terminalHref('trading')}>Trading charts <CandlestickChart size={18}/></a>
-          <a className="terminal-quick" href="/qsyn/studio">Synthetic Studio <Layers size={18}/></a>
-          <a className="terminal-quick" href={terminalHref('tools')}>Tools & integrations <Wrench size={18}/></a>
-        <a className="terminal-quick" href={terminalHref('private-live')}>Private authorized CE/PE charts <LockKeyhole size={18}/></a>
-        </section>
-      </div>
-      <section className="terminal-surface">
-        <div className="terminal-card-head"><h2>Enabled capabilities</h2><ShieldAlert size={18}/></div>
-        <div className="terminal-capabilities">
-          <span>OpenAlgo Charts widgets and indicators</span><span>Simulated</span>
-          <span>CE/PE Synthetic Studio</span><a href="/qsyn/studio">Open</a>
-          <span>Broker-linked account trading</span><span>Disabled</span>
-          <span>Durable account OMS</span><span>Not public</span>
-        </div>
-      </section>
-    </div>
-  );
 }
 function Tools({openView}) {
   return (
