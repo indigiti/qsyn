@@ -135,6 +135,8 @@ async fn personal_index_session(mut socket: WebSocket) {
                             "price":event.tick.price,
                             "bar":event.bar,
                             "bar_1s":event.second_bar,
+                            "volume_available":false,
+                            "volume_status":"not_applicable_index",
                             "trading_enabled":false
                         });
                         if socket.send(Message::Text(payload.to_string().into())).await.is_err() {

@@ -10,6 +10,7 @@ import {findProviderGaps,mergeProviderGapBars,shouldAttemptGap,
 // No gap is filled from a previous close, zero volume or interpolation.
 const makeBar=(time,price=100)=>({time,open:price,high:price+2,
   low:price-2,close:price+1,volume:2});
+const indexBar=(time,price=100)=>({...makeBar(time,price),volume:0});
 const stepByInterval={'1m':60,'5m':300,'15m':900,'1h':3600,'1d':86400};
 const epoch=s=>Math.floor(Date.parse(s)/1000);
 const fri=epoch('2026-10-09T09:15:00+05:30');
@@ -95,11 +96,13 @@ try {
     const body=JSON.parse(opts.body);
     dayFetches++;
     const start=epoch(body.day+'T09:15:00+05:30');
-    const full=Array.from({length:375},(_,i)=>makeBar(start+i*60,100+i));
+    // Cash-index volume is unavailable; the numeric zero is chart-only.
+    const full=Array.from({length:375},(_,i)=>({...indexBar(start+i*60,100+i),volume:0}));
     const bars=dayFetches===1?full.filter((_,i)=>i!==18):full;
     return {ok:true,json:async()=>({
       schema:'QSYN-UPSTOX-RUST-INDEX-HISTORY/1',
       source:'upstox_v3_rust_history',
+      volume_available:false,volume_status:'not_applicable_index',
       symbol:body.symbol,day_ist:body.day,interval:'1m',bars,
       trading_enabled:false,public_redistribution_allowed:false
     })};
@@ -171,15 +174,15 @@ try {
   live.personalFeeds.set(instrument.id,{day:'2026-10-09',
     subscribeBars:(_req,onBar)=>{handler=onBar;return ()=>{};},
     destroy:()=>{}});
-  live.personalBars.set(instrument.id,[makeBar(fri)]);
+  live.personalBars.set(instrument.id,[indexBar(fri)]);
   live._proof=async()=>({ownerViewer:true,csrf:null});
   live._historicalDay=async()=>{
     liveReplay++;
-    return [makeBar(fri),makeBar(fri+60),makeBar(fri+120),makeBar(fri+180)];
+    return [indexBar(fri),indexBar(fri+60),indexBar(fri+120),indexBar(fri+180)];
   };
   const stop=live.subscribeBars(req,()=>{updates++;},
     {onResync:()=>{resync++;}});
-  handler(makeBar(fri+180));
+  handler(indexBar(fri+180));
   await new Promise(resolve=>setImmediate(resolve));
   assert.equal(updates,1,'real live update delivered immediately');
   assert.equal(liveReplay,1,'one verified provider day replay');
@@ -216,7 +219,7 @@ try {
     source:'upstox_v3_rust_history',
     symbol:'NIFTY',day_ist:'2026-10-09',interval:'1m',
     trading_enabled:false,public_redistribution_allowed:false,
-    bars:[makeBar(fri)]
+    bars:[indexBar(fri)]
   })});
   assert.deepEqual(await oldRequest,[],'late approved response is discarded after revoke');
   assert.equal(late.indexHistoryDays.size,0,'late response must not repopulate cache');
@@ -230,15 +233,15 @@ try {
     day:'2026-10-09',destroy:()=>{},
     subscribeBars:(_req,onBar)=>{liveHandler=onBar;return ()=>{};}
   });
-  race.personalBars.set(lateInstrument.id,[makeBar(fri)]);
+  race.personalBars.set(lateInstrument.id,[indexBar(fri)]);
   race._proof=async()=>({ownerViewer:true,csrf:null});
   race._historicalDay=()=>new Promise(resolve=>{finishReplay=resolve;});
   const stopRace=race.subscribeBars(req,()=>{}, {onResync:()=>{lateResync++;}});
-  liveHandler(makeBar(fri+180));
+  liveHandler(indexBar(fri+180));
   await new Promise(resolve=>setImmediate(resolve));
   assert.equal(typeof finishReplay,'function');
   race._invalidateIndexAccess(lateInstrument);
-  finishReplay([makeBar(fri),makeBar(fri+60),makeBar(fri+120),makeBar(fri+180)]);
+  finishReplay([indexBar(fri),indexBar(fri+60),indexBar(fri+120),indexBar(fri+180)]);
   await new Promise(resolve=>setImmediate(resolve));
   assert.equal(lateResync,0,'late gap replay cannot resync after revoked access');
   assert.equal(race.personalBars.has(lateInstrument.id),false);

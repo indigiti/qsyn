@@ -547,6 +547,8 @@ try {
   if(await page.getByText('Upstox personal index charts').count()!==1)
     throw Error('Index chart readiness was not integrated into Markets');
   await page.getByRole('heading',{name:'SENSEX · Upstox personal chart'}).waitFor();
+  if(await page.getByText(/Index volume: N\/A/).count()===0)
+    throw Error('Index volume N/A disclosure missing');
   if(await page.getByRole('button',{name:'Open SENSEX historical chart'}).isEnabled())
     throw Error('Private chart opened without the stored Analytics Token');
   // Offline-only browser fixture: prove OpenAlgo renders a complete Upstox-
@@ -587,6 +589,7 @@ try {
   await page.getByRole('combobox',{name:'Market instrument'}).selectOption('BSE_INDEX:index:SENSEX');
   await page.getByRole('button',{name:'Open SENSEX historical chart'}).click();
   await page.getByText(/375 Upstox 1-minute historical candles/).waitFor({timeout:14000});
+  await page.getByLabel('Upstox index volume availability').waitFor();
   await page.getByText(/09:15–15:29 IST/).waitFor({timeout:14000});
   if(privateChartRequests!==1)
     throw Error('Expected one private history call per selected date');

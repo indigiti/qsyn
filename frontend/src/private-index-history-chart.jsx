@@ -84,6 +84,10 @@ export function PrivateIndexHistoryChart({symbol}){
       ref={chartRef} aria-label={symbol+' private historical candlestick chart'}/>}
     <p role="status" className="terminal-footnote">{status}</p>
     <p role="status" className="terminal-footnote">{liveStatus}</p>
+    <p className="terminal-footnote" aria-label="Upstox index volume availability">
+      Volume: N/A for cash indices. A zero in the chart's internal OHLCV
+      format is a compatibility placeholder, not actual traded volume.
+    </p>
     <p className="terminal-footnote">One private Analytics Token · Rust Upstox V3
       tick-by-tick WebSocket · Rust historical 1-minute candles. No OAuth,
       operator plan, PHP quote polling or separate Rust executable.

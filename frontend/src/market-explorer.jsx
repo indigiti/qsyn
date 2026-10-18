@@ -171,6 +171,9 @@ export function MarketExplorer({theme,openView,CryptoChart,PrivateCharts}){
     {market==='indices'&&<>
       <section className="terminal-surface">
         <div className="terminal-card-head"><h2>Upstox personal index charts</h2><LockKeyhole size={17}/></div>
+          <p className="terminal-footnote">Index volume: N/A.
+            A zero-volume chart placeholder is not traded index volume.
+            Stocks and option contracts require separate verified volume feeds.</p>
         <p>These seven index symbols come from QSYN's local catalog, not a live Upstox lookup.
           A stored Analytics Token does not confirm available candles. Open a chart
           to check genuine Rust historical data; Today uses an authenticated Upstox
