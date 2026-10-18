@@ -95,11 +95,13 @@ try {
     const body=JSON.parse(opts.body);
     dayFetches++;
     const start=epoch(body.day+'T09:15:00+05:30');
-    const full=Array.from({length:375},(_,i)=>makeBar(start+i*60,100+i));
+    // Cash-index volume is unavailable; the numeric zero is chart-only.
+    const full=Array.from({length:375},(_,i)=>({...makeBar(start+i*60,100+i),volume:0}));
     const bars=dayFetches===1?full.filter((_,i)=>i!==18):full;
     return {ok:true,json:async()=>({
       schema:'QSYN-UPSTOX-RUST-INDEX-HISTORY/1',
       source:'upstox_v3_rust_history',
+      volume_available:false,volume_status:'not_applicable_index',
       symbol:body.symbol,day_ist:body.day,interval:'1m',bars,
       trading_enabled:false,public_redistribution_allowed:false
     })};

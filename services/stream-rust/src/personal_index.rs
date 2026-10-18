@@ -523,8 +523,16 @@ mod tests {
         let a = b.on_tick(&t).unwrap();
         assert_eq!(a.open, a.close);
         assert_eq!(a.volume, 0); // no inferred trade size
-        assert_eq!(as_utc_bar(&crate::market_pipeline::Candle::from_observation(
-            t.time_ms / 60_000 * 60_000, t.price).unwrap())["volume"], 0);
+        assert_eq!(
+            as_utc_bar(
+                &crate::market_pipeline::Candle::from_observation(
+                    t.time_ms / 60_000 * 60_000,
+                    t.price
+                )
+                .unwrap()
+            )["volume"],
+            0
+        );
         assert!(b.on_tick(&t).is_none());
         let mut t2 = t.clone();
         t2.time_ms += 1000;
