@@ -246,7 +246,8 @@ jobs:
           coverage: none
       - run: npm install --no-audit --no-fund
         working-directory: frontend
-      - run: node --check src/main.js
+      - name: Guard against resurrected legacy chart and Studio builds
+        run: node tests/obsolete-ui-assets.test.mjs
         working-directory: frontend
       - run: npm run build
         working-directory: frontend
@@ -283,7 +284,8 @@ jobs:
           node tests/live-market-feed-toggle.test.mjs
         working-directory: frontend
       - run: |
-          test -s frontend/dist/chart.js
+          test ! -e frontend/dist/chart.js
+          test ! -e frontend/dist/studio.js
           test -s frontend/dist/terminal.js
           test -s frontend/dist/terminal.css
       - name: Install test-only Playwright Chromium

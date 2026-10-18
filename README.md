@@ -8,7 +8,7 @@ Canonical requirements: [Master Blueprint v1.4](docs/MASTER_BLUEPRINT.md).
 
 - PHP 8.3-compatible development terminal and simulated 1-minute candle endpoint.
 - Reusable, database-free PHP file storage class with revision-checked atomic document updates and basic tests.
-- OpenAlgo Charts 2.6.0 widget integration, bundled as a static browser asset.
+- OpenAlgo Charts 2.6.7 integrated in the unified React terminal and chart-only homepage.
 - Rust/Tokio service skeleton: health endpoint, opt-in local-only simulated WebSocket, CE+PE synthetic candle builder and unit tests.
 - GitHub Actions tests and a staged DigiOps artifact named **digiops-release**, with segregated public/private folders.
 
@@ -24,11 +24,12 @@ cargo test --manifest-path services/stream-rust/Cargo.toml
 cd frontend && npm install && npm run build
 cd ..
 mkdir -p apps/web-php/public/assets
-cp frontend/dist/chart.js apps/web-php/public/assets/chart.js
+cp frontend/dist/terminal.js apps/web-php/public/assets/terminal.js
+cp frontend/dist/terminal.css apps/web-php/public/assets/terminal.css
 php -S 127.0.0.1:8000 -t apps/web-php/public apps/web-php/dev-router.php
 ~~~
 
-Open http://127.0.0.1:8000/qsyn/ to view the **simulated** chart.
+Open http://127.0.0.1:8000/qsyn/ for the chart-only homepage (public crypto; NSE/BSE index history remains owner-authorized). Protected workspace pages live under `/qsyn/terminal/`.
 A PHP health endpoint is available at /qsyn/api/v1/health; /qsyn/api/v1/demo/bars returns demonstration OHLC data.
 
 To start the separate **localhost-only** Rust service:
@@ -52,7 +53,7 @@ OpenAlgo and OpenAlgo Charts must remain pinned and independently upgradeable; t
 
 ## Rust administration (opt-in)
 
-The browser admin page is available at `/qsyn/admin/rust` with **Start / Stop / Restart / Refresh / Health**. This feature is **disabled by default**. It requires either opt-in direct Rust lifecycle mode (no Supervisor) or a Cloudways-approved restricted Supervisor configuration, a server-injected administrator password hash, and PHP process-control permission. It never executes arbitrary browser-supplied commands. See [DigiOps service control guidance](infrastructure/DIGIOPS.md) for setup and security gates.
+The Rust operations page is available at `/qsyn/terminal/operations` (`/qsyn/admin/rust` redirects there) with **Start / Stop / Restart / Refresh / Health**. This feature is **disabled by default**. It requires either opt-in direct Rust lifecycle mode (no Supervisor) or a Cloudways-approved restricted Supervisor configuration, a server-injected administrator password hash, and PHP process-control permission. It never executes arbitrary browser-supplied commands. See [DigiOps service control guidance](infrastructure/DIGIOPS.md) for setup and security gates.
 
 No permission has yet been granted to start the Rust daemon on Cloudways; the page will show service controls unavailable until Cloudways supplies a supported manager. The health button remains usable even when actions are disabled.
 
