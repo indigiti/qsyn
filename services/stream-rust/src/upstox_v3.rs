@@ -1012,7 +1012,7 @@ mod tests {
             market_info: None,
         };
         let allowed = HashSet::from([key.clone()]);
-        let result = decode_scoped_minute_updates(&frame.encode_to_vec(), &allowed, now).unwrap();
+        let result = decode_scoped_minute_updates(&frame.encode_to_vec(), &allowed, now as u64).unwrap();
         assert_eq!(result.len(), 1);
         assert_eq!(result[0].volume, 278);
         assert!(result[0].volume_available);
@@ -1022,13 +1022,13 @@ mod tests {
             ..frame.clone()
         };
         assert!(
-            decode_scoped_minute_updates(&snapshot.encode_to_vec(), &allowed, now)
+            decode_scoped_minute_updates(&snapshot.encode_to_vec(), &allowed, now as u64)
                 .unwrap()
                 .is_empty()
         );
         let unapproved = HashSet::from(["NSE_FO|999".to_owned()]);
         assert!(
-            decode_scoped_minute_updates(&frame.encode_to_vec(), &unapproved, now)
+            decode_scoped_minute_updates(&frame.encode_to_vec(), &unapproved, now as u64)
                 .unwrap()
                 .is_empty()
         );
