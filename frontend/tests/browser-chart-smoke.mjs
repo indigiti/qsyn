@@ -120,6 +120,11 @@ try{
       public_redistribution_allowed:false,trading_enabled:false
     })});
   });
+  // This is a historical-candle fixture. The mocked proof's CSRF is not a
+  // genuine admin credential and must never be sent to the live ticket API.
+  // During NSE market hours the default ON switch otherwise correctly gets
+  // an HTTP 403 and an access-denied banner unrelated to historical OHLC.
+  await page.evaluate(()=>localStorage.setItem('qsyn.live-chart-feed.v1','0'));
   await page.evaluate(()=>localStorage.setItem('qsyn-public-chart-selection-v1',JSON.stringify({
     schema:'QSYN-PUBLIC-CHART-SELECTION/1',exchange:'NSE_INDEX:index',symbol:'NIFTY'
   })));
