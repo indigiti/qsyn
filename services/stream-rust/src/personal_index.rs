@@ -257,6 +257,40 @@ pub fn verify_ticket(ticket: &str, token: &str, now_s: u64) -> io::Result<String
     }
     Ok(scoped.symbol)
 }
+/// Short-lived one-use browser ticket for a single dynamically discovered
+/// instrument. This is independent from the seven legacy symbol tickets.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct InstrumentTicket {
+    instrument_key: String,
+    exp: u64,
+    nonce: String,
+}
+pub fn verify_instrument_ticket(ticket: &str, token: &str, now_s: u64) -> io::Result<String> {
+    use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
+    let (payload, signature) = ticket.split_once('.').ok_or_else(denied)?;
+    if ticket.len() > 512 || payload.len() > 350 || signature.len() != 64
+        || !signature.bytes().all(|b| b.is_ascii_hexdigit())
+    { return Err(denied()) }
+    let mut mac = Hmac::<Sha256>::new_from_slice(token.as_bytes()).map_err(|_| denied())?;
+    mac.update(payload.as_bytes());
+    mac.verify_slice(&hex_bytes(signature)?).map_err(|_| denied())?;
+    let bytes = URL_SAFE_NO_PAD.decode(payload).map_err(|_| denied())?;
+    let item: InstrumentTicket = serde_json::from_slice(&bytes).map_err(|_| denied())?;
+    if !crate::upstox_instrument_history::valid_instrument_key(&item.instrument_key)
+        || symbol_for_key(&item.instrument_key).is_some()
+        || item.exp <= now_s || item.exp > now_s + MAX_TICKET_AGE
+        || item.nonce.len() != 32
+        || !item.nonce.bytes().all(|b| b.is_ascii_hexdigit())
+    { return Err(denied()) }
+    let used = USED.get_or_init(|| Mutex::new(HashMap::new()));
+    let mut cache = used.lock().map_err(|_| denied())?;
+    cache.retain(|_,expiry| *expiry > now_s);
+    if cache.len() > 4096 || cache.insert(item.nonce,item.exp).is_some() {
+        return Err(denied());
+    }
+    Ok(item.instrument_key)
+}
 fn hex_bytes(s: &str) -> io::Result<Vec<u8>> {
     (0..s.len())
         .step_by(2)
@@ -355,146 +389,267 @@ pub struct IndexLiveEvent {
 }
 
 static SHARED: OnceLock<Mutex<Option<SharedIndexFeed>>> = OnceLock::new();
+static NEXT_GENERATION: std::sync::atomic::AtomicU64 =
+    std::sync::atomic::AtomicU64::new(1);
+const MAX_DYNAMIC_SUBSCRIPTIONS: usize = 16;
+
+#[derive(Debug, Clone, Serialize)]
+pub struct InstrumentLiveEvent {
+    pub instrument_key: String,
+    pub provider_time_ms: u64,
+    pub bar: Value,
+    pub volume_available: bool,
+    pub open_interest: Option<f64>,
+}
+
+/// One upstream Upstox V3 connection shared with all seven legacy index
+/// viewers. Dynamic subscriptions are bounded, reference-counted and removed
+/// when the last chart closes, without touching the existing index aliases.
 struct SharedIndexFeed {
     sender: tokio::sync::broadcast::Sender<IndexLiveEvent>,
+    scoped_sender: tokio::sync::broadcast::Sender<InstrumentLiveEvent>,
+    requested: tokio::sync::watch::Sender<Vec<String>>,
+    refs: HashMap<String, usize>,
+    generation: u64,
     task: tokio::task::JoinHandle<()>,
 }
 
-/// A viewer never creates its own upstream socket. The first viewer starts
-/// one six-index feed; subsequent viewers receive only their requested alias.
-/// Provider connection closes after all subscribers disconnect.
+fn make_shared(token: String) -> SharedIndexFeed {
+    use std::sync::atomic::Ordering;
+    let (sender, _) = tokio::sync::broadcast::channel(1024);
+    let (scoped_sender, _) = tokio::sync::broadcast::channel(256);
+    let (requested, receiver) = tokio::sync::watch::channel(Vec::new());
+    let index_broadcast = sender.clone();
+    let scoped_broadcast = scoped_sender.clone();
+    let generation = NEXT_GENERATION.fetch_add(1, Ordering::Relaxed);
+    let task = tokio::spawn(async move {
+        run_shared_index_feed(token, index_broadcast, scoped_broadcast, receiver).await;
+    });
+    SharedIndexFeed {
+        sender, scoped_sender, requested,
+        refs: HashMap::new(), generation, task,
+    }
+}
+
 pub fn subscribe_shared(token: String) -> tokio::sync::broadcast::Receiver<IndexLiveEvent> {
     let state = SHARED.get_or_init(|| Mutex::new(None));
     let mut guard = state.lock().expect("shared index hub mutex");
-    if let Some(feed) = guard.as_ref() {
-        if !feed.task.is_finished() {
-            return feed.sender.subscribe();
+    if guard.as_ref().is_none_or(|hub| hub.task.is_finished()) {
+        *guard = Some(make_shared(token));
+    }
+    guard.as_ref().unwrap().sender.subscribe()
+}
+
+/// Drop-based release prevents disconnected charts from leaking provider
+/// subscriptions and avoids opening another upstream connection per viewer.
+pub struct InstrumentSubscription {
+    key: String,
+    generation: u64,
+}
+impl Drop for InstrumentSubscription {
+    fn drop(&mut self) {
+        let Some(state) = SHARED.get() else { return };
+        let Ok(mut guard) = state.lock() else { return };
+        let Some(hub) = guard.as_mut() else { return };
+        if hub.generation != self.generation { return }
+        if let Some(count) = hub.refs.get_mut(&self.key) {
+            *count -= 1;
+            if *count == 0 { hub.refs.remove(&self.key); }
+            let mut keys = hub.refs.keys().cloned().collect::<Vec<_>>();
+            keys.sort_unstable();
+            hub.requested.send_replace(keys);
         }
     }
-    let (sender, receiver) = tokio::sync::broadcast::channel(1024);
-    let broadcast = sender.clone();
-    let task = tokio::spawn(async move {
-        run_shared_index_feed(token, broadcast).await;
-    });
-    *guard = Some(SharedIndexFeed { sender, task });
-    receiver
+}
+
+pub fn subscribe_instrument(
+    token: String, key: &str
+) -> io::Result<(
+    tokio::sync::broadcast::Receiver<InstrumentLiveEvent>,
+    InstrumentSubscription,
+)> {
+    if !crate::upstox_instrument_history::valid_instrument_key(key)
+        || symbol_for_key(key).is_some()
+    {
+        return Err(denied());
+    }
+    let state = SHARED.get_or_init(|| Mutex::new(None));
+    let mut guard = state.lock().map_err(|_| denied())?;
+    if guard.as_ref().is_none_or(|hub| hub.task.is_finished()) {
+        *guard = Some(make_shared(token));
+    }
+    let hub = guard.as_mut().ok_or_else(denied)?;
+    if !hub.refs.contains_key(key) && hub.refs.len() >= MAX_DYNAMIC_SUBSCRIPTIONS {
+        return Err(denied());
+    }
+    let count = hub.refs.entry(key.to_owned()).or_insert(0);
+    *count += 1;
+    let mut keys = hub.refs.keys().cloned().collect::<Vec<_>>();
+    keys.sort_unstable();
+    hub.requested.send_replace(keys);
+    Ok((hub.scoped_sender.subscribe(), InstrumentSubscription {
+        key: key.to_owned(), generation: hub.generation
+    }))
+}
+
+fn has_subscribers(
+    index_sender: &tokio::sync::broadcast::Sender<IndexLiveEvent>,
+    scoped_sender: &tokio::sync::broadcast::Sender<InstrumentLiveEvent>,
+) -> bool {
+    index_sender.receiver_count() > 0 || scoped_sender.receiver_count() > 0
 }
 
 async fn run_shared_index_feed(
     token: String,
-    sender: tokio::sync::broadcast::Sender<IndexLiveEvent>,
+    index_sender: tokio::sync::broadcast::Sender<IndexLiveEvent>,
+    scoped_sender: tokio::sync::broadcast::Sender<InstrumentLiveEvent>,
+    mut requested: tokio::sync::watch::Receiver<Vec<String>>,
 ) {
     let mut retry = 2u64;
-    while sender.receiver_count() > 0 {
-        let _ = shared_session(&token, &sender).await;
-        if sender.receiver_count() == 0 {
-            break;
-        }
+    while has_subscribers(&index_sender, &scoped_sender) {
+        let _ = shared_session(
+            &token, &index_sender, &scoped_sender, &mut requested
+        ).await;
+        if !has_subscribers(&index_sender, &scoped_sender) { break }
         tokio::time::sleep(Duration::from_secs(retry)).await;
         retry = (retry * 2).min(30);
     }
 }
 
+/// Binary V3 request; a dynamic full-mode chart receives exactly one
+/// provider I1 candle stream, never a newly created per-chart socket.
+async fn subscription_command(
+    upstream: &mut tokio_tungstenite::WebSocketStream<
+        tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>
+    >,
+    method: &str,
+    mode: &str,
+    keys: &[String],
+) -> io::Result<()> {
+    if keys.is_empty() { return Ok(()) }
+    let command = json!({
+        "guid":format!("{:x}",now_ms()?),
+        "method":method,
+        "data":{"mode":mode,"instrumentKeys":keys},
+    }).to_string();
+    upstream.send(Message::Binary(command.into_bytes().into())).await
+        .map_err(|_| denied())
+}
+
 async fn shared_session(
     token: &str,
-    sender: &tokio::sync::broadcast::Sender<IndexLiveEvent>,
+    index_sender: &tokio::sync::broadcast::Sender<IndexLiveEvent>,
+    scoped_sender: &tokio::sync::broadcast::Sender<InstrumentLiveEvent>,
+    requested: &mut tokio::sync::watch::Receiver<Vec<String>>,
 ) -> io::Result<()> {
     let response = http_client()?
         .get(AUTH_URL)
         .bearer_auth(token)
         .header("Accept", "application/json")
-        .send()
-        .await
-        .map_err(|_| denied())?;
+        .send().await.map_err(|_| denied())?;
     if response.status() != reqwest::StatusCode::OK {
         return Err(denied());
     }
     let payload: Value = response.json().await.map_err(|_| denied())?;
-    if payload["status"] != "success" {
-        return Err(denied());
-    }
+    if payload["status"] != "success" { return Err(denied()); }
     let redirect = payload["data"]["authorized_redirect_uri"]
-        .as_str()
-        .ok_or_else(denied)?;
+        .as_str().ok_or_else(denied)?;
     validate_one_use_redirect(redirect)?;
     let (mut upstream, _) = timeout(Duration::from_secs(5), connect_async(redirect))
-        .await
-        .map_err(|_| denied())?
-        .map_err(|_| denied())?;
-    let keys = INDEX_SYMBOLS
-        .iter()
-        .map(|symbol| key(symbol).unwrap())
-        .collect::<Vec<_>>();
-    let subscribe = json!({"guid":format!("{:x}", now_ms()?),"method":"sub",
-        "data":{"mode":"ltpc","instrumentKeys":keys}})
-    .to_string();
-    upstream
-        .send(Message::Binary(subscribe.into_bytes().into()))
-        .await
-        .map_err(|_| denied())?;
+        .await.map_err(|_| denied())?.map_err(|_| denied())?;
+
+    // The original seven aliases remain subscribed for legacy viewers.
+    let index_keys = INDEX_SYMBOLS.iter().map(|symbol|
+        key(symbol).unwrap().to_owned()).collect::<Vec<_>>();
+    subscription_command(&mut upstream,"sub","ltpc",&index_keys).await?;
+    let mut subscribed = std::collections::HashSet::<String>::new();
+    let initial = requested.borrow().clone();
+    if initial.len() > MAX_DYNAMIC_SUBSCRIPTIONS { return Err(denied()) }
+    subscription_command(&mut upstream,"sub","full",&initial).await?;
+    subscribed.extend(initial);
+
     let mut minute: HashMap<&'static str, MinuteBuilder> = HashMap::new();
     let mut second: HashMap<&'static str, SecondBuilder> = HashMap::new();
+    let mut last_scoped = HashMap::<String,crate::upstox_v3::ScopedMinuteUpdate>::new();
     let started = Instant::now();
     let mut idle_since: Option<Instant> = None;
     loop {
-        if started.elapsed() >= Duration::from_secs(110) {
-            break; // periodic redirect renewal; no overlapping provider sockets
-        }
-        if sender.receiver_count() == 0 {
+        if started.elapsed() >= Duration::from_secs(110) { break }
+        if !has_subscribers(index_sender,scoped_sender) {
             let since = idle_since.get_or_insert_with(Instant::now);
-            if since.elapsed() >= Duration::from_secs(3) {
-                break;
+            if since.elapsed() >= Duration::from_secs(3) { break }
+        } else { idle_since = None; }
+
+        tokio::select! {
+            changed = requested.changed() => {
+                if changed.is_err() { break }
+                let new_set = requested.borrow().iter().cloned()
+                    .collect::<std::collections::HashSet<_>>();
+                if new_set.len() > MAX_DYNAMIC_SUBSCRIPTIONS { return Err(denied()) }
+                let mut added = new_set.difference(&subscribed).cloned().collect::<Vec<_>>();
+                let mut removed = subscribed.difference(&new_set).cloned().collect::<Vec<_>>();
+                added.sort_unstable();removed.sort_unstable();
+                // Old seven-index subscriptions are never removed.
+                subscription_command(&mut upstream,"unsub","full",&removed).await?;
+                subscription_command(&mut upstream,"sub","full",&added).await?;
+                for key in &removed { last_scoped.remove(key); }
+                subscribed = new_set;
             }
-        } else {
-            idle_since = None;
-        }
-        let incoming = timeout(Duration::from_secs(2), upstream.next()).await;
-        match incoming {
-            Err(_) => continue, // idle check also works without market packets
-            Ok(Some(Ok(Message::Binary(frame)))) => {
-                if frame.len() > MAX_FRAME {
-                    return Err(denied());
-                }
-                for update in crate::upstox_v3::decode_personal_index_updates(&frame, now_ms()?)? {
-                    if update.snapshot {
-                        continue;
+            incoming = timeout(Duration::from_secs(2),upstream.next()) => {
+                match incoming {
+                    Err(_) => continue,
+                    Ok(Some(Ok(Message::Binary(frame)))) => {
+                        if frame.len() > MAX_FRAME { return Err(denied()) }
+                        let received = now_ms()?;
+                        let old = crate::upstox_v3::legacy_index_frame(&frame)?;
+                        for update in crate::upstox_v3::decode_personal_index_updates(&old,received)? {
+                            if update.snapshot { continue }
+                            let Some(symbol) = symbol_for_key(&update.key) else { continue };
+                            let tick = Tick {
+                                symbol: symbol.to_owned(),time_ms:update.time_ms,price:update.price
+                            };
+                            let Some(second_bar) = second.entry(symbol).or_default().on_tick(&tick)
+                                else { continue };
+                            let minute_builder = minute.entry(symbol).or_default();
+                            let bar = minute_builder.on_tick(&tick)
+                                .or_else(|| minute_builder.current.clone());
+                            if let Some(bar) = bar {
+                                let _ = index_sender.send(IndexLiveEvent{tick,bar,second_bar});
+                            }
+                        }
+                        for entry in crate::upstox_v3::decode_scoped_minute_updates(
+                            &frame,&subscribed,received
+                        )? {
+                            if let Some(previous) = last_scoped.get(&entry.instrument_key) {
+                                if previous.bar_time_ms > entry.bar_time_ms
+                                    || (previous.bar_time_ms == entry.bar_time_ms &&
+                                        (previous == &entry || previous.volume > entry.volume))
+                                { continue }
+                            }
+                            last_scoped.insert(entry.instrument_key.clone(),entry.clone());
+                            let volume = entry.volume;
+                            let bar = json!({
+                                "time":entry.bar_time_ms/1000,
+                                "open":entry.open,"high":entry.high,
+                                "low":entry.low,"close":entry.close,
+                                "volume":volume
+                            });
+                            let _ = scoped_sender.send(InstrumentLiveEvent {
+                                instrument_key:entry.instrument_key,
+                                provider_time_ms:entry.provider_time_ms,
+                                bar,volume_available:entry.volume_available,
+                                open_interest:entry.open_interest,
+                            });
+                        }
                     }
-                    let Some(symbol) = symbol_for_key(&update.key) else {
-                        continue;
-                    };
-                    let tick = Tick {
-                        symbol: symbol.to_owned(),
-                        time_ms: update.time_ms,
-                        price: update.price,
-                    };
-                    let Some(second_bar) = second.entry(symbol).or_default().on_tick(&tick) else {
-                        continue;
-                    };
-                    // Multiple provider updates may legitimately share currentTs.
-                    // A same-ms price change changes the second OHLC, but the
-                    // original minute path preserves its stricter monotonic rule.
-                    let minute_builder = minute.entry(symbol).or_default();
-                    let bar = minute_builder
-                        .on_tick(&tick)
-                        .or_else(|| minute_builder.current.clone());
-                    if let Some(bar) = bar {
-                        let _ = sender.send(IndexLiveEvent {
-                            tick,
-                            bar,
-                            second_bar,
-                        });
+                    Ok(Some(Ok(Message::Ping(data)))) => {
+                        upstream.send(Message::Pong(data)).await.map_err(|_| denied())?;
                     }
+                    Ok(Some(Ok(Message::Close(_)))) | Ok(None) => break,
+                    Ok(Some(Err(_))) | Ok(Some(Ok(Message::Text(_)))) => return Err(denied()),
+                    _ => {}
                 }
             }
-            Ok(Some(Ok(Message::Ping(data)))) => {
-                upstream
-                    .send(Message::Pong(data))
-                    .await
-                    .map_err(|_| denied())?;
-            }
-            Ok(Some(Ok(Message::Close(_)))) | Ok(None) => break,
-            Ok(Some(Err(_))) | Ok(Some(Ok(Message::Text(_)))) => return Err(denied()),
-            _ => {}
         }
     }
     let _ = upstream.close(None).await;

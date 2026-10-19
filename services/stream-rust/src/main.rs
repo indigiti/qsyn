@@ -114,12 +114,59 @@ async fn personal_index_session(mut socket: WebSocket) {
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
         .as_secs();
-    let symbol = match qsyn_stream::personal_index::verify_ticket(ticket, &token, now) {
-        Ok(x) => x,
-        Err(_) => {
-            let _ = socket.close().await;
-            return;
+    // The original seven-index ticket keeps its existing behavior. A separate
+    // signed instrument ticket shares the SAME upstream WebSocket hub.
+    let legacy = qsyn_stream::personal_index::verify_ticket(ticket, &token, now);
+    if legacy.is_err() {
+        let instrument = match qsyn_stream::personal_index::verify_instrument_ticket(
+            ticket, &token, now
+        ) {
+            Ok(key) => key,
+            Err(_) => { let _=socket.close().await;return; }
+        };
+        let Ok((mut receiver, _subscription)) =
+            qsyn_stream::personal_index::subscribe_instrument(token, &instrument)
+        else { let _=socket.close().await;return; };
+        loop {
+            tokio::select! {
+                event=receiver.recv()=>{
+                    match event {
+                        Ok(event) if event.instrument_key==instrument=>{
+                            let value=serde_json::json!({
+                                "schema":"QSYN-RUST-UPSTOX-INSTRUMENT-LIVE/1",
+                                "source":"upstox_v3_full_provider_ohlc",
+                                "instrument_key":event.instrument_key,
+                                "provider_time_ms":event.provider_time_ms,
+                                "bar":event.bar,
+                                "volume_available":event.volume_available,
+                                "open_interest":event.open_interest,
+                                "trading_enabled":false
+                            });
+                            if socket.send(Message::Text(value.to_string().into())).await.is_err()
+                            {break}
+                        }
+                        Ok(_)=>{},
+                        Err(tokio::sync::broadcast::error::RecvError::Lagged(_))=>{},
+                        Err(tokio::sync::broadcast::error::RecvError::Closed)=>break,
+                    }
+                }
+                packet=socket.recv()=>{
+                    match packet {
+                        Some(Ok(Message::Ping(p)))=>{
+                            if socket.send(Message::Pong(p)).await.is_err(){break}
+                        }
+                        Some(Ok(Message::Close(_)))|None|Some(Err(_))=>break,
+                        _=>{},
+                    }
+                }
+            }
         }
+        let _=socket.close().await;
+        return;
+    }
+    let symbol = match legacy {
+        Ok(x)=>x,
+        Err(_)=>{ let _=socket.close().await;return; }
     };
     let mut receiver = qsyn_stream::personal_index::subscribe_shared(token);
     loop {

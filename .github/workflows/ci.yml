@@ -265,6 +265,7 @@ jobs:
           node tests/upstox-index-volume-contract.mjs
           node tests/upstox-instrument-search.test.mjs
           node tests/upstox-instrument-history.test.mjs
+          node tests/upstox-instrument-live.test.mjs
         working-directory: frontend
       - name: Verify India index native discovery and strict license gates
         run: node tests/india-index-contract.mjs
