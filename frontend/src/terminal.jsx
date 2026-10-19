@@ -166,7 +166,13 @@ function HomepageChart({ theme, embedded = false,
     let active=true;
     // Upstream ChartGrid can reject an obsolete internal load when it cancels
     // a refresh or changes interval; a known AbortError is not an app fault.
-    const feed=new QsynMarketsFeed(s=>{if(active)setMessage(s);},{
+    const feed=new QsynMarketsFeed(s=>{
+      if(!active)return;
+      setMessage(s);
+      // A notice about unsupported crypto 1s cannot follow a newly loaded
+      // authorized Upstox index into the next market selection.
+      if(s.includes('real Rust Upstox 1m candles'))setTimeframeNotice('');
+    },{
       onBlockedIndex:index=>{if(active)setBlockedIndex(index);},
       onUnsupportedCryptoSecond:req=>{
         if(!active)return;

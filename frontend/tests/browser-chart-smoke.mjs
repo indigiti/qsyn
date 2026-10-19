@@ -135,8 +135,10 @@ try{
   }
   if(personalHistoryCalls<2 || requestedHistoryDays.size<2)
     throw Error('Homepage did not automatically load the preceding NIFTY trading session');
-  if(await page.locator('.qsyn-india-entitlement-note').count())
-    throw Error('Authenticated homepage still displayed obsolete index-plan blocker');
+  if(await page.locator('.qsyn-india-entitlement-note').count()){
+    const text=await page.locator('.qsyn-india-entitlement-note').allTextContents();
+    throw Error('Authenticated homepage showed a stale index warning '+JSON.stringify(text));
+  }
   if(await page.locator('.qsyn-home-chart canvas').count()===0)
     throw Error('Authenticated NIFTY homepage did not render candles');
   await page.unroute('**/qsyn/api/v1/admin/upstox/index-history-proof');

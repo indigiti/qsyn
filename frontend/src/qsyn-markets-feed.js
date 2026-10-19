@@ -345,6 +345,16 @@ export class QsynMarketsFeed extends QsynCryptoFeed {
         error?.message==='UPSTOX_PERSONAL_TOKEN_UNAVAILABLE'?'token':'history';
       const accessDenied=reason==='authorization'||reason==='token';
       if(accessDenied)this._invalidateIndexAccess(instrument);
+      const retained=this.personalBars.get(instrument.id)||[];
+      // A transient tail/history refresh must not mask real candles that are
+      // already on screen. Authorization and missing-token denials still
+      // invalidate the retained private feed above and show the blocker.
+      if(!accessDenied&&retained.length&&req.noCache!==true){
+        this.lastBlockedKey=null;
+        this.onBlockedIndex(null);
+        this.onState(instrument.name+' · showing last verified candles; history source unavailable');
+        return aggregatePersonalIndexBars(retained,req.interval);
+      }
       const blockedKey=instrument.id+':'+reason;
       this.activeIndex=instrument.id;
       if(this.lastBlockedKey!==blockedKey){
@@ -352,14 +362,7 @@ export class QsynMarketsFeed extends QsynCryptoFeed {
         this.onBlockedIndex({exchange:instrument.exchange,
           symbol:instrument.symbol,name:instrument.name,reason});
       }
-      // Preserve already verified history when a transient source or token
-      // failure occurs. Never synthesize a replacement candle or wipe the
-      // previously displayed session simply because the replay failed.
-      const retained=this.personalBars.get(instrument.id)||[];
-      if(!accessDenied && retained.length && req.interval!=='1s' && req.noCache!==true){
-        this.onState(instrument.name+' · showing last verified candles; history source unavailable');
-        return aggregatePersonalIndexBars(retained,req.interval);
-      }
+      // Missing/denied sources still fail closed; no invented candles.
       return [];
     }
   }
