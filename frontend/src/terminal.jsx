@@ -20,6 +20,7 @@ import {bindIndicatorLegendSettings} from './indicator-legend-settings.js';
 import { observeChartCancellations } from './chart-cancellation.js';
 import { QsynMarketsFeed } from './qsyn-markets-feed.js';
 import {saveIndexIntent} from './private-index-intent.js';
+import {indexOwnerSession,unlockIndexOwner} from './index-owner-login.js';
 import {loadPublicChartSelection,observePublicChartSelection} from './public-chart-selection.js';
 import {MAX_AUTO_BACKFILL_BARS,INITIAL_BACKFILL_BARS} from './crypto-feed.js';
 import {observeWickScienceBackfill} from './wick-science-auto-backfill.js';
@@ -157,6 +158,27 @@ function HomepageChart({ theme, embedded = false,
   const firstSymbol=!embedded && initialExchange===cryptoDefault.exchange+':'+cryptoDefault.market && initialSymbol===cryptoDefault.symbol ? savedSelection.symbol : initialSymbol;
   const [message,setMessage]=useState('Connecting public exchange candles…');
   const [blockedIndex,setBlockedIndex]=useState(null);
+  const [ownerSession,setOwnerSession]=useState('checking');
+  const [ownerPassword,setOwnerPassword]=useState('');
+  const [ownerBusy,setOwnerBusy]=useState(false);
+  const [ownerError,setOwnerError]=useState('');
+  const [ownerRetry,setOwnerRetry]=useState(0);
+  useEffect(()=>{
+    if(!blockedIndex||blockedIndex.reason!=='authorization'){
+      setOwnerSession('checking');
+      setOwnerError('');
+      setOwnerPassword('');
+      return;
+    }
+    const controller=new AbortController();
+    setOwnerSession('checking');
+    indexOwnerSession(fetch,controller.signal).then(status=>{
+      if(!controller.signal.aborted)setOwnerSession(status);
+    }).catch(()=>{
+      if(!controller.signal.aborted)setOwnerSession('unavailable');
+    });
+    return ()=>controller.abort();
+  },[blockedIndex?.reason,blockedIndex?.name,ownerRetry]);
   const [timeframeNotice,setTimeframeNotice]=useState('');
   const liveFeedEnabled=useLiveFeedPreference();
   const nativeWorkspaces=useMemo(()=>cryptoNativeWorkspaceStore(),[]);
@@ -302,20 +324,50 @@ function HomepageChart({ theme, embedded = false,
       </p>}
       <span className="qsyn-screenreader-status" role="status" aria-live="polite">{message}</span>
       {timeframeNotice&&!blockedIndex&&<div className="qsyn-india-entitlement-note" role="status">{timeframeNotice}</div>}
-      {blockedIndex && <div className="qsyn-india-entitlement-note" role="status">
-        <div><strong>{blockedIndex.name}</strong><span>{blockedIndex.reason==='history'
-          ? 'Index history temporarily unavailable' : 'Index source unavailable'}</span></div>
-        {blockedIndex.reason==='history'
-          ? <p>The private Rust Upstox historical source could not be refreshed.
-              Previously verified candles are preserved where available. Check
-              <a href="/qsyn/terminal/diagnostics"> Diagnostics &amp; feed health</a>
-              and retry the chart; missing bars are never estimated.</p>
-          : <p>The server did not authorize an owner-only index data session for this
-              browser, or the private token is unavailable. The homepage needs no QSYN login,
-              but a valid owner-browser grant or configured legacy owner access
-              and a private Upstox source are required. See
-              <a href="/qsyn/terminal/diagnostics"> Diagnostics &amp; feed health</a>
-              for the redacted failure code.</p>}
+      {blockedIndex && <div className="qsyn-india-entitlement-note qsyn-index-login-note" role="status">
+        <div><strong>{blockedIndex.name}</strong><span>{blockedIndex.reason==='authorization'
+          ? 'Owner sign-in required' : 'Index data unavailable'}</span></div>
+        {blockedIndex.reason==='authorization' && ownerSession==='checking' &&
+          <p>Checking your session…</p>}
+        {blockedIndex.reason==='authorization' && ownerSession==='login' && <>
+          <form className="qsyn-index-login-form" onSubmit={async event=>{
+            event.preventDefault();
+            if(ownerBusy)return;
+            setOwnerBusy(true);setOwnerError('');
+            try{
+              const result=await unlockIndexOwner(ownerPassword);
+              setOwnerPassword('');
+              if(result.status==='ready'){window.location.reload();return;}
+              setOwnerSession(result.status);
+              setOwnerError(result.error||'');
+            }finally{setOwnerBusy(false);}
+          }}>
+            <label htmlFor="qsyn-index-owner-password">Administrator password</label>
+            <input id="qsyn-index-owner-password" type="password"
+              autoComplete="current-password" required maxLength={1024}
+              value={ownerPassword} onChange={event=>setOwnerPassword(event.target.value)}/>
+            <button type="submit" disabled={ownerBusy}>
+              {ownerBusy?'Signing in…':'Sign in'}
+            </button>
+          </form>
+          {ownerError&&<p role="alert">{ownerError}</p>}
+        </>}
+        {(blockedIndex.reason!=='authorization'||ownerSession==='authenticated'||ownerSession==='unavailable')&&
+          <p>{ownerError||(blockedIndex.reason==='history'
+            ? 'Index history is temporarily unavailable.'
+            : blockedIndex.reason==='token'
+              ? 'Private Upstox data is not configured or authorized.'
+              : 'Your session is active, but index access is unavailable.')}</p>}
+        <div className="qsyn-india-note-actions">
+          {blockedIndex.reason==='authorization'&&ownerSession==='unavailable'&&
+            <a href="/qsyn/terminal/login">Open sign-in</a>}
+          {blockedIndex.reason==='authorization'&&ownerSession==='authenticated'&&
+            <button type="button" onClick={()=>window.location.reload()}>Retry chart</button>}
+          {blockedIndex.reason==='authorization'&&ownerSession==='unavailable'&&
+            <button type="button" onClick={()=>setOwnerRetry(n=>n+1)}>Retry</button>}
+          {(blockedIndex.reason!=='authorization'||ownerSession==='authenticated')&&
+            <a href="/qsyn/terminal/diagnostics">Diagnostics</a>}
+        </div>
       </div>}
     </div>
   </main>;
