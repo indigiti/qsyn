@@ -339,6 +339,26 @@ if ($route === '/qsyn/api/v1/admin/upstox/instruments/search') {
 }
 
 
+// Signed, read-only live subscriptions reuse the existing Rust index socket.
+if ($route === '/qsyn/api/v1/admin/upstox/instruments/ticket') {
+    $src=dirname(__DIR__).'/src';
+    if (!is_file($src.'/UpstoxInstrumentHistoryApi.php'))
+        $src=dirname(__DIR__,2).'/private_html/qsyn/app/src';
+    foreach(['RustAdmin','IndexHistoricalProof','UpstoxInstrumentSearch',
+        'UpstoxInstrumentHistoryApi'] as $unit){
+        if(!is_file($src.'/'.$unit.'.php'))
+            respond(['error'=>'upstox_instrument_live_unavailable'],503);
+        require_once $src.'/'.$unit.'.php';
+    }
+    header('Cache-Control: private, no-store');
+    header('Pragma: no-cache');
+    header('X-Robots-Tag: noindex, nofollow');
+    header('X-QSYN-Request-ID: '.bin2hex(random_bytes(8)));
+    [$status,$payload]=\QSYN\MarketData\UpstoxInstrumentHistoryApi::liveTicket($_SERVER);
+    if($status===405)header('Allow: POST');
+    respond($payload,$status);
+}
+
 if ($route === '/qsyn/api/v1/admin/upstox/instruments/history') {
     $src=dirname(__DIR__).'/src';
     if (!is_file($src.'/UpstoxInstrumentHistoryApi.php'))

@@ -9,6 +9,7 @@ export function UpstoxInstrumentHistoryChart({instrument}){
   const [csrf,setCsrf]=useState('');
   const [opened,setOpened]=useState(false);
   const [status,setStatus]=useState('Checking Upstox account authorization…');
+  const [liveStatus,setLiveStatus]=useState('Live feed is on-demand when Today is selected.');
   const host=useRef(null);
   useEffect(()=>{
     const ctl=new AbortController();setOpened(false);setCsrf('');
@@ -27,7 +28,13 @@ export function UpstoxInstrumentHistoryChart({instrument}){
   },[instrument.instrument_key]);
   useEffect(()=>{
     if(!opened||!csrf||!host.current)return;
-    const feed=new PrivateUpstoxInstrumentHistoryFeed({instrument,day:date,csrf,onStatus:setStatus});
+    const feed=new PrivateUpstoxInstrumentHistoryFeed({
+      instrument,day:date,csrf,onStatus:s=>{
+        if(s.startsWith('UPSTOX_LIVE')||s.startsWith('Rust Upstox')||
+          s.startsWith('Provider Upstox'))setLiveStatus(s);
+        else setStatus(s);
+      }
+    });
     let widget;
     try{
       widget=createWidget(host.current,{
@@ -49,8 +56,10 @@ export function UpstoxInstrumentHistoryChart({instrument}){
       Open historical chart</button>
     {opened&&<div className="qt-private-history-host" ref={host}/>}
     <p role="status">{status}</p>
+    <p role="status">{liveStatus}</p>
     <p>Volume and open interest reflect provider fields where available.
-      Live streaming for discovered instruments is not yet activated;
-      the existing seven index feeds remain unchanged.</p>
+      Live 1-minute OHLCV uses Upstox full-mode provider candles when authenticated
+      through one bounded Rust socket. Availability still requires Upstox access.
+      The original seven index feeds remain unchanged.</p>
   </section>;
 }

@@ -45,14 +45,42 @@ struct Ltpc {
     cp: f64,
 }
 #[derive(Clone, PartialEq, prost::Message)]
+struct ProviderMinute {
+    #[prost(string, tag = "1")]
+    interval: String,
+    #[prost(double, tag = "2")]
+    open: f64,
+    #[prost(double, tag = "3")]
+    high: f64,
+    #[prost(double, tag = "4")]
+    low: f64,
+    #[prost(double, tag = "5")]
+    close: f64,
+    #[prost(int64, tag = "6")]
+    volume: i64,
+    #[prost(int64, tag = "7")]
+    time_ms: i64,
+}
+#[derive(Clone, PartialEq, prost::Message)]
+struct ProviderOhlc {
+    #[prost(message, repeated, tag = "1")]
+    candles: Vec<ProviderMinute>,
+}
+#[derive(Clone, PartialEq, prost::Message)]
 struct MarketFullFeed {
     #[prost(message, optional, tag = "1")]
     ltpc: Option<Ltpc>,
+    #[prost(message, optional, tag = "4")]
+    market_ohlc: Option<ProviderOhlc>,
+    #[prost(double, optional, tag = "7")]
+    oi: Option<f64>,
 }
 #[derive(Clone, PartialEq, prost::Message)]
 struct IndexFullFeed {
     #[prost(message, optional, tag = "1")]
     ltpc: Option<Ltpc>,
+    #[prost(message, optional, tag = "2")]
+    market_ohlc: Option<ProviderOhlc>,
 }
 #[derive(Clone, PartialEq, prost::Message)]
 struct FullFeed {
@@ -433,6 +461,130 @@ pub fn decode_personal_index_updates(
         });
     }
     Ok(out)
+}
+
+/// A *provider-supplied* 1-minute OHLCV update. LTPC tick counts are never
+/// interpreted as traded volume, and no incomplete OHLC is constructed from
+/// occasional price snapshots. All timestamps originate in the provider.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ScopedMinuteUpdate {
+    pub instrument_key: String,
+    pub provider_time_ms: u64,
+    pub bar_time_ms: u64,
+    pub open: f64,
+    pub high: f64,
+    pub low: f64,
+    pub close: f64,
+    pub volume: u64,
+    pub volume_available: bool,
+    pub open_interest: Option<f64>,
+}
+
+/// Decode only requested full-mode keys. Unapproved updates are ignored,
+/// because a provider may send an in-flight packet after an unsubscribe.
+/// An initial snapshot is never classified as a new live market event.
+pub fn decode_scoped_minute_updates(
+    raw: &[u8],
+    requested: &std::collections::HashSet<String>,
+    received_ms: u64,
+) -> io::Result<Vec<ScopedMinuteUpdate>> {
+    if raw.is_empty() || raw.len() > MAX_FRAME || requested.len() > 24 {
+        return Err(denied("scoped_v3_frame_invalid"));
+    }
+    let frame = FeedResponse::decode(raw).map_err(|_| denied("scoped_v3_protobuf_invalid"))?;
+    let provider_time_ms =
+        u64::try_from(frame.current_ts).map_err(|_| denied("scoped_v3_timestamp_invalid"))?;
+    if provider_time_ms == 0
+        || provider_time_ms > received_ms.saturating_add(2_000)
+        || received_ms.saturating_sub(provider_time_ms) > 10_000
+    {
+        return Err(denied("scoped_v3_clock_invalid"));
+    }
+    if frame.frame_type == 0 || frame.frame_type == 2 {
+        return Ok(Vec::new()); // provider snapshot or market status
+    }
+    if frame.frame_type != 1 || frame.feeds.len() > 40 {
+        return Err(denied("scoped_v3_unexpected_frame"));
+    }
+    let mut out = Vec::new();
+    for (instrument_key, feed) in frame.feeds {
+        if !requested.contains(&instrument_key) {
+            continue;
+        }
+        let (market_ohlc, oi, index) = match feed.variant {
+            Some(feed::Variant::Full(full)) => match full.variant {
+                Some(full_feed::Variant::Market(m)) => (m.market_ohlc, m.oi, false),
+                Some(full_feed::Variant::Index(i)) => (i.market_ohlc, None, true),
+                _ => continue,
+            },
+            _ => continue, // never synthesize volume/ohlc from LTPC
+        };
+        let Some(ohlc) = market_ohlc else { continue };
+        let mut selected = None;
+        for candle in ohlc.candles {
+            if candle.interval != "I1" {
+                continue;
+            }
+            let time = u64::try_from(candle.time_ms)
+                .map_err(|_| denied("scoped_v3_candle_time_invalid"))?;
+            if time == 0
+                || time % 60_000 != 0
+                || time > provider_time_ms.saturating_add(60_000)
+                || provider_time_ms.saturating_sub(time) > 120_000
+                || ![candle.open, candle.high, candle.low, candle.close]
+                    .iter()
+                    .all(|v| v.is_finite() && *v > 0.0)
+                || candle.high < candle.open.max(candle.close)
+                || candle.low > candle.open.min(candle.close)
+                || candle.high < candle.low
+                || candle.volume < 0
+            {
+                return Err(denied("scoped_v3_candle_invalid"));
+            }
+            if selected.is_some() {
+                return Err(denied("scoped_v3_duplicate_minute"));
+            }
+            let volume = if index {
+                0
+            } else {
+                u64::try_from(candle.volume).map_err(|_| denied("scoped_v3_volume_invalid"))?
+            };
+            let open_interest = if index {
+                None
+            } else {
+                oi.filter(|x| x.is_finite() && *x >= 0.0)
+            };
+            selected = Some(ScopedMinuteUpdate {
+                instrument_key: instrument_key.clone(),
+                provider_time_ms,
+                bar_time_ms: time,
+                open: candle.open,
+                high: candle.high,
+                low: candle.low,
+                close: candle.close,
+                volume,
+                volume_available: !index,
+                open_interest,
+            });
+        }
+        if let Some(item) = selected {
+            out.push(item);
+        }
+    }
+    Ok(out)
+}
+
+/// Retain the strict legacy seven-index decoder while the shared socket also
+/// carries independently authorized equity and derivatives subscriptions.
+pub fn legacy_index_frame(raw: &[u8]) -> io::Result<Vec<u8>> {
+    if raw.is_empty() || raw.len() > MAX_FRAME {
+        return Err(denied("mixed_v3_frame_invalid"));
+    }
+    let mut frame = FeedResponse::decode(raw).map_err(|_| denied("mixed_v3_protobuf_invalid"))?;
+    frame
+        .feeds
+        .retain(|k, _| crate::personal_index::symbol_for_key(k).is_some());
+    Ok(frame.encode_to_vec())
 }
 
 /// Compatibility entry point for an exact single-index frame. All production
@@ -818,6 +970,70 @@ pub async fn observe_one_use_index_session_with_sink(
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn scoped_full_feed_preserves_actual_minute_volume_and_oi() {
+        use std::collections::HashSet;
+        let now = 1_798_200_000_000i64;
+        let minute = (now / 60_000) * 60_000;
+        let key = "NSE_FO|157318".to_owned();
+        let full = MarketFullFeed {
+            ltpc: Some(Ltpc {
+                ltp: 103.0,
+                ltt: now,
+                ltq: 5,
+                cp: 101.0,
+            }),
+            market_ohlc: Some(ProviderOhlc {
+                candles: vec![ProviderMinute {
+                    interval: "I1".into(),
+                    open: 100.0,
+                    high: 104.0,
+                    low: 99.0,
+                    close: 103.0,
+                    volume: 278,
+                    time_ms: minute,
+                }],
+            }),
+            oi: Some(1200.0),
+        };
+        let frame = FeedResponse {
+            frame_type: 1,
+            feeds: HashMap::from([(
+                key.clone(),
+                Feed {
+                    variant: Some(feed::Variant::Full(FullFeed {
+                        variant: Some(full_feed::Variant::Market(full)),
+                    })),
+                    request_mode: 1,
+                },
+            )]),
+            current_ts: now,
+            market_info: None,
+        };
+        let allowed = HashSet::from([key.clone()]);
+        let result =
+            decode_scoped_minute_updates(&frame.encode_to_vec(), &allowed, now as u64).unwrap();
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].volume, 278);
+        assert!(result[0].volume_available);
+        assert_eq!(result[0].open_interest, Some(1200.0));
+        let snapshot = FeedResponse {
+            frame_type: 0,
+            ..frame.clone()
+        };
+        assert!(
+            decode_scoped_minute_updates(&snapshot.encode_to_vec(), &allowed, now as u64)
+                .unwrap()
+                .is_empty()
+        );
+        let unapproved = HashSet::from(["NSE_FO|999".to_owned()]);
+        assert!(
+            decode_scoped_minute_updates(&frame.encode_to_vec(), &unapproved, now as u64)
+                .unwrap()
+                .is_empty()
+        );
+    }
     use super::*;
     use crate::authorized_ingest::{PrivateIngestApproval, PrivatePersistentIngest};
     use crate::durable_market_wal;
@@ -954,6 +1170,8 @@ mod tests {
             1 => feed::Variant::Full(FullFeed {
                 variant: Some(full_feed::Variant::Market(MarketFullFeed {
                     ltpc: Some(ltpc),
+                    market_ohlc: None,
+                    oi: None,
                 })),
             }),
             _ => feed::Variant::FirstLevel(FirstLevelWithGreeks { ltpc: Some(ltpc) }),
@@ -1049,6 +1267,7 @@ mod tests {
                                     ltq: 0,
                                     cp: 90.0,
                                 }),
+                                market_ohlc: None,
                             })),
                         })),
                         request_mode: 0,

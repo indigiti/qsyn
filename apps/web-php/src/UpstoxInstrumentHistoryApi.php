@@ -18,6 +18,54 @@ final class UpstoxInstrumentHistoryApi
         return $raw>='2022-01-01'
             && $date<=(new \DateTimeImmutable('now',new \DateTimeZone('Asia/Kolkata')))->setTime(0,0);
     }
+    /** One-use Rust WebSocket ticket; no bearer leaves the PHP private store. */
+    public static function liveTicket(array $server): array
+    {
+        if(($server['REQUEST_METHOD']??'GET')!=='POST')
+            return [405,['error'=>'method_not_allowed']];
+        if(!RustAdmin::originAllowed($server))
+            return [403,['error'=>'upstox_live_origin_denied']];
+        RustAdmin::boot();
+        if(!RustAdmin::authenticated())return [401,['error'=>'admin_login_required']];
+        if(getenv('QSYN_TRADING_ENABLED')==='1'
+            ||getenv('QSYN_ENABLE_LIVE_TRADING')==='1')
+            return [503,['error'=>'live_chart_safety_gate_denied']];
+        if(!RustAdmin::verifyCsrf((string)($server['HTTP_X_CSRF_TOKEN']??'')))
+            return [403,['error'=>'upstox_live_csrf_denied']];
+        if(!preg_match('~\\Aapplication/json(?:\\s*;|$)~i',
+            (string)($server['CONTENT_TYPE']??'')))
+            return [415,['error'=>'invalid_content_type']];
+        $raw=file_get_contents('php://input',false,null,0,768);
+        if(!is_string($raw)||strlen($raw)>767)
+            return [413,['error'=>'live_selection_too_large']];
+        try{$data=json_decode($raw,true,5,JSON_THROW_ON_ERROR);}
+        catch(\Throwable){return [400,['error'=>'invalid_live_selection']];}
+        if(!is_array($data)||array_keys($data)!==['scope']
+            ||!is_string($data['scope']))
+            return [422,['error'=>'invalid_live_scope']];
+        $token=IndexHistoricalProof::privateToken();
+        if($token===null)return [409,['error'=>'upstox_analytics_token_not_ready']];
+        $key=UpstoxInstrumentSearch::verifyScope(
+            $data['scope'],$token,RustAdmin::csrf(),time());
+        if($key===null)return [403,['error'=>'expired_or_invalid_instrument_selection']];
+        // The legacy seven index subscriptions must stay on their old route.
+        if(in_array($key,[
+            'NSE_INDEX|Nifty 50','NSE_INDEX|Nifty Bank',
+            'NSE_INDEX|Nifty Fin Service','NSE_INDEX|Nifty Mid Select',
+            'NSE_INDEX|India VIX','BSE_INDEX|SENSEX','BSE_INDEX|BANKEX',
+        ],true))return [422,['error'=>'use_existing_index_live_chart']];
+        $part=rtrim(strtr(base64_encode(json_encode([
+            'instrument_key'=>$key,'exp'=>time()+35,
+            'nonce'=>bin2hex(random_bytes(16))
+        ],JSON_THROW_ON_ERROR)),'+/','-_'),'=');
+        return [200,[
+            'schema'=>'QSYN-UPSTOX-INSTRUMENT-RUST-TICKET/1',
+            'instrument_key'=>$key,'ticket'=>$part.'.'.hash_hmac('sha256',$part,$token),
+            'websocket_path'=>'/qsyn/ws/personal-index',
+            'expires_in_seconds'=>35,'trading_enabled'=>false,
+        ]];
+    }
+
     public static function dispatch(array $server,?callable $runner=null): array
     {
         if(($server['REQUEST_METHOD']??'GET')!=='POST')
