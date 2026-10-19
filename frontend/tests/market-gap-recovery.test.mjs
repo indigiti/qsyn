@@ -128,9 +128,12 @@ try {
   idx._session=()=>({getBars:async()=>{throw Error('UPSTOX_PROVIDER_TIMEOUT');}});
   const retained=await idx.getBars(req);
   assert.deepEqual(retained,restored,'transient source failure preserves real OHLC');
-  assert.equal(errors[0]?.reason,'history');
+  assert(errors.every(error=>error===null),
+    'verified index candles should not be covered by a transient history blocker');
   await idx.getBars(req);
-  assert.equal(errors.length,1,'repeat source failures do not flood chart overlays');
+  assert(errors.every(error=>error===null),
+    'repeat history errors must not create obsolete chart overlays');
+  assert.equal(idx.lastBlockedKey,null,'transient provider failure is not access denial');
   idx._session=sessionBeforeOutage;
   assert.deepEqual(await idx.getBars(req),restored);
   assert.equal(errors.at(-1),null,'verified source recovery clears outage notice');

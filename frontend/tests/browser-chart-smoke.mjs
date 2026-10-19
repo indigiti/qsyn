@@ -87,6 +87,13 @@ try{
   page.on('request',req=>{
     if(req.url().includes('upstox'))browserRequests.push(req.method()+' '+req.url().split('/api/')[1]);
   });
+  // This fixture deliberately verifies the administrator history path.
+  // A running local owner-viewer grant must not silently switch the test to
+  // /owner-index/history, which is NOT the endpoint mocked below.
+  await page.route('**/qsyn/api/v1/owner-index/status',route=>
+    route.fulfill({status:403,contentType:'application/json',
+      body:JSON.stringify({error:'owner_viewer_not_enabled_in_admin_fixture'})}));
+  await page.route('**/qsyn/api/v1/owner-index/history',route=>route.abort());
   await page.route('**/qsyn/api/v1/admin/upstox/index-history-proof',route=>{
     proofRequests++;
     return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({
@@ -113,6 +120,11 @@ try{
       public_redistribution_allowed:false,trading_enabled:false
     })});
   });
+  // This is a historical-candle fixture. The mocked proof's CSRF is not a
+  // genuine admin credential and must never be sent to the live ticket API.
+  // During NSE market hours the default ON switch otherwise correctly gets
+  // an HTTP 403 and an access-denied banner unrelated to historical OHLC.
+  await page.evaluate(()=>localStorage.setItem('qsyn.live-chart-feed.v1','0'));
   await page.evaluate(()=>localStorage.setItem('qsyn-public-chart-selection-v1',JSON.stringify({
     schema:'QSYN-PUBLIC-CHART-SELECTION/1',exchange:'NSE_INDEX:index',symbol:'NIFTY'
   })));
@@ -135,8 +147,10 @@ try{
   }
   if(personalHistoryCalls<2 || requestedHistoryDays.size<2)
     throw Error('Homepage did not automatically load the preceding NIFTY trading session');
-  if(await page.locator('.qsyn-india-entitlement-note').count())
-    throw Error('Authenticated homepage still displayed obsolete index-plan blocker');
+  if(await page.locator('.qsyn-india-entitlement-note').count()){
+    const text=await page.locator('.qsyn-india-entitlement-note').allTextContents();
+    throw Error('Authenticated homepage showed a stale index warning '+JSON.stringify(text));
+  }
   if(await page.locator('.qsyn-home-chart canvas').count()===0)
     throw Error('Authenticated NIFTY homepage did not render candles');
   await page.unroute('**/qsyn/api/v1/admin/upstox/index-history-proof');
