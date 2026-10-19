@@ -314,3 +314,19 @@ button:focus-visible,a:focus-visible{outline:2px solid var(--q-accent);outline-o
 @media(max-width:700px){.terminal-topbar .terminal-top-right{gap:5px}
   .terminal-topbar .qsyn-feed-pill{width:70px;height:28px}
   .terminal-market-embedded .qsyn-chart-feed-paused{top:45px;left:12px;right:auto}}
+
+
+/* Small, chart-anchored credential prompt. Existing diagnostics stay in terminal. */
+.qsyn-index-login-note{width:min(270px,calc(100vw - 24px));gap:9px}
+.qsyn-index-login-form{display:flex;flex-direction:column;gap:7px}
+.qsyn-index-login-form label{font-size:11px;color:#526077;font-weight:650}
+.qsyn-index-login-form input{
+  width:100%;min-width:0;padding:9px 10px;border:1px solid #bdc9d9;
+  border-radius:7px;font-size:13px;color:#15243b;background:#fff
+}
+.qsyn-index-login-form button{
+  cursor:pointer;min-height:34px;border:1px solid #135da8;
+  border-radius:7px;background:#135da8;color:white;font-size:12px;font-weight:700
+}
+.qsyn-index-login-form button:disabled{opacity:.6;cursor:progress}
+.qsyn-index-login-form :focus-visible{outline:2px solid #2563eb;outline-offset:2px}

@@ -169,11 +169,61 @@ try{
     schema:'QSYN-PUBLIC-CHART-SELECTION/1',exchange:'BSE_INDEX:index',symbol:'SENSEX'
   })));
   await anonPage.reload({waitUntil:'domcontentloaded'});
-  // Anonymous users see source availability, not an administrator login CTA.
-  await anonPage.getByText('Index source unavailable',{exact:true}).waitFor({timeout:20000});
-  if(await anonPage.getByText('Sign in to QSYN').count()!==0)
-    throw Error('Homepage index selection must not require QSYN administrator login');
+  // Anonymous visitors get a compact password form, never private candles.
+  // Only the selected Indian index asks for owner sign-in; public crypto is unchanged.
+  await anonPage.getByText('Owner sign-in required',{exact:true}).waitFor({timeout:20000});
+  const ownerInput=anonPage.getByLabel('Administrator password',{exact:true});
+  await ownerInput.waitFor();
   if(anonymousHistory!==0)throw Error('Anonymous NSE/BSE private history exposed');
+  if(await anonPage.locator('.qsyn-india-entitlement-note').innerText()
+      .then(s=>s.includes('The server did not authorize an owner-only index data session')))
+    throw Error('Verbose index diagnostics leaked into compact sign-in');
+
+  // The server, not React, validates credentials and throttles attempts.
+  await ownerInput.fill('wrong-chart-password');
+  await anonPage.getByRole('button',{name:'Sign in',exact:true}).click();
+  await anonPage.getByText('Incorrect password or sign-in temporarily locked.').waitFor();
+  if(anonymousHistory!==0)throw Error('Invalid password was allowed to fetch private index bars');
+
+  // Exercise the actual PHP login cookie with a mocked, explicitly authorized
+  // provider. A login alone must NOT unlock an unmocked private data source.
+  let signedInHistory=0;
+  await anonPage.route('**/qsyn/api/v1/owner-index/status',route=>
+    route.fulfill({status:403,contentType:'application/json',
+      body:JSON.stringify({error:'owner_grant_not_present'})}));
+  await anonPage.route('**/qsyn/api/v1/admin/upstox/index-history-proof',route=>
+    route.fulfill({status:200,contentType:'application/json',
+      body:JSON.stringify({schema:'QSYN-INDEX-HISTORICAL-PROOF/1',
+        token_present:true,csrf:'b'.repeat(64),
+        suggested_day_ist:sessionDay,trading_enabled:false})}));
+  await anonPage.unroute('**/qsyn/api/v1/admin/upstox/personal-index/history');
+  await anonPage.route('**/qsyn/api/v1/admin/upstox/personal-index/history',async route=>{
+    signedInHistory++;
+    const request=route.request();
+    const body=request.postDataJSON();
+    if(request.method()!=='POST'||body.symbol!=='SENSEX'
+      ||request.headers()['x-csrf-token']!=='b'.repeat(64))
+      throw Error('Owner chart used invalid protected index history request');
+    const open=Math.floor(Date.parse(body.day+'T09:15:00+05:30')/1000);
+    const bars=Array.from({length:375},(_,i)=>({
+      time:open+i*60,open:82000+i/10,high:82003+i/10,
+      low:81998+i/10,close:82001+i/10,volume:0
+    }));
+    await route.fulfill({status:200,contentType:'application/json',
+      body:JSON.stringify({schema:'QSYN-UPSTOX-RUST-INDEX-HISTORY/1',
+        source:'upstox_v3_rust_history',symbol:'SENSEX',
+        day_ist:body.day,interval:'1m',bars,
+        public_redistribution_allowed:false,trading_enabled:false})});
+  });
+  // Disable live tickets in this strictly historical fixture.
+  await anonPage.evaluate(()=>localStorage.setItem('qsyn.live-chart-feed.v1','0'));
+  await anonPage.getByLabel('Administrator password',{exact:true}).fill(adminPassword);
+  await anonPage.getByRole('button',{name:'Sign in',exact:true}).click();
+  await anonPage.waitForFunction(()=>document.querySelector('.qsyn-screenreader-status')
+    ?.textContent?.includes('real Rust Upstox 1m candles'),null,{timeout:20000});
+  if(signedInHistory===0)throw Error('Successful inline sign-in did not refresh private index history');
+  if(await anonPage.locator('.qsyn-index-login-form').count()!==0)
+    throw Error('Index password form remains visible after authorization');
   await anonymous.close();
   if(errors.length)throw Error('Browser script errors: '+errors.join('; ').slice(0,450));
   console.log('PASS: retired Rust admin + legacy chart redirect into React; unauthenticated controls blocked; homepage unchanged');
