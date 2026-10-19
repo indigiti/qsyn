@@ -118,15 +118,20 @@ async fn personal_index_session(mut socket: WebSocket) {
     // signed instrument ticket shares the SAME upstream WebSocket hub.
     let legacy = qsyn_stream::personal_index::verify_ticket(ticket, &token, now);
     if legacy.is_err() {
-        let instrument = match qsyn_stream::personal_index::verify_instrument_ticket(
-            ticket, &token, now
-        ) {
-            Ok(key) => key,
-            Err(_) => { let _=socket.close().await;return; }
-        };
+        let instrument =
+            match qsyn_stream::personal_index::verify_instrument_ticket(ticket, &token, now) {
+                Ok(key) => key,
+                Err(_) => {
+                    let _ = socket.close().await;
+                    return;
+                }
+            };
         let Ok((mut receiver, _subscription)) =
             qsyn_stream::personal_index::subscribe_instrument(token, &instrument)
-        else { let _=socket.close().await;return; };
+        else {
+            let _ = socket.close().await;
+            return;
+        };
         loop {
             tokio::select! {
                 event=receiver.recv()=>{
@@ -161,12 +166,15 @@ async fn personal_index_session(mut socket: WebSocket) {
                 }
             }
         }
-        let _=socket.close().await;
+        let _ = socket.close().await;
         return;
     }
     let symbol = match legacy {
-        Ok(x)=>x,
-        Err(_)=>{ let _=socket.close().await;return; }
+        Ok(x) => x,
+        Err(_) => {
+            let _ = socket.close().await;
+            return;
+        }
     };
     let mut receiver = qsyn_stream::personal_index::subscribe_shared(token);
     loop {

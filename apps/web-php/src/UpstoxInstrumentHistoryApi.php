@@ -39,7 +39,7 @@ final class UpstoxInstrumentHistoryApi
         if(!is_string($raw)||strlen($raw)>767)
             return [413,['error'=>'live_selection_too_large']];
         try{$data=json_decode($raw,true,5,JSON_THROW_ON_ERROR);}
-        catch(\\Throwable){return [400,['error'=>'invalid_live_selection']];}
+        catch(\Throwable){return [400,['error'=>'invalid_live_selection']];}
         if(!is_array($data)||array_keys($data)!==['scope']
             ||!is_string($data['scope']))
             return [422,['error'=>'invalid_live_scope']];

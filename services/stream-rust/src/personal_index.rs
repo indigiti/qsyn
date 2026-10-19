@@ -269,24 +269,32 @@ struct InstrumentTicket {
 pub fn verify_instrument_ticket(ticket: &str, token: &str, now_s: u64) -> io::Result<String> {
     use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
     let (payload, signature) = ticket.split_once('.').ok_or_else(denied)?;
-    if ticket.len() > 512 || payload.len() > 350 || signature.len() != 64
+    if ticket.len() > 512
+        || payload.len() > 350
+        || signature.len() != 64
         || !signature.bytes().all(|b| b.is_ascii_hexdigit())
-    { return Err(denied()) }
+    {
+        return Err(denied());
+    }
     let mut mac = Hmac::<Sha256>::new_from_slice(token.as_bytes()).map_err(|_| denied())?;
     mac.update(payload.as_bytes());
-    mac.verify_slice(&hex_bytes(signature)?).map_err(|_| denied())?;
+    mac.verify_slice(&hex_bytes(signature)?)
+        .map_err(|_| denied())?;
     let bytes = URL_SAFE_NO_PAD.decode(payload).map_err(|_| denied())?;
     let item: InstrumentTicket = serde_json::from_slice(&bytes).map_err(|_| denied())?;
     if !crate::upstox_instrument_history::valid_instrument_key(&item.instrument_key)
         || symbol_for_key(&item.instrument_key).is_some()
-        || item.exp <= now_s || item.exp > now_s + MAX_TICKET_AGE
+        || item.exp <= now_s
+        || item.exp > now_s + MAX_TICKET_AGE
         || item.nonce.len() != 32
         || !item.nonce.bytes().all(|b| b.is_ascii_hexdigit())
-    { return Err(denied()) }
+    {
+        return Err(denied());
+    }
     let used = USED.get_or_init(|| Mutex::new(HashMap::new()));
     let mut cache = used.lock().map_err(|_| denied())?;
-    cache.retain(|_,expiry| *expiry > now_s);
-    if cache.len() > 4096 || cache.insert(item.nonce,item.exp).is_some() {
+    cache.retain(|_, expiry| *expiry > now_s);
+    if cache.len() > 4096 || cache.insert(item.nonce, item.exp).is_some() {
         return Err(denied());
     }
     Ok(item.instrument_key)
@@ -389,8 +397,7 @@ pub struct IndexLiveEvent {
 }
 
 static SHARED: OnceLock<Mutex<Option<SharedIndexFeed>>> = OnceLock::new();
-static NEXT_GENERATION: std::sync::atomic::AtomicU64 =
-    std::sync::atomic::AtomicU64::new(1);
+static NEXT_GENERATION: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
 const MAX_DYNAMIC_SUBSCRIPTIONS: usize = 16;
 
 #[derive(Debug, Clone, Serialize)]
@@ -426,8 +433,12 @@ fn make_shared(token: String) -> SharedIndexFeed {
         run_shared_index_feed(token, index_broadcast, scoped_broadcast, receiver).await;
     });
     SharedIndexFeed {
-        sender, scoped_sender, requested,
-        refs: HashMap::new(), generation, task,
+        sender,
+        scoped_sender,
+        requested,
+        refs: HashMap::new(),
+        generation,
+        task,
     }
 }
 
@@ -451,10 +462,14 @@ impl Drop for InstrumentSubscription {
         let Some(state) = SHARED.get() else { return };
         let Ok(mut guard) = state.lock() else { return };
         let Some(hub) = guard.as_mut() else { return };
-        if hub.generation != self.generation { return }
+        if hub.generation != self.generation {
+            return;
+        }
         if let Some(count) = hub.refs.get_mut(&self.key) {
             *count -= 1;
-            if *count == 0 { hub.refs.remove(&self.key); }
+            if *count == 0 {
+                hub.refs.remove(&self.key);
+            }
             let mut keys = hub.refs.keys().cloned().collect::<Vec<_>>();
             keys.sort_unstable();
             hub.requested.send_replace(keys);
@@ -463,13 +478,13 @@ impl Drop for InstrumentSubscription {
 }
 
 pub fn subscribe_instrument(
-    token: String, key: &str
+    token: String,
+    key: &str,
 ) -> io::Result<(
     tokio::sync::broadcast::Receiver<InstrumentLiveEvent>,
     InstrumentSubscription,
 )> {
-    if !crate::upstox_instrument_history::valid_instrument_key(key)
-        || symbol_for_key(key).is_some()
+    if !crate::upstox_instrument_history::valid_instrument_key(key) || symbol_for_key(key).is_some()
     {
         return Err(denied());
     }
@@ -487,9 +502,13 @@ pub fn subscribe_instrument(
     let mut keys = hub.refs.keys().cloned().collect::<Vec<_>>();
     keys.sort_unstable();
     hub.requested.send_replace(keys);
-    Ok((hub.scoped_sender.subscribe(), InstrumentSubscription {
-        key: key.to_owned(), generation: hub.generation
-    }))
+    Ok((
+        hub.scoped_sender.subscribe(),
+        InstrumentSubscription {
+            key: key.to_owned(),
+            generation: hub.generation,
+        },
+    ))
 }
 
 fn has_subscribers(
@@ -507,10 +526,10 @@ async fn run_shared_index_feed(
 ) {
     let mut retry = 2u64;
     while has_subscribers(&index_sender, &scoped_sender) {
-        let _ = shared_session(
-            &token, &index_sender, &scoped_sender, &mut requested
-        ).await;
-        if !has_subscribers(&index_sender, &scoped_sender) { break }
+        let _ = shared_session(&token, &index_sender, &scoped_sender, &mut requested).await;
+        if !has_subscribers(&index_sender, &scoped_sender) {
+            break;
+        }
         tokio::time::sleep(Duration::from_secs(retry)).await;
         retry = (retry * 2).min(30);
     }
@@ -520,19 +539,24 @@ async fn run_shared_index_feed(
 /// provider I1 candle stream, never a newly created per-chart socket.
 async fn subscription_command(
     upstream: &mut tokio_tungstenite::WebSocketStream<
-        tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>
+        tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>,
     >,
     method: &str,
     mode: &str,
     keys: &[String],
 ) -> io::Result<()> {
-    if keys.is_empty() { return Ok(()) }
+    if keys.is_empty() {
+        return Ok(());
+    }
     let command = json!({
         "guid":format!("{:x}",now_ms()?),
         "method":method,
         "data":{"mode":mode,"instrumentKeys":keys},
-    }).to_string();
-    upstream.send(Message::Binary(command.into_bytes().into())).await
+    })
+    .to_string();
+    upstream
+        .send(Message::Binary(command.into_bytes().into()))
+        .await
         .map_err(|_| denied())
 }
 
@@ -546,39 +570,56 @@ async fn shared_session(
         .get(AUTH_URL)
         .bearer_auth(token)
         .header("Accept", "application/json")
-        .send().await.map_err(|_| denied())?;
+        .send()
+        .await
+        .map_err(|_| denied())?;
     if response.status() != reqwest::StatusCode::OK {
         return Err(denied());
     }
     let payload: Value = response.json().await.map_err(|_| denied())?;
-    if payload["status"] != "success" { return Err(denied()); }
+    if payload["status"] != "success" {
+        return Err(denied());
+    }
     let redirect = payload["data"]["authorized_redirect_uri"]
-        .as_str().ok_or_else(denied)?;
+        .as_str()
+        .ok_or_else(denied)?;
     validate_one_use_redirect(redirect)?;
     let (mut upstream, _) = timeout(Duration::from_secs(5), connect_async(redirect))
-        .await.map_err(|_| denied())?.map_err(|_| denied())?;
+        .await
+        .map_err(|_| denied())?
+        .map_err(|_| denied())?;
 
     // The original seven aliases remain subscribed for legacy viewers.
-    let index_keys = INDEX_SYMBOLS.iter().map(|symbol|
-        key(symbol).unwrap().to_owned()).collect::<Vec<_>>();
-    subscription_command(&mut upstream,"sub","ltpc",&index_keys).await?;
+    let index_keys = INDEX_SYMBOLS
+        .iter()
+        .map(|symbol| key(symbol).unwrap().to_owned())
+        .collect::<Vec<_>>();
+    subscription_command(&mut upstream, "sub", "ltpc", &index_keys).await?;
     let mut subscribed = std::collections::HashSet::<String>::new();
     let initial = requested.borrow().clone();
-    if initial.len() > MAX_DYNAMIC_SUBSCRIPTIONS { return Err(denied()) }
-    subscription_command(&mut upstream,"sub","full",&initial).await?;
+    if initial.len() > MAX_DYNAMIC_SUBSCRIPTIONS {
+        return Err(denied());
+    }
+    subscription_command(&mut upstream, "sub", "full", &initial).await?;
     subscribed.extend(initial);
 
     let mut minute: HashMap<&'static str, MinuteBuilder> = HashMap::new();
     let mut second: HashMap<&'static str, SecondBuilder> = HashMap::new();
-    let mut last_scoped = HashMap::<String,crate::upstox_v3::ScopedMinuteUpdate>::new();
+    let mut last_scoped = HashMap::<String, crate::upstox_v3::ScopedMinuteUpdate>::new();
     let started = Instant::now();
     let mut idle_since: Option<Instant> = None;
     loop {
-        if started.elapsed() >= Duration::from_secs(110) { break }
-        if !has_subscribers(index_sender,scoped_sender) {
+        if started.elapsed() >= Duration::from_secs(110) {
+            break;
+        }
+        if !has_subscribers(index_sender, scoped_sender) {
             let since = idle_since.get_or_insert_with(Instant::now);
-            if since.elapsed() >= Duration::from_secs(3) { break }
-        } else { idle_since = None; }
+            if since.elapsed() >= Duration::from_secs(3) {
+                break;
+            }
+        } else {
+            idle_since = None;
+        }
 
         tokio::select! {
             changed = requested.changed() => {

@@ -463,7 +463,6 @@ pub fn decode_personal_index_updates(
     Ok(out)
 }
 
-
 /// A *provider-supplied* 1-minute OHLCV update. LTPC tick counts are never
 /// interpreted as traded volume, and no incomplete OHLC is constructed from
 /// occasional price snapshots. All timestamps originate in the provider.
@@ -492,10 +491,9 @@ pub fn decode_scoped_minute_updates(
     if raw.is_empty() || raw.len() > MAX_FRAME || requested.len() > 24 {
         return Err(denied("scoped_v3_frame_invalid"));
     }
-    let frame = FeedResponse::decode(raw)
-        .map_err(|_| denied("scoped_v3_protobuf_invalid"))?;
-    let provider_time_ms = u64::try_from(frame.current_ts)
-        .map_err(|_| denied("scoped_v3_timestamp_invalid"))?;
+    let frame = FeedResponse::decode(raw).map_err(|_| denied("scoped_v3_protobuf_invalid"))?;
+    let provider_time_ms =
+        u64::try_from(frame.current_ts).map_err(|_| denied("scoped_v3_timestamp_invalid"))?;
     if provider_time_ms == 0
         || provider_time_ms > received_ms.saturating_add(2_000)
         || received_ms.saturating_sub(provider_time_ms) > 10_000
@@ -515,10 +513,8 @@ pub fn decode_scoped_minute_updates(
         }
         let (market_ohlc, oi, index) = match feed.variant {
             Some(feed::Variant::Full(full)) => match full.variant {
-                Some(full_feed::Variant::Market(m)) =>
-                    (m.market_ohlc, m.oi, false),
-                Some(full_feed::Variant::Index(i)) =>
-                    (i.market_ohlc, None, true),
+                Some(full_feed::Variant::Market(m)) => (m.market_ohlc, m.oi, false),
+                Some(full_feed::Variant::Index(i)) => (i.market_ohlc, None, true),
                 _ => continue,
             },
             _ => continue, // never synthesize volume/ohlc from LTPC
@@ -531,11 +527,13 @@ pub fn decode_scoped_minute_updates(
             }
             let time = u64::try_from(candle.time_ms)
                 .map_err(|_| denied("scoped_v3_candle_time_invalid"))?;
-            if time == 0 || time % 60_000 != 0
+            if time == 0
+                || time % 60_000 != 0
                 || time > provider_time_ms.saturating_add(60_000)
                 || provider_time_ms.saturating_sub(time) > 120_000
-                || ![candle.open,candle.high,candle.low,candle.close]
-                    .iter().all(|v| v.is_finite() && *v > 0.0)
+                || ![candle.open, candle.high, candle.low, candle.close]
+                    .iter()
+                    .all(|v| v.is_finite() && *v > 0.0)
                 || candle.high < candle.open.max(candle.close)
                 || candle.low > candle.open.min(candle.close)
                 || candle.high < candle.low
@@ -549,8 +547,7 @@ pub fn decode_scoped_minute_updates(
             let volume = if index {
                 0
             } else {
-                u64::try_from(candle.volume)
-                    .map_err(|_| denied("scoped_v3_volume_invalid"))?
+                u64::try_from(candle.volume).map_err(|_| denied("scoped_v3_volume_invalid"))?
             };
             let open_interest = if index {
                 None
@@ -583,9 +580,10 @@ pub fn legacy_index_frame(raw: &[u8]) -> io::Result<Vec<u8>> {
     if raw.is_empty() || raw.len() > MAX_FRAME {
         return Err(denied("mixed_v3_frame_invalid"));
     }
-    let mut frame = FeedResponse::decode(raw)
-        .map_err(|_| denied("mixed_v3_protobuf_invalid"))?;
-    frame.feeds.retain(|k,_| crate::personal_index::symbol_for_key(k).is_some());
+    let mut frame = FeedResponse::decode(raw).map_err(|_| denied("mixed_v3_protobuf_invalid"))?;
+    frame
+        .feeds
+        .retain(|k, _| crate::personal_index::symbol_for_key(k).is_some());
     Ok(frame.encode_to_vec())
 }
 
@@ -976,39 +974,64 @@ mod tests {
     #[test]
     fn scoped_full_feed_preserves_actual_minute_volume_and_oi() {
         use std::collections::HashSet;
-        let now=1_798_200_000_000i64;
-        let minute=(now/60_000)*60_000;
-        let key="NSE_FO|157318".to_owned();
-        let full=MarketFullFeed {
-            ltpc:Some(Ltpc{ltp:103.0,ltt:now,ltq:5,cp:101.0}),
-            market_ohlc:Some(ProviderOhlc{candles:vec![ProviderMinute{
-                interval:"I1".into(),open:100.0,high:104.0,low:99.0,
-                close:103.0,volume:278,time_ms:minute
-            }]}),
-            oi:Some(1200.0)
+        let now = 1_798_200_000_000i64;
+        let minute = (now / 60_000) * 60_000;
+        let key = "NSE_FO|157318".to_owned();
+        let full = MarketFullFeed {
+            ltpc: Some(Ltpc {
+                ltp: 103.0,
+                ltt: now,
+                ltq: 5,
+                cp: 101.0,
+            }),
+            market_ohlc: Some(ProviderOhlc {
+                candles: vec![ProviderMinute {
+                    interval: "I1".into(),
+                    open: 100.0,
+                    high: 104.0,
+                    low: 99.0,
+                    close: 103.0,
+                    volume: 278,
+                    time_ms: minute,
+                }],
+            }),
+            oi: Some(1200.0),
         };
-        let frame=FeedResponse {
-            frame_type:1, feeds:HashMap::from([(
-                key.clone(),Feed {
-                    variant:Some(feed::Variant::Full(FullFeed {
-                        variant:Some(full_feed::Variant::Market(full))
-                    })),request_mode:1
-                }
-            )]),current_ts:now,market_info:None
+        let frame = FeedResponse {
+            frame_type: 1,
+            feeds: HashMap::from([(
+                key.clone(),
+                Feed {
+                    variant: Some(feed::Variant::Full(FullFeed {
+                        variant: Some(full_feed::Variant::Market(full)),
+                    })),
+                    request_mode: 1,
+                },
+            )]),
+            current_ts: now,
+            market_info: None,
         };
-        let allowed=HashSet::from([key.clone()]);
-        let result=decode_scoped_minute_updates(&frame.encode_to_vec(),&allowed,now)
-            .unwrap();
-        assert_eq!(result.len(),1);
-        assert_eq!(result[0].volume,278);
+        let allowed = HashSet::from([key.clone()]);
+        let result = decode_scoped_minute_updates(&frame.encode_to_vec(), &allowed, now).unwrap();
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].volume, 278);
         assert!(result[0].volume_available);
-        assert_eq!(result[0].open_interest,Some(1200.0));
-        let snapshot=FeedResponse {frame_type:0,..frame.clone()};
-        assert!(decode_scoped_minute_updates(&snapshot.encode_to_vec(),&allowed,now)
-            .unwrap().is_empty());
-        let unapproved=HashSet::from(["NSE_FO|999".to_owned()]);
-        assert!(decode_scoped_minute_updates(&frame.encode_to_vec(),&unapproved,now)
-            .unwrap().is_empty());
+        assert_eq!(result[0].open_interest, Some(1200.0));
+        let snapshot = FeedResponse {
+            frame_type: 0,
+            ..frame.clone()
+        };
+        assert!(
+            decode_scoped_minute_updates(&snapshot.encode_to_vec(), &allowed, now)
+                .unwrap()
+                .is_empty()
+        );
+        let unapproved = HashSet::from(["NSE_FO|999".to_owned()]);
+        assert!(
+            decode_scoped_minute_updates(&frame.encode_to_vec(), &unapproved, now)
+                .unwrap()
+                .is_empty()
+        );
     }
     use super::*;
     use crate::authorized_ingest::{PrivateIngestApproval, PrivatePersistentIngest};
