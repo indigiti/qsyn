@@ -87,6 +87,13 @@ try{
   page.on('request',req=>{
     if(req.url().includes('upstox'))browserRequests.push(req.method()+' '+req.url().split('/api/')[1]);
   });
+  // This fixture deliberately verifies the administrator history path.
+  // A running local owner-viewer grant must not silently switch the test to
+  // /owner-index/history, which is NOT the endpoint mocked below.
+  await page.route('**/qsyn/api/v1/owner-index/status',route=>
+    route.fulfill({status:403,contentType:'application/json',
+      body:JSON.stringify({error:'owner_viewer_not_enabled_in_admin_fixture'})}));
+  await page.route('**/qsyn/api/v1/owner-index/history',route=>route.abort());
   await page.route('**/qsyn/api/v1/admin/upstox/index-history-proof',route=>{
     proofRequests++;
     return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({
