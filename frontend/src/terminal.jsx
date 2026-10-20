@@ -222,7 +222,13 @@ function HomepageChart({ theme, embedded = false,
       exchange:firstExchange,
       interval:'1m',intervals:['1s','1m','5m','15m','1h','1d'],
       theme,branding:false,panels:true,toolbar:true,bottombar:true,
-      preset:'1x1',workspaces:nativeWorkspaces||undefined,
+      // The native OpenAlgo grid journals the current (including unnamed)
+      // chart desk locally and restores it after reload. Saved named layouts
+      // remain owned by the existing conflict-safe WorkspaceRepository.
+      // Keep homepage and embedded Markets drafts independent so navigating
+      // directly to a requested market does not inherit another page's desk.
+      preset:'1x1',persist:embedded?'qsyn-markets-draft-v1':'qsyn-home-draft-v1',
+      workspaces:nativeWorkspaces||undefined,
       lookbackBars:INITIAL_BACKFILL_BARS,
       // OpenAlgo's default 15s history deadline is too short for a bounded
       // 51-page maximum MFE backfill. Keep PHP/Rust timeouts per request.
