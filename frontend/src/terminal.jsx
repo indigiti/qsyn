@@ -299,7 +299,17 @@ function HomepageChart({ theme, embedded = false,
     const stopIndicatorAutosave=bindAutoSavedIndicators(grid,browserStorage());
     window.addEventListener('resize',syncToolbar);
     host.current.addEventListener('scroll',syncToolbar,true);
-    void grid.ready.then(updateGrid).catch(()=>{
+    void grid.ready.then(()=>{
+      if(!active)return;
+      // The separately saved public chart selection is the navigation intent.
+      // A persisted *draft* from an earlier instrument must not override it
+      // (notably when an index is chosen before a refresh). Native named layouts
+      // deliberately reopen afterwards via their own repository controller.
+      const selected=grid.active()?.widget;
+      if(selected && (selected.symbol()!==firstSymbol||selected.exchange()!==firstExchange))
+        selected.setSymbol(firstSymbol,firstExchange);
+      updateGrid();
+    }).catch(()=>{
       if(active)setMessage('Public market feed unavailable · no demo fallback');
     });
     updateGrid();
