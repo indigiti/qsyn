@@ -153,6 +153,27 @@ try{
   }
   if(await page.locator('.qsyn-home-chart canvas').count()===0)
     throw Error('Authenticated NIFTY homepage did not render candles');
+
+  // TradingView-style native named layouts: name, save and reopen the same
+  // grid after page reload, preserving the public chart-only homepage.
+  const layoutButton=page.locator('.qsyn-homepage .oac-grid__saved');
+  await layoutButton.waitFor({timeout:12000});
+  await layoutButton.click();
+  await page.locator('.oac-layouts [data-action="save"]').click();
+  const layoutName='NIFTY local desk';
+  await page.locator('.oac-layouts__input').fill(layoutName);
+  await page.locator('.oac-layouts [data-action="submit-name"]').click();
+  await page.waitForFunction(name=>document.querySelector('.oac-grid__saved .oac-grid__bar-text')
+    ?.textContent?.includes(name),layoutName,{timeout:12000});
+  const autosave=page.locator('.oac-layouts__switch');
+  if(await autosave.getAttribute('aria-checked')!=='true')await autosave.click();
+  await page.reload({waitUntil:'domcontentloaded'});
+  await page.waitForFunction(name=>document.querySelector('.oac-grid__saved .oac-grid__bar-text')
+    ?.textContent?.includes(name),layoutName,{timeout:20000});
+  await layoutButton.click();
+  if(await page.locator('.oac-layouts__switch').getAttribute('aria-checked')!=='true')
+    throw Error('Saved layout autosave preference was lost after page reload');
+
   await page.unroute('**/qsyn/api/v1/admin/upstox/index-history-proof');
   await page.unroute('**/qsyn/api/v1/admin/upstox/personal-index/history');
 
