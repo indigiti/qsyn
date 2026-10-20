@@ -141,10 +141,16 @@ export function bindAutoSavedIndicators(grid, storage) {
     for (const widget of widgets) if (!bindings.has(widget)) bindings.set(widget, attach(widget));
   }
 
-  const offActive = grid.on('active', sync);
-  const offLayout = grid.on('layout', sync);
-  sync();
-  void Promise.resolve(grid.ready).then(sync).catch(() => {});
+  // IndexedDB workspace restoration is asynchronous. Bind only after it
+  // completes so autosave never races or overwrites a saved native layout.
+  const offActive = grid.on('active', () => { if (initialized) sync(); });
+  const offLayout = grid.on('layout', () => { if (initialized) sync(); });
+  let initialized = false;
+  void Promise.resolve(grid.ready).then(() => {
+    if (!active) return;
+    initialized = true;
+    sync();
+  }).catch(() => {});
   return () => {
     active = false;
     offActive?.();
