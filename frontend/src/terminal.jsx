@@ -256,7 +256,9 @@ function HomepageChart({ theme, embedded = false,
         topbar.insertBefore(slot,nativeWatchlist);
       const gridRect=grid.root.getBoundingClientRect();
       const position=slot.getBoundingClientRect();
-      bar.style.left=Math.max(0,Math.min(position.left-gridRect.left,gridRect.width-72))+'px';
+      // Size follows CSS: named layout label on desktop, two icons on phones.
+      const slotWidth=position.width;
+      bar.style.left=Math.max(0,Math.min(position.left-gridRect.left,gridRect.width-slotWidth))+'px';
       bar.style.top=(position.top-gridRect.top)+'px';
       bar.dataset.placed='true';
     };
