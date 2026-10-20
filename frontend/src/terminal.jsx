@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { createWidget, createChartGrid, mountIndicatorSettings } from 'openalgo-charts/widget';
 import {bindIndicatorLegendSettings} from './indicator-legend-settings.js';
+import {bindAutoSavedIndicators} from './local-indicator-autosave.js';
 import { observeChartCancellations } from './chart-cancellation.js';
 import { QsynMarketsFeed } from './qsyn-markets-feed.js';
 import {saveIndexIntent} from './private-index-intent.js';
@@ -287,6 +288,7 @@ function HomepageChart({ theme, embedded = false,
     const offActive=grid.on('active',updateGrid);
     const offLayout=grid.on('layout',updateGrid);
     const stopSelection=observePublicChartSelection(grid,browserStorage());
+    const stopIndicatorAutosave=bindAutoSavedIndicators(grid,browserStorage());
     window.addEventListener('resize',syncToolbar);
     host.current.addEventListener('scroll',syncToolbar,true);
     void grid.ready.then(updateGrid).catch(()=>{
@@ -298,7 +300,7 @@ function HomepageChart({ theme, embedded = false,
       for(const stops of observers.values())stops.forEach(stop=>stop());
       observers.clear();
       for(const stop of legendStops.values())stop();legendStops.clear();
-      observer.disconnect();offActive?.();offLayout?.();stopSelection();
+      observer.disconnect();offActive?.();offLayout?.();stopSelection();stopIndicatorAutosave();
       window.removeEventListener('resize',syncToolbar);
       host.current?.removeEventListener('scroll',syncToolbar,true);
       slot?.remove();
