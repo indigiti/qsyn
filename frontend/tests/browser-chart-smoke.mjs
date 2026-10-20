@@ -167,6 +167,10 @@ try{
     ?.textContent?.includes(name),layoutName,{timeout:12000});
   const autosave=page.locator('.oac-layouts__switch');
   if(await autosave.getAttribute('aria-checked')!=='true')await autosave.click();
+  // Repository autosave preference writes asynchronously to IndexedDB. A
+  // reload before the switch confirms its write would be a false negative.
+  await page.waitForFunction(()=>document.querySelector('.oac-layouts__switch')
+    ?.getAttribute('aria-checked')==='true',null,{timeout:12000});
   await page.reload({waitUntil:'domcontentloaded'});
   await page.waitForFunction(name=>document.querySelector('.oac-grid__saved .oac-grid__bar-text')
     ?.textContent?.includes(name),layoutName,{timeout:20000});
