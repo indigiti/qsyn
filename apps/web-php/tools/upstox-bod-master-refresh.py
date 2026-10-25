@@ -129,6 +129,7 @@ def import_files(root: Path, sources: dict[str, Path], today: dt.date):
     stage = destination / generation
     stage.mkdir(mode=0o700)
     counts = {}
+    published = False
     try:
         parser = runpy.run_path(str(Path(__file__).with_name("upstox-instrument-inspect.py")))["stream_json_array"]
         for exchange in ("NSE", "BSE"):
@@ -166,6 +167,7 @@ def import_files(root: Path, sources: dict[str, Path], today: dt.date):
             os.chmod(temp, 0o600)
             json.dump(manifest, writer, separators=(",", ":"))
         os.replace(temp, destination / "current.json")
+        published = True
         # Keep the current snapshot plus two prior generations for rollback;
         # avoid unbounded private-disk growth under daily operator refresh.
         snapshots = sorted(
@@ -181,10 +183,14 @@ def import_files(root: Path, sources: dict[str, Path], today: dt.date):
             if len(keep) < 3:
                 keep.add(old.name)
             else:
-                shutil.rmtree(old)
+                try:
+                    shutil.rmtree(old)
+                except OSError:
+                    pass  # Retention failure cannot revoke a published snapshot.
         return manifest
     except BaseException:
-        shutil.rmtree(stage)
+        if not published:
+            shutil.rmtree(stage)
         raise
 
 
