@@ -237,7 +237,9 @@ jobs:
 
   charts:
     name: OpenAlgo Charts production bundle
-    runs-on: ubuntu-latest
+    # Playwright 1.55.0 test browsers do not support the ubuntu-26.04 runner.
+    # Keep real Chromium acceptance until Playwright is reviewed/upgraded.
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

@@ -8,11 +8,11 @@
   },
   "dependencies": {
     "openalgo-charts": "2.6.7",
-    "react": "19.2.0",
-    "react-dom": "19.2.0",
-    "lucide-react": "0.563.0"
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "lucide-react": "1.61.0"
   },
   "devDependencies": {
-    "esbuild": "0.25.12"
+    "esbuild": "0.28.2"
   }
 }
