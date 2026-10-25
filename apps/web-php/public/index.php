@@ -318,6 +318,26 @@ if (preg_match('#^/qsyn/api/v1/owner-index/(status|history|ticket|browser-grant)
 }
 
 
+// Owner-only, read-only full NSE/BSE BOD master list (operator-imported).
+// This never downloads on an HTTP request and does not authorize market data.
+if ($route === '/qsyn/api/v1/admin/upstox/instruments/master') {
+    $src=dirname(__DIR__).'/src';
+    if (!is_file($src.'/UpstoxMasterCatalog.php'))
+        $src=dirname(__DIR__,2).'/private_html/qsyn/app/src';
+    foreach (['RustAdmin','IndexHistoricalProof','UpstoxInstrumentSearch','UpstoxMasterCatalog'] as $unit) {
+        if(!is_file($src.'/'.$unit.'.php'))
+            respond(['error'=>'upstox_master_catalog_unavailable'],503);
+        require_once $src.'/'.$unit.'.php';
+    }
+    header('Cache-Control: private, no-store');
+    header('Pragma: no-cache');
+    header('X-Robots-Tag: noindex, nofollow');
+    header('X-QSYN-Request-ID: '.bin2hex(random_bytes(8)));
+    [$status,$payload]=\\QSYN\\MarketData\\UpstoxMasterCatalog::dispatch($_SERVER,$_GET);
+    if($status===405)header('Allow: GET');
+    respond($payload,$status);
+}
+
 // Account-scoped, read-only Upstox instrument search; never ships token or
 // account metadata to the browser and never authorizes data subscriptions.
 if ($route === '/qsyn/api/v1/admin/upstox/instruments/search') {
