@@ -123,6 +123,8 @@ try {
     throw Error('NSE master leaked into BSE selection');
   await page.getByRole('button',{name:'Search Upstox'}).click();
   await page.unroute('**/qsyn/api/v1/admin/upstox/instruments/master*');
+  // Existing live-feed pause assertion targets the Crypto chart, not Stocks.
+  await page.getByRole('button',{name:'Crypto',exact:true}).click();
   const headerFeed=page.getByRole('switch',{name:'Header live market feed'});
   const marketsFeed=page.getByRole('switch',{name:'Markets live market feed'});
   if(await headerFeed.getAttribute('aria-checked')!=='true'||
