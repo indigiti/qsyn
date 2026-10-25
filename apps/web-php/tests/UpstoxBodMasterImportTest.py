@@ -71,6 +71,12 @@ def main():
         assert error.returncode != 0, error.stdout
         assert (store / "current.json").read_text() == current, "partial refresh published"
         assert len(list(store.glob("bod-*"))) == 1, "partial generation retained"
+        write_bod(bse, [row("BSE", "BSE_EQ", "BSE_EQ|INE002A01018", "RELIANCE")])
+        for _ in range(4):
+            updated = run(root, nse, bse)
+            assert updated.returncode == 0, updated.stderr
+        assert len(list(store.glob("bod-*"))) == 3, "unbounded daily catalog retention"
+        assert json.loads((store / "current.json").read_text())["generation"] != generation
         os.chmod(root, 0o755)
         assert run(root, nse, bse).returncode != 0, "unsafe runtime accepted"
     print("PASS: private atomic streaming NSE/BSE BOD import and fail-closed catalog")
