@@ -300,6 +300,7 @@ jobs:
           node tests/crypto-backfill.test.mjs
           node tests/market-gap-recovery.test.mjs
           node tests/live-market-feed-toggle.test.mjs
+          node tests/dashboard-status.test.mjs
         working-directory: frontend
       - run: |
           test ! -e frontend/dist/chart.js

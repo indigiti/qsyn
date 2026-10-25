@@ -299,6 +299,40 @@ try {
     throw new Error('Dashboard read-only label missing');
   if(await page.getByRole('button',{name:'Saved chart workspaces'}).count()!==1)
     throw new Error('Saved workspaces must remain available');
+  if(await page.locator('.qd-overview .qd-metric').count()!==4)
+    throw Error('Dashboard must show four compact operational status cards');
+  // End-to-end proof: token is stored and a master is imported, while market
+  // connectivity remains unverified. A green toggle must not change that.
+  await page.route('**/qsyn/api/v1/admin/upstox/analytics/status',route=>
+    route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({
+      schema:'QSYN-UPSTOX-ANALYTICS-STATUS/1',
+      token_stored:true,trading_enabled:false,provider_feed_authorized_now:false
+    })}));
+  await page.route('**/qsyn/api/v1/admin/upstox/instruments/master?mode=status',route=>
+    route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({
+      schema:'QSYN-UPSTOX-BOD-MASTER/1',catalog_ready:true,
+      imported_day_ist:'2026-10-25',imported_today_ist:false,
+      exchange_counts:{NSE:12000,BSE:9000},data_state:'discovery_only',
+      history_verified:false,live_feed_verified:false,trading_enabled:false
+    })}));
+  await page.route('**/qsyn/api/v1/admin/diagnostics/report',route=>
+    route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({
+      schema:'QSYN-ADMIN-DIAGNOSTICS/1',admin:{authenticated:true},
+      live_index_feed_verified:false,trading_enabled:false
+    })}));
+  await page.reload({waitUntil:'domcontentloaded'});
+  await page.locator('.qd-overview').getByText('Token stored',{exact:true}).waitFor();
+  await page.locator('.qd-overview').getByText('Imported',{exact:true}).waitFor();
+  await page.getByText(/NSE 12,000 · BSE 9,000 instruments/).waitFor();
+  await page.locator('.qd-overview').getByText('Not verified',{exact:true}).waitFor();
+  const feedCard=await page.locator('.qd-feed').boundingBox();
+  if(!feedCard||feedCard.height>290)
+    throw Error('Dashboard live feed card has oversized empty space');
+  await page.getByRole('button',{name:'Refresh dashboard status'}).click();
+  await page.locator('.qd-overview').getByText('Token stored',{exact:true}).waitFor();
+  await page.unroute('**/qsyn/api/v1/admin/upstox/analytics/status');
+  await page.unroute('**/qsyn/api/v1/admin/upstox/instruments/master?mode=status');
+  await page.unroute('**/qsyn/api/v1/admin/diagnostics/report');
   const liveSwitch=page.getByRole('switch',{name:'Live market data feed'});
   if(await page.getByRole('switch',{name:'Header live market feed'}).count()!==1)
     throw Error('Global feed switch disappeared on Dashboard');
