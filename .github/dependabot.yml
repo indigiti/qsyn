@@ -1,0 +1,36 @@
+# Open reviewed dependency PRs; never automatically merge or deploy upgrades.
+# The chart adapter is pinned independently because OpenAlgo widget changes can
+# break saved layouts, indicator settings, historical paging or owner-only feeds.
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directory: "/frontend"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:30"
+      timezone: "Asia/Kolkata"
+    open-pull-requests-limit: 4
+    ignore:
+      - dependency-name: "openalgo-charts"
+    groups:
+      react-runtime:
+        patterns:
+          - "react"
+          - "react-dom"
+      icon-library:
+        patterns:
+          - "lucide-react"
+      bundler:
+        patterns:
+          - "esbuild"
+  - package-ecosystem: "cargo"
+    directory: "/services/stream-rust"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "10:00"
+      timezone: "Asia/Kolkata"
+    open-pull-requests-limit: 3
+    # Rust libraries pre-1.0 can break APIs on minor upgrades. Review CI,
+    # compiled binary footprint and broker feed behavior before accepting.
