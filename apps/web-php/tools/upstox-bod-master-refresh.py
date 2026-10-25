@@ -44,6 +44,11 @@ def safe_root(root: Path) -> Path:
     return resolved
 
 
+def file_sha256(path: Path):
+    with path.open("rb") as handle:
+        return hashlib.file_digest(handle, "sha256").hexdigest()
+
+
 def maybe_date(value):
     if isinstance(value, str):
         try:
@@ -146,7 +151,7 @@ def import_files(root: Path, sources: dict[str, Path], today: dt.date):
             if count == 0:
                 raise ValueError("no_valid_" + exchange + "_instruments")
             counts[exchange] = {"total": count, "segments": segments,
-                                "sha256": hashlib.sha256(output.read_bytes()).hexdigest()}
+                                "sha256": file_sha256(output)}
         # Publish only after both exchange files are fully written and validated.
         manifest = {
             "schema": "QSYN-UPSTOX-BOD-MASTER/1",
