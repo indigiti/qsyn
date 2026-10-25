@@ -333,7 +333,7 @@ if ($route === '/qsyn/api/v1/admin/upstox/instruments/master') {
     header('Pragma: no-cache');
     header('X-Robots-Tag: noindex, nofollow');
     header('X-QSYN-Request-ID: '.bin2hex(random_bytes(8)));
-    [$status,$payload]=\\QSYN\\MarketData\\UpstoxMasterCatalog::dispatch($_SERVER,$_GET);
+    [$status,$payload]=\QSYN\MarketData\UpstoxMasterCatalog::dispatch($_SERVER,$_GET);
     if($status===405)header('Allow: GET');
     respond($payload,$status);
 }
