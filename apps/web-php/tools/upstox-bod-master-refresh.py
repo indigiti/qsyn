@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import fcntl
 import hashlib
 import json
 import os
@@ -165,6 +166,22 @@ def import_files(root: Path, sources: dict[str, Path], today: dt.date):
             os.chmod(temp, 0o600)
             json.dump(manifest, writer, separators=(",", ":"))
         os.replace(temp, destination / "current.json")
+        # Keep the current snapshot plus two prior generations for rollback;
+        # avoid unbounded private-disk growth under daily operator refresh.
+        snapshots = sorted(
+            (p for p in destination.iterdir()
+             if p.is_dir() and not p.is_symlink()
+             and re.fullmatch(r"bod-20[0-9]{2}-[0-9]{2}-[0-9]{2}-[a-f0-9]{12}", p.name)),
+            key=lambda p: p.name, reverse=True,
+        )
+        keep = {generation}
+        for old in snapshots:
+            if old.name in keep:
+                continue
+            if len(keep) < 3:
+                keep.add(old.name)
+            else:
+                shutil.rmtree(old)
         return manifest
     except BaseException:
         shutil.rmtree(stage)
@@ -190,13 +207,29 @@ def main():
     try:
         root = safe_root(Path(args.runtime))
         sources = {"NSE": args.nse_file, "BSE": args.bse_file}
-        if args.download:
-            import tempfile
-            scratch = tempfile.TemporaryDirectory(prefix="qsyn-bod-")
-            sources = {x: Path(scratch.name) / (x + ".json.gz") for x in SOURCES}
-            for x, out in sources.items():
-                download(x, out)
-        manifest = import_files(root, sources, args.asof)
+        # One operator refresh at a time. The lock never contains secrets.
+        lock_dir = root / "upstox-master"
+        if lock_dir.is_symlink():
+            raise ValueError("master_directory_symlink")
+        lock_dir.mkdir(mode=0o700, exist_ok=True)
+        if lock_dir.stat().st_mode & 0o077:
+            raise ValueError("master_directory_permissions")
+        lock_path = lock_dir / ".refresh.lock"
+        if lock_path.is_symlink():
+            raise ValueError("master_lock_symlink")
+        with lock_path.open("a+b") as lock:
+            os.chmod(lock_path, 0o600)
+            try:
+                fcntl.flock(lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                raise ValueError("master_refresh_already_running") from None
+            if args.download:
+                import tempfile
+                scratch = tempfile.TemporaryDirectory(prefix="qsyn-bod-")
+                sources = {x: Path(scratch.name) / (x + ".json.gz") for x in SOURCES}
+                for x, out in sources.items():
+                    download(x, out)
+            manifest = import_files(root, sources, args.asof)
         print(json.dumps(manifest, separators=(",", ":")))
         return 0
     except (OSError, ValueError, EOFError, UnicodeError, json.JSONDecodeError) as exc:
