@@ -28,8 +28,8 @@ TYPES = {"NSE_EQ", "NSE_INDEX", "NSE_FO", "NCD_FO", "NSE_COM",
          "BSE_EQ", "BSE_INDEX", "BSE_FO", "BCD_FO"}
 MAX_COMPRESSED = 100_000_000
 MAX_RECORDS = 2_000_000
-KEY = re.compile(r"^(NSE_EQ|NSE_INDEX|NSE_FO|NCD_FO|NSE_COM|BSE_EQ|BSE_INDEX|BSE_FO|BCD_FO)\|[A-Za-z0-9 ._/-]{1,100}$")
-SIMPLE = re.compile(r"^[A-Za-z0-9 .&+_/'():,-]{1,180}$")
+KEY = re.compile(r"^(NSE_EQ|NSE_INDEX|NSE_FO|NCD_FO|NSE_COM|BSE_EQ|BSE_INDEX|BSE_FO|BCD_FO)\|[^\x00-\x1f\x7f]{1,100}$")
+SIMPLE = re.compile(r"^[^\x00-\x1f\x7f]{1,180}$")
 
 
 def safe_root(root: Path) -> Path:
