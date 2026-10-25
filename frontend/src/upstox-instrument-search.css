@@ -30,3 +30,10 @@
  border:1px solid var(--q-line);border-radius:6px}
 .terminal-shell .qs-upstox-history .qt-private-history-host{flex-basis:100%;height:450px;min-height:400px}
 .terminal-shell .qs-upstox-history p{flex-basis:100%;font-size:11px;color:var(--q-muted)}
+
+
+/* Complete NSE/BSE BOD master browser stays in the existing terminal panel. */
+.terminal-shell .qs-upstox-mode{display:flex;flex-wrap:wrap;gap:8px}
+.terminal-shell .qs-upstox-mode button{cursor:pointer;border:1px solid var(--q-line);background:var(--q-bg);
+ color:var(--q-fg);border-radius:7px;padding:7px 12px;font-size:12px;font-weight:650}
+.terminal-shell .qs-upstox-mode button[aria-pressed="true"]{border-color:var(--q-accent);color:var(--q-accent);background:var(--q-hover)}

@@ -89,6 +89,42 @@ try {
     throw Error('Terminal should expose four core sections only');
   await page.locator('.terminal-sidebar').getByRole('button',{name:'Markets'}).click();
   await page.getByRole('heading',{name:'Market explorer'}).waitFor();
+  // Full NSE/BSE master browsing must work through the existing authenticated
+  // Markets UI, without exposing prices or requiring an extra terminal.
+  await page.getByRole('button',{name:'Stocks',exact:true}).click();
+  await page.route('**/qsyn/api/v1/admin/upstox/instruments/master*',async route=>{
+    const u=new URL(route.request().url());
+    if(u.searchParams.get('mode')==='status')return route.fulfill({
+      status:200,contentType:'application/json',body:JSON.stringify({
+        schema:'QSYN-UPSTOX-BOD-MASTER/1',catalog_ready:true,
+        imported_day_ist:'2026-10-25',imported_today_ist:true,
+        exchange_counts:{NSE:2,BSE:1},data_state:'discovery_only',
+        history_verified:false,live_feed_verified:false,trading_enabled:false
+      })
+    });
+    const exchange=u.searchParams.get('exchange');
+    return route.fulfill({status:200,contentType:'application/json',
+      body:JSON.stringify({
+        schema:'QSYN-UPSTOX-BOD-MASTER/1',source:'upstox_official_bod_json',
+        data_state:'discovery_only',history_verified:false,live_feed_verified:false,
+        trading_enabled:false,exchange,segment:u.searchParams.get('segment'),
+        imported_day_ist:'2026-10-25',page_number:1,records:20,total_pages:1,total_records:1,
+        instruments:[{instrument_key:exchange+'_EQ|INE002A01018',exchange,
+          segment:exchange+'_EQ',trading_symbol:exchange==='NSE'?'NSE_FIXTURE':'BSE_FIXTURE',
+          name:'FIXTURE SYMBOL',instrument_type:'EQ',expiry:null,strike_price:null,
+          lot_size:1,underlying_symbol:null,selection_scope:null}]
+      })});
+  });
+  await page.getByRole('button',{name:'Full NSE/BSE master'}).click();
+  await page.getByText('NSE_FIXTURE',{exact:true}).waitFor({timeout:10000});
+  await page.getByLabel('Upstox exchange').selectOption('BSE');
+  await page.getByText('BSE_FIXTURE',{exact:true}).waitFor({timeout:10000});
+  if(await page.getByText('NSE_FIXTURE',{exact:true}).count())
+    throw Error('NSE master leaked into BSE selection');
+  await page.getByRole('button',{name:'Search Upstox'}).click();
+  await page.unroute('**/qsyn/api/v1/admin/upstox/instruments/master*');
+  // Existing live-feed pause assertion targets the Crypto chart, not Stocks.
+  await page.getByRole('button',{name:'Crypto',exact:true}).click();
   const headerFeed=page.getByRole('switch',{name:'Header live market feed'});
   const marketsFeed=page.getByRole('switch',{name:'Markets live market feed'});
   if(await headerFeed.getAttribute('aria-checked')!=='true'||

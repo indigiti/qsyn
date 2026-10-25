@@ -84,6 +84,9 @@ jobs:
           php -l apps/web-php/src/UpstoxInstrumentHistoryApi.php
           php apps/web-php/tests/UpstoxInstrumentHistoryApiTest.php
           php apps/web-php/tests/UpstoxInstrumentSearchTest.php
+          php -l apps/web-php/src/UpstoxMasterCatalog.php
+          php apps/web-php/tests/UpstoxMasterCatalogTest.php
+          python3 apps/web-php/tests/UpstoxBodMasterImportTest.py
           php -l apps/web-php/src/IndexHistoricalProof.php
           php apps/web-php/tests/IndexHistoricalProofTest.php
           php -l apps/web-php/src/PersonalIndexGateway.php
@@ -266,6 +269,7 @@ jobs:
           node tests/upstox-readiness-contract.mjs
           node tests/upstox-index-volume-contract.mjs
           node tests/upstox-instrument-search.test.mjs
+          node tests/upstox-master-catalog.test.mjs
           node tests/upstox-instrument-history.test.mjs
           node tests/upstox-instrument-live.test.mjs
         working-directory: frontend
