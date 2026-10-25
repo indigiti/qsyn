@@ -231,6 +231,10 @@ jobs:
           cp apps/web-php/tools/private-history-export.php staging/private/app/tools/private-history-export.php
           cp apps/web-php/tools/openalgo-local-probe.php staging/private/app/tools/openalgo-local-probe.php
           cp apps/web-php/tools/upstox-instrument-inspect.py staging/private/app/tools/upstox-instrument-inspect.py
+          cp apps/web-php/tools/upstox-bod-master-refresh.py staging/private/app/tools/upstox-bod-master-refresh.py
+          cp apps/web-php/src/UpstoxInstrumentSearch.php staging/private/app/src/UpstoxInstrumentSearch.php
+          cp apps/web-php/src/UpstoxInstrumentHistoryApi.php staging/private/app/src/UpstoxInstrumentHistoryApi.php
+          cp apps/web-php/src/UpstoxMasterCatalog.php staging/private/app/src/UpstoxMasterCatalog.php
           cp frontend/dist/account-chart.js staging/public/assets/account-chart.js
           cp apps/web-php/public/assets/account-dashboard.js staging/public/assets/account-dashboard.js
           cp apps/web-php/public/assets/account-dashboard.css staging/public/assets/account-dashboard.css
@@ -344,6 +348,11 @@ jobs:
           test ! -e staging/private/runtime/openalgo-registry.json
           test -s staging/private/app/tools/openalgo-local-probe.php
           test -s staging/private/app/tools/upstox-instrument-inspect.py
+          test -s staging/private/app/tools/upstox-bod-master-refresh.py
+          test -s staging/private/app/src/UpstoxInstrumentSearch.php
+          test -s staging/private/app/src/UpstoxInstrumentHistoryApi.php
+          test -s staging/private/app/src/UpstoxMasterCatalog.php
+          php -l staging/private/app/src/UpstoxMasterCatalog.php
           test ! -e staging/private/runtime/openalgo-key.txt
           test ! -e staging/public/assets/chart-diagnostics.js
           test ! -e staging/public/assets/rust-diagnostics.js
@@ -519,6 +528,11 @@ jobs:
           test ! -e verified-release/private/runtime/openalgo-registry.json
           test -s verified-release/private/app/tools/openalgo-local-probe.php
           test -s verified-release/private/app/tools/upstox-instrument-inspect.py
+          test -s verified-release/private/app/tools/upstox-bod-master-refresh.py
+          test -s verified-release/private/app/src/UpstoxInstrumentSearch.php
+          test -s verified-release/private/app/src/UpstoxInstrumentHistoryApi.php
+          test -s verified-release/private/app/src/UpstoxMasterCatalog.php
+          php -l verified-release/private/app/src/UpstoxMasterCatalog.php
           test ! -e verified-release/private/runtime/openalgo-key.txt
           test ! -e verified-release/public/assets/chart-diagnostics.js
           test ! -e verified-release/public/assets/rust-diagnostics.js
