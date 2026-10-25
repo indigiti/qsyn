@@ -1,6 +1,6 @@
 /** QSYN operational landing: evidence first, never fabricated market prices. */
 import React,{useEffect,useState} from 'react';
-import {Activity,ArrowRight,CandlestickChart,Database,Radio,RefreshCw,
+import {Activity,ArrowRight,CandlestickChart,Radio,RefreshCw,
   ShieldCheck,Wallet} from 'lucide-react';
 import {LiveFeedSwitch,useLiveFeedPreference} from './live-feed-switch.jsx';
 import {fetchDashboardStatus} from './dashboard-status.js';
@@ -40,7 +40,6 @@ export function DashboardCockpit({openView}){
     });
     return ()=>controller.abort();
   },[revision]);
-  const status=loading?'Checking…':summary;
   const accountValue=loading?'Checking…':
     summary.account==='stored'?'Token stored':
     summary.account==='missing'?'Not configured':'Check unavailable';
