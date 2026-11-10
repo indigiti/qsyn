@@ -10,7 +10,7 @@
     "openalgo-charts": "2.6.9",
     "react": "19.3.1",
     "react-dom": "19.3.1",
-    "lucide-react": "1.61.0"
+    "lucide-react": "1.70.0"
   },
   "devDependencies": {
     "esbuild": "0.28.2"
