@@ -254,6 +254,20 @@ export class QsynMarketsFeed extends QsynCryptoFeed {
         }
       }
       if(this.closed||req.signal?.aborted||invalid())return [];
+      // For ordinary loads, an empty authorized response is not a deletion:
+      // use last verified candles for this same authorized index. A noCache
+      // refresh must instead return [] to signal NO REPLACEMENT; otherwise
+      // a partial cached range can delete old candles in OpenAlgo. Revoked
+      // access clears personalBars and always fails closed.
+      if(!bars.length){
+        const retained=this.personalBars.get(instrument.id)||[];
+        if(retained.length&&req.noCache!==true){
+          this.lastBlockedKey=null;
+          this.onBlockedIndex(null);
+          this.onState(instrument.name+' · empty provider response; displaying last verified candles');
+          return aggregatePersonalIndexBars(retained,req.interval);
+        }
+      }
       let previousCoverage='';
       if(bars.length){
         // Cache the CURRENT date independently from any older candles, so

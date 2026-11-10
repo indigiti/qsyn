@@ -41,7 +41,9 @@
  border-top:1px solid var(--q-line);font-size:11px;color:var(--q-muted)}
 .terminal-shell .qd-secondary button{border:0;background:transparent;color:var(--q-accent);font-weight:650;cursor:pointer;padding:5px 8px}
 .terminal-shell .qd-secondary button:hover{text-decoration:underline}
-@media(max-width:1300px){.terminal-shell .qd-overview{grid-template-columns:repeat(2,minmax(0,1fr))}}
+/* The terminal's fixed sidebar consumes ~228px: four equal cards become
+   unreadable long before the browser itself reaches tablet width. */
+@media(max-width:1550px){.terminal-shell .qd-overview{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:900px){.terminal-shell .qd-destinations{grid-template-columns:1fr}}
 @media(max-width:650px){
  .terminal-shell .qd-heading{align-items:flex-start;flex-direction:column;gap:12px}
@@ -51,4 +53,28 @@
  .terminal-shell .qd-metric{min-height:0}
  .terminal-shell .qd-section-heading{align-items:flex-start;flex-direction:column;gap:3px}
  .terminal-shell .qd-safety{white-space:normal}
+}
+
+/* Readable operational cards without horizontal overflow or empty vertical
+   filler. Keep the homepage's full-screen chart completely untouched. */
+.terminal-shell .qd-dashboard{min-width:0}
+.terminal-shell .qd-overview>.qd-panel{min-width:0}
+.terminal-shell .qd-metric{min-height:164px;gap:10px}
+.terminal-shell .qd-metric .qd-value{font-variant-numeric:tabular-nums}
+.terminal-shell .qd-metric .qd-description{font-size:12px;line-height:1.55}
+.terminal-shell .qd-feed .qsyn-feed-control{gap:10px;flex-wrap:wrap}
+.terminal-shell .qd-feed .qsyn-feed-control-copy{min-width:0;flex:1 1 120px}
+.terminal-shell .qd-feed .qsyn-feed-control-copy small{max-width:none}
+.terminal-shell .qd-dashboard :is(.qd-destination,.qd-refresh,.qd-inline-action):focus-visible{
+  outline:2px solid var(--q-accent);outline-offset:3px
+}
+@media(max-width:900px){
+  .terminal-shell .qd-overview{grid-template-columns:1fr}
+  .terminal-shell .qd-heading{align-items:flex-start;flex-wrap:wrap}
+}
+@media(max-width:650px){
+  .terminal-shell .qd-dashboard{max-width:100%}
+  .terminal-shell .qd-heading-actions{align-items:flex-start}
+  .terminal-shell .qd-metric{min-height:0}
+  .terminal-shell .qd-destinations{grid-template-columns:1fr}
 }

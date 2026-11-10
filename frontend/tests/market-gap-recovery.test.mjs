@@ -135,8 +135,27 @@ try {
     'repeat history errors must not create obsolete chart overlays');
   assert.equal(idx.lastBlockedKey,null,'transient provider failure is not access denial');
   idx._session=sessionBeforeOutage;
+  // Explicit noCache repair must retain previously verified candles too;
+  // losing the source during refresh must not erase yesterday's chart.
+  idx._session=()=>({getBars:async()=>{throw Error('UPSTOX_PROVIDER_TIMEOUT');}});
+  assert.deepEqual(await idx.getBars({...req,noCache:true}),[],
+    'forced history refresh outage must not replace chart controller bars');
+  assert.deepEqual(await idx.getBars(req),restored,
+    'ordinary history request still returns last verified candles');
+  idx._session=sessionBeforeOutage;
   assert.deepEqual(await idx.getBars(req),restored);
   assert.equal(errors.at(-1),null,'verified source recovery clears outage notice');
+  // A legitimately empty response from the authorized historical endpoint
+  // must not be interpreted as an instruction to delete existing candles.
+  idx._session=()=>({getBars:async()=>[]});
+  const dayBeforeEmpty=idx._historicalDay;
+  idx._historicalDay=async()=>[];
+  assert.deepEqual(await idx.getBars(req),restored,
+    'empty source response preserves last verified candles on ordinary loads');
+  assert.deepEqual(await idx.getBars({...req,noCache:true}),[],
+    'empty forced refresh must not replace controller history');
+  idx._historicalDay=dayBeforeEmpty;
+  idx._session=sessionBeforeOutage;
   // Revoked access is different from an exchange timeout: no private
   // cached OHLC, proof, history, or socket can remain accessible.
   const id=findIndiaIndex('NSE_INDEX:index','NIFTY').id;
