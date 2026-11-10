@@ -254,6 +254,19 @@ export class QsynMarketsFeed extends QsynCryptoFeed {
         }
       }
       if(this.closed||req.signal?.aborted||invalid())return [];
+      // An empty authorized provider response is not a deletion. OpenAlgo
+      // replaces the entire requested series on refresh: retain the last
+      // verified source candles instead of blanking the chart. Never do this
+      // after a revoked grant (_invalidateIndexAccess clears personalBars).
+      if(!bars.length){
+        const retained=this.personalBars.get(instrument.id)||[];
+        if(retained.length){
+          this.lastBlockedKey=null;
+          this.onBlockedIndex(null);
+          this.onState(instrument.name+' · empty provider response; displaying last verified candles');
+          return aggregatePersonalIndexBars(retained,req.interval);
+        }
+      }
       let previousCoverage='';
       if(bars.length){
         // Cache the CURRENT date independently from any older candles, so
@@ -349,7 +362,7 @@ export class QsynMarketsFeed extends QsynCryptoFeed {
       // A transient tail/history refresh must not mask real candles that are
       // already on screen. Authorization and missing-token denials still
       // invalidate the retained private feed above and show the blocker.
-      if(!accessDenied&&retained.length&&req.noCache!==true){
+      if(!accessDenied&&retained.length){
         this.lastBlockedKey=null;
         this.onBlockedIndex(null);
         this.onState(instrument.name+' · showing last verified candles; history source unavailable');
