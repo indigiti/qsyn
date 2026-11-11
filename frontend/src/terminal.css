@@ -234,19 +234,18 @@ button:focus-visible,a:focus-visible{outline:2px solid var(--q-accent);outline-o
 .qsyn-homepage{position:relative;min-height:100dvh}
 .qsyn-homepage .qsyn-crypto-grid{width:100%;height:100dvh;min-height:420px}
 .qsyn-homepage .qsyn-grid-toolbar-slot{
-  display:inline-block;width:72px;min-width:72px;height:32px;flex:none;
+  display:inline-block;width:184px;min-width:184px;height:32px;flex:none;
   pointer-events:none
 }
 .qsyn-homepage .oac-widget.oac-grid__bar{
   position:absolute;z-index:65;left:0;top:0;
   display:flex;align-items:center;gap:4px;
-  min-height:32px;height:32px;width:72px;
+  min-height:32px;height:32px;width:184px;
   padding:0;border:0;background:transparent;overflow:visible;
 }
 .qsyn-homepage .oac-grid__bar:not([data-placed="true"]){visibility:hidden}
 .qsyn-homepage .oac-grid__bar > :not(.oac-grid__layout):not(.oac-grid__saved){display:none!important}
 .qsyn-homepage .oac-grid__bar .oac-grid__layout,
-.qsyn-homepage .oac-grid__bar .oac-grid__saved,
 .qsyn-homepage .oac-topbar__watchlist{
   display:inline-flex;align-items:center;justify-content:center;
   width:32px;min-width:32px;height:32px;flex:none;
@@ -254,6 +253,33 @@ button:focus-visible,a:focus-visible{outline:2px solid var(--q-accent);outline-o
 }
 .qsyn-homepage .oac-grid__bar .oac-grid__bar-text,
 .qsyn-homepage .oac-grid__bar .oac-chev{display:none}
+/* Make the already-working OpenAlgo saved-layout control discoverable.
+   Its text is live: 'Layouts' before Save As, then the user's layout name.
+   Keep the upstream menu, status indicator and keyboard handlers intact. */
+.qsyn-homepage .oac-grid__bar .oac-grid__saved{
+  display:inline-flex;align-items:center;gap:6px;justify-content:flex-start;
+  width:144px;min-width:0;max-width:144px;height:32px;flex:none;
+  padding:0 9px;font-size:12px;font-weight:600;
+  border:1px solid var(--q-line);border-radius:6px;overflow:hidden;
+}
+.qsyn-homepage .oac-grid__bar .oac-grid__saved .oac-grid__bar-text{
+  display:block;min-width:0;max-width:105px;overflow:hidden;
+  text-overflow:ellipsis;white-space:nowrap;
+}
+.qsyn-homepage .oac-grid__bar .oac-grid__saved[data-attention="true"]::after{
+  position:static;flex:none;
+}
+/* On a phone, keep the compact two-icon toolbar and native hover labels. */
+@media(max-width:700px){
+  .qsyn-homepage .qsyn-grid-toolbar-slot{
+    width:72px;min-width:72px;
+  }
+  .qsyn-homepage .oac-widget.oac-grid__bar{width:72px}
+  .qsyn-homepage .oac-grid__bar .oac-grid__saved{
+    width:32px;min-width:32px;padding:0;justify-content:center;border:0;
+  }
+  .qsyn-homepage .oac-grid__bar .oac-grid__saved .oac-grid__bar-text{display:none}
+}
 .qsyn-homepage .oac-grid__bar .oac-glyph,
 .qsyn-homepage .oac-topbar__watchlist .oac-glyph{
   display:inline-flex;flex:none;font-size:14px

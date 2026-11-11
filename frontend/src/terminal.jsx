@@ -222,7 +222,13 @@ function HomepageChart({ theme, embedded = false,
       exchange:firstExchange,
       interval:'1m',intervals:['1s','1m','5m','15m','1h','1d'],
       theme,branding:false,panels:true,toolbar:true,bottombar:true,
-      preset:'1x1',workspaces:nativeWorkspaces||undefined,
+      // The native OpenAlgo grid journals the current (including unnamed)
+      // chart desk locally and restores it after reload. Saved named layouts
+      // remain owned by the existing conflict-safe WorkspaceRepository.
+      // Keep homepage and embedded Markets drafts independent so navigating
+      // directly to a requested market does not inherit another page's desk.
+      preset:'1x1',persist:embedded?'qsyn-markets-draft-v1':'qsyn-home-draft-v1',
+      workspaces:nativeWorkspaces||undefined,
       lookbackBars:INITIAL_BACKFILL_BARS,
       // OpenAlgo's default 15s history deadline is too short for a bounded
       // 51-page maximum MFE backfill. Keep PHP/Rust timeouts per request.
@@ -250,7 +256,9 @@ function HomepageChart({ theme, embedded = false,
         topbar.insertBefore(slot,nativeWatchlist);
       const gridRect=grid.root.getBoundingClientRect();
       const position=slot.getBoundingClientRect();
-      bar.style.left=Math.max(0,Math.min(position.left-gridRect.left,gridRect.width-72))+'px';
+      // Size follows CSS: named layout label on desktop, two icons on phones.
+      const slotWidth=position.width;
+      bar.style.left=Math.max(0,Math.min(position.left-gridRect.left,gridRect.width-slotWidth))+'px';
       bar.style.top=(position.top-gridRect.top)+'px';
       bar.dataset.placed='true';
     };
@@ -291,7 +299,17 @@ function HomepageChart({ theme, embedded = false,
     const stopIndicatorAutosave=bindAutoSavedIndicators(grid,browserStorage());
     window.addEventListener('resize',syncToolbar);
     host.current.addEventListener('scroll',syncToolbar,true);
-    void grid.ready.then(updateGrid).catch(()=>{
+    void grid.ready.then(()=>{
+      if(!active)return;
+      // The separately saved public chart selection is the navigation intent.
+      // A persisted *draft* from an earlier instrument must not override it
+      // (notably when an index is chosen before a refresh). Native named layouts
+      // deliberately reopen afterwards via their own repository controller.
+      const selected=grid.active()?.widget;
+      if(selected && (selected.symbol()!==firstSymbol||selected.exchange()!==firstExchange))
+        selected.setSymbol(firstSymbol,firstExchange);
+      updateGrid();
+    }).catch(()=>{
       if(active)setMessage('Public market feed unavailable · no demo fallback');
     });
     updateGrid();
