@@ -1,0 +1,42 @@
+name: QSYN Seven Venue Live Acceptance
+# Full ten-minute all-samples contiguous WebSocket acceptance for QSYN #235 (92e0806f2585).
+
+on:
+  push:
+    branches: ["probe/crypto-seven-venue-staging"]
+  pull_request:
+    paths: [".github/workflows/crypto-seven-venue-probe.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: qsyn-public-crypto-probe-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  public-crypto:
+    name: Observe seven public crypto feeds on staging
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify every 1m candle window over ten minutes across seven exchanges
+        shell: bash
+        run: |
+          set -o pipefail
+          python3 services/stream-rust/tests/crypto_public_observe.py \
+            --base-url https://stage.digiti.in \
+            --observe-seconds 600 \
+            --sample-seconds 20 \
+            --require-websocket \
+            --require-contiguous 2>&1 | tee qsyn-crypto-seven-venue-report.txt
+      - name: Preserve probe report even when a provider fails
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qsyn-crypto-seven-venue-live-report
+          path: qsyn-crypto-seven-venue-report.txt
+          if-no-files-found: warn
+          retention-days: 7

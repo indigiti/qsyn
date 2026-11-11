@@ -109,15 +109,22 @@ def main()->int:
     first=scan(args.base_url)
     end=time.monotonic()+args.observe_seconds
     last=first
-    observed_gap_keys=set()
+    observed_gap_keys={key for key,result in first.items()
+                       if result.get("ok") and result["bars"]["missing_candles"]>0}
+    observed_unhealthy_keys={key for key,result in first.items()
+        if not result.get("ok") or result["feed"]["state"]!="websocket" or not result["feed"]["fresh"]}
+    gap_samples={key:int(key in observed_gap_keys) for key in first}
     rounds=1
     while time.monotonic()<end:
         time.sleep(min(args.sample_seconds,max(0,end-time.monotonic())))
         last=scan(args.base_url)
         rounds+=1
         for key,result in last.items():
+            if not result.get("ok") or result["feed"]["state"]!="websocket" or not result["feed"]["fresh"]:
+                observed_unhealthy_keys.add(key)
             if result.get("ok") and result["bars"]["missing_candles"]:
                 observed_gap_keys.add(key)
+                gap_samples[key]=gap_samples.get(key,0)+1
     passing=0
     for key,result in last.items():
         if not result.get("ok"):
@@ -131,17 +138,24 @@ def main()->int:
                  (60 if args.observe_seconds>=60 else 0))
         ws=(health["state"]=="websocket" and health["fresh"])
         gaps=newest["missing_candles"]
-        ok=(not args.require_websocket or ws) and (not args.require_contiguous or gaps==0)
+        # Strict endurance requires *every sampled response* to be healthy,
+        # not merely the final response after a transient gap self-resolved.
+        ok=(not args.require_websocket or (ws and key not in observed_unhealthy_keys)) and (
+            not args.require_contiguous or (gaps==0 and key not in observed_gap_keys))
         if args.observe_seconds>=60:
             ok=ok and advanced
         print(f'{"PASS" if ok else "WARN"} {key}: transport={health["state"]} '
               f'candles={newest["count"]} missing={gaps} '
               f'last={datetime.fromtimestamp(newest["last_candle_start"],timezone.utc).isoformat()} '
               f'reconnects={health["reconnect_count"]} updates={health["websocket_candle_updates"]} '
-              f'advance={advanced}')
+              f'advance={advanced} observed_gap_samples={gap_samples.get(key,0)} '
+              f'observed_unhealthy={key in observed_unhealthy_keys}')
         passing+=int(ok)
     print(json.dumps({"schema":"QSYN-CRYPTO-PROBE/1","observations":rounds,
         "tested":len(VENUES),"passed":passing,"observed_gap_instruments":sorted(observed_gap_keys),
+        "observed_unhealthy_instruments":sorted(observed_unhealthy_keys),
+        "gap_samples":gap_samples,
+        "require_contiguous":args.require_contiguous,
         "require_websocket":args.require_websocket},sort_keys=True))
     return 0 if passing==len(VENUES) else 1
 
