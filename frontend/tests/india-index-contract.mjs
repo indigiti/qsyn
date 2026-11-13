@@ -295,6 +295,20 @@ try {
   assert.deepEqual(await continuity.getBars({...indexReq,noCache:true,
     from:epoch(previousDay+'T09:15:00+05:30')}),[],
     'failed refresh retains upstream controller history');
+  const holidayReads=[];
+  continuity._historicalDay=async(_instrument,day)=>{
+    holidayReads.push(day);
+    return day===previousDay?[]:buildDay(day);
+  };
+  const afterHoliday=await continuity.getBars(indexReq);
+  assert.equal(afterHoliday.length,750,'weekday holiday must not hide last real session');
+  assert.equal(holidayReads.length,2);
+  assert.equal(holidayReads[0],previousDay);
+  continuity._historicalDay=async()=>{throw Error('PRIVATE_INDEX_ACCESS_DENIED');};
+  assert.deepEqual(await continuity.getBars(indexReq),[],
+    'prior history denial discards even the successful current-day response');
+  assert.equal(continuity.personalBars.size,0);
+  assert.equal(continuity.indexHistoryDays.size,0);
   continuity.destroy();
 
   const missing=new QsynMarketsFeed();
