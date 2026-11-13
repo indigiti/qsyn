@@ -1,3 +1,4 @@
+import {findIndiaIndex} from '../src/india-index-catalog.js';
 import assert from 'node:assert/strict';
 import { INDIA_INDEX_MARKETS,findIndiaIndex,searchIndiaIndexes } from '../src/india-index-catalog.js';
 import { QsynMarketsFeed,validIndexBarTime } from '../src/qsyn-markets-feed.js';
@@ -310,6 +311,20 @@ try {
   assert.equal(continuity.personalBars.size,0);
   assert.equal(continuity.indexHistoryDays.size,0);
   continuity.destroy();
+
+  const rollover=new QsynMarketsFeed();
+  const rolloverInstrument=findIndiaIndex(indexReq.exchange,indexReq.symbol);
+  const proofCsrf='a'.repeat(64);
+  const previousFeed=rollover._session(rolloverInstrument,previousDay,proofCsrf);
+  rollover.personalBars.set(rolloverInstrument.id,buildDay(previousDay));
+  rollover._session(rolloverInstrument,currentDay,proofCsrf);
+  assert.equal(previousFeed.closed,true);
+  assert.equal(rollover.personalBars.get(rolloverInstrument.id).length,375,
+    'same-scope rollover retains verified bars while replacement loads');
+  rollover._session(rolloverInstrument,currentDay,'b'.repeat(64));
+  assert.equal(rollover.personalBars.has(rolloverInstrument.id),false,
+    'changed proof must not reuse retained candles');
+  rollover.destroy();
 
   const missing=new QsynMarketsFeed();
   missing._proof=async()=>({csrf:'a'.repeat(64),suggested_day_ist:'2026-10-09'});
