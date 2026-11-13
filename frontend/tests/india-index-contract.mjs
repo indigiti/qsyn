@@ -295,7 +295,35 @@ try {
   assert.deepEqual(await continuity.getBars({...indexReq,noCache:true,
     from:epoch(previousDay+'T09:15:00+05:30')}),[],
     'failed refresh retains upstream controller history');
+  const holidayReads=[];
+  continuity._historicalDay=async(_instrument,day)=>{
+    holidayReads.push(day);
+    return day===previousDay?[]:buildDay(day);
+  };
+  const afterHoliday=await continuity.getBars(indexReq);
+  assert.equal(afterHoliday.length,750,'weekday holiday must not hide last real session');
+  assert.equal(holidayReads.length,2);
+  assert.equal(holidayReads[0],previousDay);
+  continuity._historicalDay=async()=>{throw Error('PRIVATE_INDEX_ACCESS_DENIED');};
+  assert.deepEqual(await continuity.getBars(indexReq),[],
+    'prior history denial discards even the successful current-day response');
+  assert.equal(continuity.personalBars.size,0);
+  assert.equal(continuity.indexHistoryDays.size,0);
   continuity.destroy();
+
+  const rollover=new QsynMarketsFeed();
+  const rolloverInstrument=findIndiaIndex(indexReq.exchange,indexReq.symbol);
+  const proofCsrf='a'.repeat(64);
+  const previousFeed=rollover._session(rolloverInstrument,previousDay,proofCsrf);
+  rollover.personalBars.set(rolloverInstrument.id,buildDay(previousDay));
+  rollover._session(rolloverInstrument,currentDay,proofCsrf);
+  assert.equal(previousFeed.closed,true);
+  assert.equal(rollover.personalBars.get(rolloverInstrument.id).length,375,
+    'same-scope rollover retains verified bars while replacement loads');
+  rollover._session(rolloverInstrument,currentDay,'b'.repeat(64));
+  assert.equal(rollover.personalBars.has(rolloverInstrument.id),false,
+    'changed proof must not reuse retained candles');
+  rollover.destroy();
 
   const missing=new QsynMarketsFeed();
   missing._proof=async()=>({csrf:'a'.repeat(64),suggested_day_ist:'2026-10-09'});

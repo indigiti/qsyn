@@ -66,3 +66,20 @@ assert.equal(partial.account,'unavailable');
 assert.equal(partial.catalog,'unavailable');
 assert.equal(partial.live,'unverified');
 console.log('PASS: dashboard evidence is fail-closed and independent of browser feed switch');
+
+{
+  const updates=[];
+  const result=await fetchDashboardStatus({
+    timeoutMs:30,
+    fetcher:async url=>url.includes('/diagnostics/')
+      ? new Promise(()=>{})
+      : {ok:true,json:async()=>url.includes('/analytics/')
+        ? {schema:'QSYN-UPSTOX-ANALYTICS-STATUS/1',trading_enabled:false,token_stored:true}
+        : null},
+    onProbe:(key,value)=>updates.push([key,value])
+  });
+  assert.equal(result.account,'stored');
+  assert.equal(result.live,'unavailable');
+  assert.equal(updates.find(([key])=>key==='analytics')[1].account,'stored');
+  assert.equal(updates.at(-1)[0],'diagnostics','stalled probe must not block settled probes');
+}
