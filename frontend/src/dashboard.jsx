@@ -27,23 +27,24 @@ export function DashboardCockpit({openView}){
   const enabled=useLiveFeedPreference();
   const [summary,setSummary]=useState(EMPTY);
   const [revision,setRevision]=useState(0);
-  const [loading,setLoading]=useState(true);
+  const [pending,setPending]=useState({analytics:true,master:true,diagnostics:true});
+  const loading=Object.values(pending).some(Boolean);
   useEffect(()=>{
     const controller=new AbortController();
-    setLoading(true);
-    void fetchDashboardStatus({signal:controller.signal}).then(value=>{
-      if(!controller.signal.aborted)setSummary(value);
-    }).catch(()=>{
-      if(!controller.signal.aborted)setSummary(EMPTY);
-    }).finally(()=>{
-      if(!controller.signal.aborted)setLoading(false);
-    });
+    setPending({analytics:true,master:true,diagnostics:true});
+    void fetchDashboardStatus({signal:controller.signal,onProbe:(key,value)=>{
+      const patch=key==='analytics'?{account:value.account}:key==='master'
+        ?{catalog:value.catalog,counts:value.counts,importDay:value.importDay,today:value.today}
+        :{live:value.live};
+      setSummary(old=>({...old,...patch}));
+      setPending(old=>({...old,[key]:false}));
+    }});
     return ()=>controller.abort();
   },[revision]);
-  const accountValue=loading?'Checking…':
+  const accountValue=pending.analytics?'Checking…':
     summary.account==='stored'?'Token stored':
     summary.account==='missing'?'Not configured':'Check unavailable';
-  const catalogValue=loading?'Checking…':
+  const catalogValue=pending.master?'Checking…':
     summary.catalog==='ready'?'Imported':
     summary.catalog==='missing'?'Import required':'Check unavailable';
   const catalogText=summary.catalog==='ready'
@@ -53,7 +54,7 @@ export function DashboardCockpit({openView}){
     :summary.catalog==='missing'
       ?'The operator must import the official NSE/BSE master files on the server.'
       :'Private master-list status could not be verified.';
-  const liveValue=loading?'Checking…':
+  const liveValue=pending.diagnostics?'Checking…':
     summary.live==='verified'?'Verified':
     summary.live==='unverified'?'Not verified':'Check unavailable';
   return <div className="terminal-page qd-dashboard">
@@ -81,7 +82,7 @@ export function DashboardCockpit({openView}){
           : 'Live subscriptions paused. Historical charts are not disabled.'}</p>
       </section>
       <Metric label="Upstox account" value={accountValue}
-        state={!loading&&summary.account==='stored'?'ready':'neutral'}
+        state={!pending.analytics&&summary.account==='stored'?'ready':'neutral'}
         detail={summary.account==='stored'
           ?'Read-only Analytics Token stored; provider authorization is not confirmed.'
           :'Check broker connections for account and token setup.'}>
@@ -90,14 +91,14 @@ export function DashboardCockpit({openView}){
         </button>
       </Metric>
       <Metric label="NSE / BSE symbol masters" value={catalogValue}
-        state={!loading&&summary.catalog==='ready'?'ready':'neutral'}
-        detail={loading?'Checking private master-list import…':catalogText}>
+        state={!pending.master&&summary.catalog==='ready'?'ready':'neutral'}
+        detail={pending.master?'Checking private master-list import…':catalogText}>
         <button className="qd-inline-action" type="button" onClick={()=>openView('markets')}>
           Open Markets <ArrowRight size={14} aria-hidden="true"/>
         </button>
       </Metric>
       <Metric label="Index live data" value={liveValue}
-        state={!loading&&summary.live==='verified'?'ready':'neutral'}
+        state={!pending.diagnostics&&summary.live==='verified'?'ready':'neutral'}
         detail="Live index-data verification is separate from the browser feed switch and saved broker token.">
         <button className="qd-inline-action" type="button" onClick={()=>openView('diagnostics')}>
           Feed diagnostics <ArrowRight size={14} aria-hidden="true"/>
