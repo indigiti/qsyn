@@ -166,10 +166,17 @@ export class QsynMarketsFeed extends QsynCryptoFeed {
   _session(instrument,day,csrf,ownerViewer=false){
     const key=instrument.id;
     const old=this.personalFeeds.get(key);
-    if(old?.day===day&&old?.ownerViewer===ownerViewer)return old;
+    const sameScope=old?.ownerViewer===ownerViewer&&old?.csrf===csrf;
+    if(old?.day===day&&sameScope)return old;
     old?.destroy();
-    this.personalBars.delete(key);
-    this.historyStatus.delete(key);
+    // Keep verified history during date rollover, never across proof scopes.
+    if(!sameScope){
+      this.personalBars.delete(key);
+      this.historyStatus.delete(key);
+      for(const cache of [this.indexHistoryDays,this.indexHistoryMisses])
+        for(const cachedKey of cache.keys())
+          if(cachedKey.startsWith(key+':'))cache.delete(cachedKey);
+    }
     const feed=new PrivateIndexHistoryFeed({
       symbol:instrument.symbol,day,csrf,ownerViewer,
       onStatus:msg=>{if(!this.closed)this.onState(instrument.name+' · '+msg);},
@@ -238,6 +245,10 @@ export class QsynMarketsFeed extends QsynCryptoFeed {
       let bars=await feed.getBars(scoped);
       if(invalid())return [];
       let day=requestedDay;
+      // A refresh cannot replace current chart history with an older session
+      // just because the provider temporarily returned an empty current day.
+      if(!bars.length&&req.noCache===true&&this.personalBars.get(instrument.id)?.length)
+        return [];
       if(!bars.length){
         const start=Math.floor(Date.parse(requestedDay+'T00:00:00+05:30')/1000);
         for(let d=1;d<=7 && !bars.length;d++){
@@ -300,7 +311,8 @@ export class QsynMarketsFeed extends QsynCryptoFeed {
             req.countBack>bars.length);
         if(needsPrior){
           const anchor=Math.floor(Date.parse(day+'T00:00:00+05:30')/1000);
-          for(let offset=1;offset<=4;offset++){
+          let found=false;
+          for(let offset=1;offset<=10;offset++){
             const previous=new Date((anchor-offset*86400+IST_OFFSET)*1000);
             if([0,6].includes(previous.getUTCDay()))continue;
             const olderDay=previous.toISOString().slice(0,10);
@@ -311,25 +323,26 @@ export class QsynMarketsFeed extends QsynCryptoFeed {
               if(this.closed||req.signal?.aborted||invalid())return [];
               if(older.length){
                 bars=[...older.filter(bar=>bar.time<bars[0].time),...bars];
-              }else{
-                // If a refresh already showed real older bars in this
-                // interval, an empty provider answer must NOT delete them.
-                const previousShown=this.personalBars.get(instrument.id)||[];
-                const knownPrior=previousShown.some(bar=>bar.time<bars[0].time &&
-                  (!Number.isFinite(req.from)||bar.time>=req.from));
-                if(req.noCache===true&&knownPrior)
-                  throw Error('INDEX_PRIOR_SESSION_REPAIR_INCOMPLETE');
-                // No fabricated candles for provider outages or holidays.
-                previousCoverage=' · prior '+olderDay+' history unavailable';
+                found=true;
+                break;
               }
+              // A successful empty reply may be a holiday. Continue within
+              // the fixed calendar bound, but never continue after an error.
             }catch(error){
-              if(this.closed||req.signal?.aborted||error?.name==='AbortError')return [];
-              // A refresh failure must retain the existing chart window
-              // instead of passing partial new bars to OpenAlgo.
-              if(req.noCache===true)throw error;
-              previousCoverage=' · prior '+olderDay+' history request failed';
+              if(this.closed||req.signal?.aborted||invalid()||error?.name==='AbortError')return [];
+              if(['PRIVATE_INDEX_ACCESS_DENIED','QSYN_ADMIN_LOGIN_REQUIRED',
+                  'UPSTOX_PERSONAL_TOKEN_UNAVAILABLE'].includes(error?.message)||
+                  req.noCache===true)throw error;
+              previousCoverage=' · prior session history request failed';
+              break;
             }
-            break; // At most one additional history request per initial load.
+          }
+          if(!found){
+            const knownPrior=(this.personalBars.get(instrument.id)||[]).some(bar=>
+              bar.time<bars[0].time&&(!Number.isFinite(req.from)||bar.time>=req.from));
+            if(req.noCache===true&&knownPrior)
+              throw Error('INDEX_PRIOR_SESSION_REPAIR_INCOMPLETE');
+            previousCoverage ||= ' · prior session history unavailable';
           }
         }
         if(invalid())return [];
@@ -363,11 +376,11 @@ export class QsynMarketsFeed extends QsynCryptoFeed {
       // A transient tail/history refresh must not mask real candles that are
       // already on screen. Authorization and missing-token denials still
       // invalidate the retained private feed above and show the blocker.
-      if(!accessDenied&&retained.length&&req.noCache!==true){
+      if(!accessDenied&&retained.length){
         this.lastBlockedKey=null;
         this.onBlockedIndex(null);
         this.onState(instrument.name+' · showing last verified candles; history source unavailable');
-        return aggregatePersonalIndexBars(retained,req.interval);
+        return req.noCache===true?[]:aggregatePersonalIndexBars(retained,req.interval);
       }
       const blockedKey=instrument.id+':'+reason;
       this.activeIndex=instrument.id;
