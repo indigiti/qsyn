@@ -1,4 +1,3 @@
-import {findIndiaIndex} from '../src/india-index-catalog.js';
 import assert from 'node:assert/strict';
 import { INDIA_INDEX_MARKETS,findIndiaIndex,searchIndiaIndexes } from '../src/india-index-catalog.js';
 import { QsynMarketsFeed,validIndexBarTime } from '../src/qsyn-markets-feed.js';
