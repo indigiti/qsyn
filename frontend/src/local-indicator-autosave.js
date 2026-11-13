@@ -10,12 +10,12 @@ const MAX_BYTES = 90000;
 const MAX_STUDIES = 32;
 const MAX_PROFILES = 20;
 
-function instrumentKey(widget) {
+function instrumentKey(widget, scope, slot) {
   const exchange = widget?.exchange?.();
   const symbol = widget?.symbol?.();
   if (typeof exchange !== 'string' || typeof symbol !== 'string' ||
       !exchange || !symbol || exchange.length > 100 || symbol.length > 120) return null;
-  return JSON.stringify([exchange, symbol]);
+  return JSON.stringify(scope==='home'&&slot===0?[exchange,symbol]:[scope,slot,exchange,symbol]);
 }
 
 function cleanStudies(value) {
@@ -50,7 +50,7 @@ function read(storage) {
 
 function store(storage, document, key, studies) {
   if (!storage || !key || !studies) return false;
-  const profiles = { ...document.profiles };
+  const profiles = { ...read(storage).profiles };
   // Reinsert the modified profile at the end, pruning least recently edited.
   delete profiles[key];
   profiles[key] = { indicators: studies };
@@ -73,18 +73,18 @@ function store(storage, document, key, studies) {
  * Restores only indicators, using the engine's validated partial state restore.
  * An explicit native workspace with existing studies wins at initial attach.
  */
-export function bindAutoSavedIndicators(grid, storage) {
+export function bindAutoSavedIndicators(grid, storage, scope='home') {
   if (!grid || !storage) return () => {};
   const document = read(storage);
   const bindings = new Map();
   let active = true;
 
-  function attach(widget) {
+  function attach(widget, slot) {
     const chart = widget.chart;
     if (!chart || typeof chart.getState !== 'function' ||
         typeof chart.restoreState !== 'function' ||
         typeof chart.on !== 'function' || typeof widget.on !== 'function') return () => {};
-    let key = instrumentKey(widget);
+    let key = instrumentKey(widget,scope,slot);
     let restoring = 0;
     const stops = [];
 
@@ -124,7 +124,7 @@ export function bindAutoSavedIndicators(grid, storage) {
       if (!restoring) save();
     }));
     stops.push(widget.on('symbol', () => {
-      key = instrumentKey(widget);
+      key = instrumentKey(widget,scope,slot);
       // Switching instruments keeps the current studies unless that market
       // has its own saved set. An explicit empty set clears them.
       restore();
@@ -134,11 +134,12 @@ export function bindAutoSavedIndicators(grid, storage) {
 
   function sync() {
     if (!active) return;
-    const widgets = new Set(grid.cells().map(cell => cell.widget).filter(Boolean));
-    for (const [widget, stop] of bindings) {
-      if (!widgets.has(widget)) { stop(); bindings.delete(widget); }
+    const widgets=new Map(grid.cells().flatMap((cell,slot)=>cell.widget?[[cell.widget,slot]]:[]));
+    for(const [widget,binding] of bindings){
+      if(widgets.get(widget)!==binding.slot){binding.stop();bindings.delete(widget);}
     }
-    for (const widget of widgets) if (!bindings.has(widget)) bindings.set(widget, attach(widget));
+    for(const [widget,slot] of widgets)
+      if(!bindings.has(widget))bindings.set(widget,{slot,stop:attach(widget,slot)});
   }
 
   // IndexedDB workspace restoration is asynchronous. Bind only after it
@@ -155,7 +156,7 @@ export function bindAutoSavedIndicators(grid, storage) {
     active = false;
     offActive?.();
     offLayout?.();
-    for (const stop of bindings.values()) stop();
+    for (const binding of bindings.values()) binding.stop();
     bindings.clear();
   };
 }
