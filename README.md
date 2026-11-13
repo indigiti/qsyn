@@ -8,7 +8,7 @@ Canonical requirements: [Master Blueprint v1.4](docs/MASTER_BLUEPRINT.md).
 
 - PHP 8.3-compatible development terminal and simulated 1-minute candle endpoint.
 - Reusable, database-free PHP file storage class with revision-checked atomic document updates and basic tests.
-- OpenAlgo Charts 2.6.7 integrated in the unified React terminal and chart-only homepage.
+- OpenAlgo Charts 2.6.9 integrated in the unified React terminal and chart-only homepage.
 - Rust/Tokio service skeleton: health endpoint, opt-in local-only simulated WebSocket, CE+PE synthetic candle builder and unit tests.
 - GitHub Actions tests and a staged DigiOps artifact named **digiops-release**, with segregated public/private folders.
 
