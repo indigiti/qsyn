@@ -51,11 +51,25 @@ export function normalizeDashboardStatus({analytics,master,diagnostics}){
   }
   return {account,catalog,counts,importDay,today,live};
 }
-export async function fetchDashboardStatus({fetcher=fetch,signal}={}){
-  const [analytics,master,diagnostics]=await Promise.all([
-    read(ENDPOINTS.analytics,fetcher,signal),
-    read(ENDPOINTS.master,fetcher,signal),
-    read(ENDPOINTS.diagnostics,fetcher,signal)
-  ]);
-  return normalizeDashboardStatus({analytics,master,diagnostics});
+export async function fetchDashboardStatus({fetcher=fetch,signal,onProbe,timeoutMs=5000}={}){
+  const entries=await Promise.all(Object.entries(ENDPOINTS).map(async ([key,url])=>{
+    const controller=new AbortController();
+    let timer,stop;
+    const deadline=new Promise(resolve=>{
+      stop=()=>{controller.abort();resolve(null);};
+      timer=setTimeout(stop,timeoutMs);
+      if(signal?.aborted)stop();
+      else signal?.addEventListener('abort',stop,{once:true});
+    });
+    let value;
+    try{
+      value=await Promise.race([deadline,read(url,fetcher,controller.signal)]);
+    }finally{
+      clearTimeout(timer);
+      signal?.removeEventListener('abort',stop);
+    }
+    if(!signal?.aborted)onProbe?.(key,normalizeDashboardStatus({[key]:value}));
+    return [key,value];
+  }));
+  return normalizeDashboardStatus(Object.fromEntries(entries));
 }
