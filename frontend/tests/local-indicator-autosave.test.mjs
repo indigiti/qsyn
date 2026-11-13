@@ -85,3 +85,25 @@ test('asynchronous grid readiness prevents premature restoration and saves',asyn
  assert.deepEqual(f.saved().profiles[JSON.stringify(['NSE_INDEX:index','NIFTY'])].indicators,[]);
  off();
 });
+
+test('same symbol in two panes keeps independent studies after reload',async()=>{
+  const a=mock(),b=mock();
+  const first=a.grid.cells()[0],second=b.grid.cells()[0];
+  a.grid.cells=()=>[first,second];
+  const other={...alligator,settings:{jaw:21}};
+  const stop=bindAutoSavedIndicators(a.grid,a.storage);
+  await tick();a.setStudies([alligator]);b.setStudies([other]);stop();
+  const c=mock(),d=mock();
+  const nextFirst=c.grid.cells()[0],nextSecond=d.grid.cells()[0];
+  c.grid.cells=()=>[nextFirst,nextSecond];
+  const off=bindAutoSavedIndicators(c.grid,a.storage);
+  await tick();
+  assert.deepEqual(c.studies,[alligator]);
+  assert.deepEqual(d.studies,[other]);
+  off();
+  const markets=mock();
+  const end=bindAutoSavedIndicators(markets.grid,a.storage,'markets');
+  await tick();
+  assert.deepEqual(markets.studies,[]);
+  end();
+});

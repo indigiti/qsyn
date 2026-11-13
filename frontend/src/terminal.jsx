@@ -288,7 +288,7 @@ function HomepageChart({ theme, embedded = false,
     const offActive=grid.on('active',updateGrid);
     const offLayout=grid.on('layout',updateGrid);
     const stopSelection=observePublicChartSelection(grid,browserStorage());
-    const stopIndicatorAutosave=bindAutoSavedIndicators(grid,browserStorage());
+    const stopIndicatorAutosave=bindAutoSavedIndicators(grid,browserStorage(),embedded?'markets':'home');
     window.addEventListener('resize',syncToolbar);
     host.current.addEventListener('scroll',syncToolbar,true);
     void grid.ready.then(updateGrid).catch(()=>{
@@ -306,7 +306,7 @@ function HomepageChart({ theme, embedded = false,
       slot?.remove();
       grid.destroy();feed.destroy();
     };
-  },[theme,nativeWorkspaces,nativeWatchlists,firstExchange,firstSymbol]);
+  },[theme,nativeWorkspaces,nativeWatchlists,firstExchange,firstSymbol,embedded]);
   const openPrivateIndex=()=>{
     if(!blockedIndex)return;
     if(typeof onPrivateIndexRequest==='function'){
