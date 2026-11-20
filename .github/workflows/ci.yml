@@ -259,7 +259,7 @@ jobs:
         run: node tests/obsolete-ui-assets.test.mjs
         working-directory: frontend
       - name: Verify offline TickPipe importer
-        run: python3 -m unittest discover -s ../ops/tickpipe -v
+        run: python3 -m unittest discover -s ops/tickpipe -v
       - run: npm run build
         working-directory: frontend
       - name: Verify shared pretty URL registry
