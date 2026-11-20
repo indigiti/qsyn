@@ -9,7 +9,7 @@ function ReplayPlot({bars,seconds}){
   return <svg viewBox="0 0 720 200" width="100%" role="img"
     aria-label={'Snapshot-derived candlestick chart. Last close '+newest.close}>
     {bars.map(b=>{
-      const x=(b.time-origin)*6+3;
+      const x=(b.time-origin)/seconds*6+3;
       const color=b.close>=b.open?'#16865c':'#d05252';
       return <g key={b.time}><title>{new Date(b.time*1000).toISOString()} UTC · O {b.open} H {b.high} L {b.low} C {b.close}</title>
         <line x1={x} x2={x} y1={y(b.high)} y2={y(b.low)} stroke={color}/>
