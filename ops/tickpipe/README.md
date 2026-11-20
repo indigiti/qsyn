@@ -17,5 +17,8 @@ one-second and one-minute OHLC in receive-time buckets. Empty buckets are not
 filled. Sequence gaps indicate missing rows within the selected partition, not
 broker disconnects or exchange coverage. Snapshot quantities are not exchange
 trade quantities; OHLC intentionally does not include volume. Quotes/depth
-are not imported. Keep bundles separate from live chart data. There is no
-terminal upload, in-app replay or trading integration in this version.
+are not imported. Keep bundles separate from live chart data. In Terminal → Workspaces → TickPipe replay, choose the generated JSON bundle
+(up to 32 MiB). Replay shows one recorded candle at a time, not individual
+exchange events. Empty time buckets remain blank. Playback speed is candles
+per second, not exchange-clock speed. The file never uploads and is not
+persisted by the terminal. No live chart or trading integration.
