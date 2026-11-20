@@ -258,6 +258,8 @@ jobs:
       - name: Guard against resurrected legacy chart and Studio builds
         run: node tests/obsolete-ui-assets.test.mjs
         working-directory: frontend
+      - name: Verify offline TickPipe importer
+        run: python3 -m unittest discover -s ops/tickpipe -v
       - run: npm run build
         working-directory: frontend
       - name: Verify shared pretty URL registry
@@ -325,7 +327,7 @@ jobs:
         run: node tests/browser-studio-smoke.mjs
         working-directory: frontend
       - name: Validate strict browser workspace state and simulated instrument whitelist
-        run: node --test tests/terminal-workspace.test.mjs tests/terminal-file-sync.test.mjs tests/private-live-chart.test.mjs tests/indicator-legend-settings.test.mjs tests/private-index-live-bridge.test.mjs tests/index-regular-session.test.mjs
+        run: node --test tests/terminal-workspace.test.mjs tests/terminal-file-sync.test.mjs tests/private-live-chart.test.mjs tests/indicator-legend-settings.test.mjs tests/private-index-live-bridge.test.mjs tests/index-regular-session.test.mjs tests/tickpipe-replay.test.mjs
         working-directory: frontend
       - name: Validate database-free OpenAlgo-style terminal in desktop/mobile Chromium
         run: node tests/browser-terminal-smoke.mjs

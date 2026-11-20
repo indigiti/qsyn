@@ -1,3 +1,4 @@
+import {TickPipeReplay} from './tickpipe-replay.jsx';
 /**
  * QSYN native-style terminal shell.
  *
@@ -887,7 +888,7 @@ function App() {
       {view === 'workspaces' && <div className="terminal-page"><header className="terminal-title">
         <div><p className="terminal-eyebrow">SAVED LAYOUTS</p><h1>Chart workspaces</h1>
         <p>Browser-local simulated research layouts and optional separately authorized private files.</p></div></header>
-        <ChartWorkspace theme={theme}/></div>}
+        <ChartWorkspace theme={theme}/><TickPipeReplay/></div>}
       {view === 'brokers' && <BrokersWorkspace openView={openView}/>}
       {view === 'diagnostics' && <DiagnosticsWorkspace/>}
       {view === 'operations' && <OperationsWorkspace/>}
